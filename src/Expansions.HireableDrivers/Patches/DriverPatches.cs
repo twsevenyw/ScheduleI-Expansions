@@ -3,20 +3,22 @@ using Expansions.Core;
 using Expansions.HireableDrivers.Game;
 using Expansions.HireableDrivers.Runtime;
 using HarmonyLib;
+using Il2CppInterop.Runtime;
 
 namespace Expansions.HireableDrivers.Patches;
 
 /// <summary>
-/// The four patches the transport loop needs, applied only through the module's own Harmony instance.
+/// Transport isolation, native clipboard presentation and Fixer hiring-flow patches, applied only
+/// through the module's own Harmony instance.
 /// <para>
 /// No <c>[HarmonyPatch]</c> attributes anywhere: the mod assembly carries
 /// <c>[assembly: HarmonyDontPatchAll]</c> precisely so that disabling the module genuinely unpatches,
 /// and an attribute class would survive <c>UnpatchSelf</c> under MelonLoader's own Harmony id.
 /// </para>
 /// <para>
-/// Every body checks the driver registry first, so a vanilla Handler is never affected. Each patch is
-/// applied independently and a failure is survivable: with no stations and no vanilla routes assigned,
-/// an unsuppressed driver simply idles rather than fighting us for its own legs.
+/// Employee/clipboard bodies check the registry, so vanilla Handlers are untouched. Fixer bodies act
+/// only while the injected Driver choice is selected. Each target binds independently; load-bearing
+/// groups fail closed and expose their repair path.
 /// </para>
 /// </summary>
 internal static class DriverPatches
@@ -34,6 +36,13 @@ internal static class DriverPatches
     /// </summary>
     internal static bool TransportSafe =>
         IsApplied("UpdateBehaviour") && IsApplied("GetTransitRouteReady");
+
+    internal static bool NativeHiringSafe =>
+        IsApplied("ModifyChoiceList") &&
+        Applied.Count(label => label.EndsWith(".ChoiceCallback", StringComparison.Ordinal)) >= 2 &&
+        IsApplied("CheckChoice") &&
+        IsApplied("ModifyDialogueText") &&
+        IsApplied("Confirm");
 
     /// <summary>
     /// Whether a named patch landed, without materialising the list. Read from per-frame availability
@@ -57,14 +66,22 @@ internal static class DriverPatches
         Applied.Clear();
         Skipped.Clear();
 
+        var employee = Gx.Type(GameTypes.Employee);
+        var employeeManager = Gx.Type(GameTypes.EmployeeManager);
         var packager = Gx.RequireType(GameTypes.Packager);
         var configuration = Gx.Type(GameTypes.PackagerConfiguration);
         var routeEntry = Gx.Type(GameTypes.RouteEntryUi);
         var configPanel = Gx.Type(GameTypes.PackagerConfigPanel);
+        var selectionInfo = Gx.Type(GameTypes.SelectionInfoUi);
+        var management = Gx.Type(GameTypes.ManagementInterface);
+        var fixer = Gx.Type(GameTypes.DialogueControllerFixer);
 
         // The one place a skipping prefix is genuinely required: UpdateBehaviour is the per-tick work
         // dispatcher and there is no other way to stop the packaging brain issuing its own movement.
         Patch(harmony, packager, "UpdateBehaviour", nameof(SuppressUpdateBehaviour), PatchKind.Prefix);
+        Patch(harmony, employee, "InitializeAppearance", nameof(DressInitializedDriver), PatchKind.Postfix);
+        Patch(harmony, employeeManager, "CreateEmployee_Server", nameof(ExpandCreationCapacity), PatchKind.Prefix);
+        Patch(harmony, employeeManager, "CreateEmployee_Server", nameof(RestoreCreationCapacity), PatchKind.Postfix);
 
         Patch(harmony, packager, "ShouldIdle", nameof(NeverIdleMidTrip), PatchKind.Postfix);
         Patch(harmony, packager, "IsAnyWorkInProgress", nameof(BusyMidTrip), PatchKind.Postfix);
@@ -75,6 +92,17 @@ internal static class DriverPatches
         Patch(harmony, routeEntry, "DestinationClicked", nameof(PickDestinationFromList), PatchKind.Prefix);
         Patch(harmony, routeEntry, "RefreshUI", nameof(ShowDealerDestination), PatchKind.Postfix);
         Patch(harmony, configPanel, "BindInternal", nameof(DressDriverPanel), PatchKind.Postfix);
+        Patch(harmony, selectionInfo, "Set", nameof(DressSelectionInfoSet), PatchKind.Postfix);
+        Patch(harmony, selectionInfo, "Update", nameof(DressSelectionInfoUpdate), PatchKind.Postfix);
+        Patch(harmony, management, "UpdateMainLabels", nameof(DressDriverHeader), PatchKind.Postfix);
+
+        // Native Fixer flow: employee type → location → confirmation.
+        Patch(harmony, fixer, "ModifyChoiceList", nameof(FixerModifyChoiceList), PatchKind.Postfix);
+        Patch(harmony, fixer, "ChoiceCallback", nameof(FixerChoiceCallbackPrefix), PatchKind.Prefix);
+        Patch(harmony, fixer, "ChoiceCallback", nameof(FixerChoiceCallbackPostfix), PatchKind.Postfix);
+        Patch(harmony, fixer, "CheckChoice", nameof(FixerCheckChoice), PatchKind.Prefix);
+        Patch(harmony, fixer, "ModifyDialogueText", nameof(FixerModifyDialogueText), PatchKind.Prefix);
+        Patch(harmony, fixer, "Confirm", nameof(FixerConfirm), PatchKind.Prefix);
 
         lifetime.OnDispose(() =>
         {
@@ -162,8 +190,15 @@ internal static class DriverPatches
     /// the brain alone then costs nothing and buys the whole employee contract.
     /// </para>
     /// </summary>
-    private static bool SuppressUpdateBehaviour(object __instance) =>
-        !DriverRegistry.TryGet(__instance, out var brain) || !brain.IsOnTrip;
+    private static bool SuppressUpdateBehaviour(object __instance)
+    {
+        if (DriverRegistry.TryGet(__instance, out var brain))
+            return !brain.IsOnTrip && ClipboardApi.HasAssignedHome(__instance);
+
+        // A factory call can expose the networked employee before DriverRegistry finishes the record.
+        // Keep that short window safe too; the driver_ id is ours and never belongs to a vanilla Handler.
+        return !DriverRegistry.HasDriverIdentity(__instance) || ClipboardApi.HasAssignedHome(__instance);
+    }
 
     private static void NeverIdleMidTrip(object __instance, ref bool __result)
     {
@@ -204,7 +239,7 @@ internal static class DriverPatches
             return;
 
         var packager = Gx.GetAlive(__instance, "packager");
-        if (packager is null || !DriverRegistry.IsDriver(packager))
+        if (packager is null || !DriverRegistry.HasDriverIdentity(packager))
             return;
 
         __result = false;
@@ -346,8 +381,8 @@ internal static class DriverPatches
                 return;
 
             var heading = drivers.Count == 1
-                ? $"Routes - collects at {ClipboardRoutes.HomeName(drivers[0])}"
-                : "Routes - each driver collects at its own property";
+                ? $"Routes · {ClipboardRoutes.HomeName(drivers[0])}"
+                : "Driver routes";
 
             // FieldText is what RouteListFieldUI.Start writes into the label, and Start runs after Bind
             // on a freshly instantiated panel, so both have to be set or the heading is overwritten.
@@ -355,10 +390,241 @@ internal static class DriverPatches
 
             if (Gx.GetAlive(routes, "FieldLabel") is { } label)
                 Gx.Set(label, "text", heading);
+
+            var management = Gx.Singleton(GameTypes.ManagementInterface);
+            if (management is not null)
+                DressDriverHeader(management);
         }
         catch (Exception ex)
         {
             DriverLog.Debug($"Could not dress the driver clipboard panel ({Gx.Explain(ex)}).");
+        }
+    }
+
+    /// <summary>Rebrands the clipboard's vanilla "Handler" type label for all-driver selections.</summary>
+    private static void DressDriverHeader(object __instance)
+    {
+        try
+        {
+            var configurables = Gx.List(Gx.Get(__instance, "Configurables"));
+            if (configurables.Count == 0)
+                return;
+
+            var drivers = 0;
+            foreach (var configurable in configurables)
+            {
+                var packager = Gx.Cast(configurable, GameTypes.Packager)
+                               ?? Gx.GetAlive(configurable, "packager")
+                               ?? Gx.GetAlive(Gx.Get(configurable, "Configuration"), "packager")
+                               ?? configurable;
+                if (DriverRegistry.HasDriverIdentity(packager))
+                    drivers++;
+            }
+
+            if (drivers != configurables.Count)
+                return;
+
+            var screen = Gx.GetAlive(__instance, "MainScreen");
+            var tmpType = Gx.Type("Il2CppTMPro.TextMeshProUGUI");
+            if (screen is not UnityEngine.Component component || tmpType is null)
+                return;
+
+            foreach (var raw in component.GetComponentsInChildren(Il2CppType.From(tmpType), true))
+            {
+                var label = Gx.Cast(raw, tmpType);
+                var text = Gx.Get<string>(label, "text", string.Empty);
+                if (text.Length == 0)
+                    continue;
+
+                var replaced = text
+                    .Replace("Handlers", "Drivers", StringComparison.OrdinalIgnoreCase)
+                    .Replace("Handler", "Driver", StringComparison.OrdinalIgnoreCase)
+                    .Replace("Packagers", "Drivers", StringComparison.OrdinalIgnoreCase)
+                    .Replace("Packager", "Driver", StringComparison.OrdinalIgnoreCase);
+                if (!string.Equals(text, replaced, StringComparison.Ordinal))
+                    Gx.Set(label, "text", replaced);
+            }
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Debug($"Could not rebrand the clipboard header ({Gx.Explain(ex)}).");
+        }
+    }
+
+    private static void DressSelectionInfoSet(object __instance, object Configurables)
+    {
+        try
+        {
+            DressSelectionInfo(__instance, Gx.List(Configurables));
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Debug($"Could not rebrand SelectionInfoUI.Set ({Gx.Explain(ex)}).");
+        }
+    }
+
+    private static void DressSelectionInfoUpdate(object __instance)
+    {
+        try
+        {
+            var management = Gx.Singleton(GameTypes.ManagementInterface);
+            DressSelectionInfo(__instance, Gx.List(Gx.Get(management, "Configurables")));
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Debug($"Could not rebrand SelectionInfoUI.Update ({Gx.Explain(ex)}).");
+        }
+    }
+
+    private static void DressSelectionInfo(object selectionInfo, IReadOnlyList<object?> configurables)
+    {
+        if (configurables.Count == 0)
+            return;
+
+        var drivers = 0;
+        var handlers = 0;
+
+        foreach (var configurable in configurables)
+        {
+            var packager = Gx.Cast(configurable, GameTypes.Packager)
+                           ?? Gx.GetAlive(configurable, "packager")
+                           ?? Gx.GetAlive(Gx.Get(configurable, "Configuration"), "packager");
+            if (packager is null)
+                return; // Mixed employee types: keep the game's Different Types presentation.
+
+            if (DriverRegistry.HasDriverIdentity(packager))
+                drivers++;
+            else
+                handlers++;
+        }
+
+        if (drivers == 0)
+            return;
+
+        var title = handlers == 0
+            ? $"{drivers}x Driver"
+            : $"{drivers}x Driver, {handlers}x Handler";
+
+        if (Gx.GetAlive(selectionInfo, "Title") is { } label)
+            Gx.Set(label, "text", title);
+    }
+
+    /// <summary>Runs on every peer after the vanilla appearance RPC path.</summary>
+    private static void DressInitializedDriver(object __instance)
+    {
+        try
+        {
+            var id = EmployeeApi.Id(__instance);
+            if (!id.StartsWith("driver_", StringComparison.Ordinal))
+                return;
+
+            DriverAppearance.Apply(id, EmployeeApi.DisplayName(__instance), __instance);
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Warn($"Could not apply a driver uniform after appearance initialization ({Gx.Explain(ex)}).");
+        }
+    }
+
+    private static void ExpandCreationCapacity(object property, string id, ref int __state)
+    {
+        __state = WorldApi.EmployeeCapacity(property);
+        var driverSlotsInUse = DriverCapacity.Used(WorldApi.PropertyCode(property));
+        var creatingDriver = id.StartsWith("driver_", StringComparison.Ordinal) ? 1 : 0;
+        var expanded = __state + driverSlotsInUse + creatingDriver;
+        if (expanded > __state)
+            Gx.Set(property, "EmployeeCapacity", expanded);
+    }
+
+    private static void RestoreCreationCapacity(object property, int __state) =>
+        Gx.Set(property, "EmployeeCapacity", __state);
+
+    private static void FixerModifyChoiceList(object __instance, string dialogueLabel, object existingChoices)
+    {
+        try
+        {
+            HiringDesk.ModifyChoiceList(__instance, dialogueLabel, existingChoices);
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Error("Driver type injection into the Fixer dialogue failed.", ex);
+        }
+    }
+
+    private static bool FixerChoiceCallbackPrefix(object __instance, string choiceLabel)
+    {
+        try
+        {
+            return HiringDesk.ChoiceCallbackPrefix(__instance, choiceLabel);
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Error("Driver Fixer choice prefix failed.", ex);
+            return true;
+        }
+    }
+
+    private static void FixerChoiceCallbackPostfix(object __instance, string choiceLabel)
+    {
+        try
+        {
+            HiringDesk.ChoiceCallbackPostfix(__instance, choiceLabel);
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Error("Driver Fixer choice postfix failed.", ex);
+        }
+    }
+
+    private static bool FixerCheckChoice(
+        object __instance,
+        string choiceLabel,
+        ref string invalidReason,
+        ref bool __result)
+    {
+        try
+        {
+            return HiringDesk.CheckChoice(__instance, choiceLabel, ref invalidReason, ref __result);
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Error("Driver Fixer validation failed.", ex);
+            return true;
+        }
+    }
+
+    private static bool FixerModifyDialogueText(
+        object __instance,
+        string dialogueLabel,
+        string dialogueText,
+        ref string __result)
+    {
+        try
+        {
+            return HiringDesk.ModifyDialogueText(
+                __instance,
+                dialogueLabel,
+                dialogueText,
+                ref __result);
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Error("Driver Fixer confirmation text failed.", ex);
+            return true;
+        }
+    }
+
+    private static bool FixerConfirm(object __instance)
+    {
+        var driverSelection = HiringDesk.IsDriverSelection(__instance);
+        try
+        {
+            return HiringDesk.ConfirmPrefix(__instance);
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Error("Driver Fixer confirmation interception failed.", ex);
+            return !driverSelection; // Fail closed only for Driver; vanilla employee hiring survives.
         }
     }
 }

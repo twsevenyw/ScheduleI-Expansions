@@ -44,17 +44,25 @@ internal static class VisitorLookFactory
 
         var female = rng.Chance(wardrobe.FemaleChance);
 
+        // Morph ranges follow the 117 readable shipped AvatarSettings in avatars-dump-2026-08-03.json.
+        // Gender: 0 ≈ male end, 1 ≈ female end (Donna/Lisa high, Trent/Marcus 0). Height is a
+        // 0.90–1.10 rig scale. EyebrowThickness median is ~1.12 — the old 0.45–0.8 band sat almost
+        // entirely below every normal shipped face and helped the stretch/distort bug once writes
+        // actually stuck.
+        var height = AvatarMorphRanges.HeightSafe.Clamp(rng.Range(wardrobe.Height.Min, wardrobe.Height.Max));
+        var weight = AvatarMorphRanges.WeightSafe.Clamp(rng.Range(wardrobe.Weight.Min, wardrobe.Weight.Max));
+
         var look = new ArchetypeLook
         {
-            // A blend rather than a hard 0 or 1: the shipped characters sit anywhere on the slider,
-            // and two members on the same setting have visibly the same build.
-            Gender = female ? rng.Range(0.72f, 1f) : rng.Range(0f, 0.28f),
-            Height = rng.Range(wardrobe.Height.Min, wardrobe.Height.Max),
-            Weight = rng.Range(wardrobe.Weight.Min, wardrobe.Weight.Max),
+            Gender = female
+                ? rng.Range(0.66f, 1f)
+                : rng.Range(0f, 0.28f),
+            Height = height,
+            Weight = weight,
             SkinColor = rng.Pick(wardrobe.SkinTones),
-            EyebrowScale = rng.Range(0.75f, 1.05f),
-            EyebrowThickness = rng.Range(0.45f, 0.8f),
-            PupilDilation = rng.Range(0.55f, 0.8f),
+            EyebrowScale = rng.Range(AvatarMorphRanges.EyebrowScaleSafe.Min, AvatarMorphRanges.EyebrowScaleSafe.Max),
+            EyebrowThickness = rng.Range(AvatarMorphRanges.EyebrowThicknessSafe.Min, AvatarMorphRanges.EyebrowThicknessSafe.Max),
+            PupilDilation = rng.Range(AvatarMorphRanges.PupilDilationSafe.Min, AvatarMorphRanges.PupilDilationSafe.Max),
         };
 
         var hairColor = wardrobe.AltHairColors.Length > 0 && rng.Chance(wardrobe.AltHairColorChance)

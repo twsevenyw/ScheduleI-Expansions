@@ -163,14 +163,14 @@ internal sealed class OutlawState
             return false;
         }
 
-        var fee = Math.Max(0, _config.OutlawLegalFee.Value);
+        var fee = _config.FeeFor(record.Outlaw);
         var cash = Wallet.Cash();
         var bank = Wallet.Online();
 
         if (cash + bank < fee)
         {
-            message = $"A lawyer wants ${fee:N0} and you have ${cash + bank:N0} between your pockets and the bank. " +
-                      "Come back with the money, or serve the clean days.";
+            message = $"Clearing {Describe(record.Outlaw)} costs ${fee:N0} and you have ${cash + bank:N0} between your pockets and the bank. " +
+                      "Come back with the money, knock on the police station door again, or serve the clean days.";
             return false;
         }
 
@@ -187,7 +187,7 @@ internal sealed class OutlawState
         record.LegalFeesPaid += fee;
         Sync();
 
-        message = $"${fee:N0} to a lawyer: {Describe(previous)} down to {Describe(record.Outlaw)}. " +
+        message = $"Legal fee paid at the station: ${fee:N0}. {Describe(previous)} down to {Describe(record.Outlaw)}. " +
                   (fromBank > 0.5f ? $"${fromCash:N0} in cash and ${fromBank:N0} off your bank balance." : "Paid in cash.");
 
         PoliceLog.Msg($"Legal fee paid: ${fee} ({Describe(previous)} -> {Describe(record.Outlaw)}).");

@@ -37,7 +37,11 @@ internal sealed class CustomerLink
     internal static CustomerLink? Resolve(GameNpc npc, out string failure)
     {
         var customer = npc.Customer(out failure);
-        return customer is null ? null : new CustomerLink(npc, customer);
+        if (customer is null)
+            return null;
+
+        var typed = InteropCast.As(customer, GameTypes.Customer) ?? customer;
+        return new CustomerLink(npc, typed);
     }
 
     /// <summary>A contract the player has already accepted and not yet delivered on.</summary>
@@ -104,7 +108,11 @@ internal sealed class CustomerLink
             _customer.GetType(), _customer, "ShouldTryGenerateDeal", Array.Empty<object?>(), out var value, out failure) &&
         value is true;
 
-    /// <summary>Where the shipped code would send this customer to meet the player.</summary>
+    /// <summary>
+    /// Where the shipped code would send this customer to meet the player when no contract pins a
+    /// spot. <c>GetDeliveryLocation</c> can pick a random unscheduled site, so it is not the same
+    /// thing as the location baked into a live offer or accepted contract.
+    /// </summary>
     internal string DeliveryLocationName
     {
         get
@@ -123,6 +131,51 @@ internal sealed class CustomerLink
                 ? GameReflection.Format(name)
                 : GameReflection.Format(location);
         }
+    }
+
+    /// <summary>
+    /// Delivery spot on the outstanding offer or accepted contract — what the handover will actually
+    /// use. Falls back to <see cref="DeliveryLocationName"/> only when neither is set.
+    /// </summary>
+    internal string ActiveDeliveryLocationName
+    {
+        get
+        {
+            var fromOffer = LocationNameOf(Offer);
+            if (fromOffer.Length > 0)
+                return fromOffer;
+
+            var fromContract = LocationNameOf(Contract);
+            if (fromContract.Length > 0)
+                return fromContract;
+
+            return DeliveryLocationName;
+        }
+    }
+
+    private static string LocationNameOf(object? contractOrInfo)
+    {
+        if (contractOrInfo is null)
+            return string.Empty;
+
+        if (GameReflection.TryRead(contractOrInfo, "DeliveryLocation", out var location, out _) &&
+            GameReflection.IsPresent(location))
+        {
+            if (GameReflection.TryRead(location, "LocationName", out var name, out _))
+                return GameReflection.Format(name);
+
+            return GameReflection.Format(location);
+        }
+
+        if (GameReflection.TryRead(contractOrInfo, "DeliveryLocationGUID", out var guid, out _) ||
+            GameReflection.TryRead(contractOrInfo, "DeliveryLocationGuid", out guid, out _))
+        {
+            var text = GameReflection.Format(guid);
+            if (text.Length > 0 && !string.Equals(text, "null", StringComparison.OrdinalIgnoreCase))
+                return text;
+        }
+
+        return string.Empty;
     }
 
     /// <summary>True when the phone conversation is showing answerable responses right now.</summary>
@@ -229,9 +282,19 @@ internal sealed class CustomerLink
     /// prefab's <c>CustomerData</c> said at the time, so a visitor whose data is written later has to
     /// ask for it again or the interaction menu stays empty.
     /// </summary>
-    internal bool SetUpDialogue(out string failure) =>
-        GameReflection.TryInvoke(
-            _customer.GetType(), _customer, "SetUpDialogue", Array.Empty<object?>(), out _, out failure);
+    internal bool SetUpDialogue(out string failure)
+    {
+        var customerType = GameReflection.FindType(GameTypes.Customer);
+        if (customerType is null)
+        {
+            failure = $"'{GameTypes.Customer}' not found";
+            return false;
+        }
+
+        var typed = InteropCast.As(_customer, customerType) ?? _customer;
+        return GameReflection.TryInvoke(
+            customerType, typed, "SetUpDialogue", Array.Empty<object?>(), out _, out failure);
+    }
 
     /// <summary>
     /// Whether the shipped street-deal request took, judged from the two pieces of state it moves.

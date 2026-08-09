@@ -48,8 +48,27 @@ internal static class DealerApi
 
     internal static bool IsRecruited(object? dealer) => Gx.Get(dealer, "IsRecruited") is true;
 
-    internal static int HeldItems(object? dealer) =>
-        Gx.Call(dealer, "GetTotalInventoryItemCount", Array.Empty<string>()) as int? ?? 0;
+    internal static int HeldItems(object? dealer)
+    {
+        var total = 0;
+        var seen = new HashSet<IntPtr>();
+
+        foreach (var slot in Gx.List(Gx.Get(dealer, "ItemSlots"))
+                     .Concat(Gx.List(Gx.Get(dealer, "overflowSlots"))))
+        {
+            var pointer = Gx.PointerOf(slot);
+            if (pointer != IntPtr.Zero && !seen.Add(pointer))
+                continue;
+
+            total += Math.Max(0, Gx.Get(slot, "Quantity") as int? ?? 0);
+        }
+
+        // A renamed slot member should not turn every dealer into "empty"; retain the shipped
+        // aggregate as the fallback while Gx records the binding failure for diagnostics.
+        return seen.Count > 0
+            ? total
+            : Gx.Call(dealer, "GetTotalInventoryItemCount", Array.Empty<string>()) as int? ?? 0;
+    }
 
     internal static Vector3 Position(object? dealer) =>
         Gx.GetAlive(dealer, "transform") is Transform transform ? transform.position : Vector3.zero;
@@ -130,11 +149,24 @@ internal static class DealerApi
 
             if (actual < amount)
             {
+                var storageBefore = TransitApi.UnitsInStorage(storage, id);
                 var rollback = Gx.Call(instance, "GetCopy", new[] { "Int32" }, amount - actual);
-                if (rollback is null ||
-                    !Gx.TryCall(storage, "InsertItem", new[] { "ItemInstance", "Boolean" }, rollback, true))
+                if (rollback is null)
                 {
                     DriverLog.Error($"A failed dealer transfer could not restore {amount - actual} item(s) to the vehicle.");
+                }
+                else
+                {
+                    Gx.TryCall(storage, "InsertItem", new[] { "ItemInstance", "Boolean" }, rollback, true);
+                    var restored = Math.Clamp(
+                        TransitApi.UnitsInStorage(storage, id) - storageBefore,
+                        0,
+                        amount - actual);
+                    if (restored < amount - actual)
+                    {
+                        DriverLog.Error(
+                            $"A failed dealer transfer restored only {restored}/{amount - actual} item(s) to the vehicle.");
+                    }
                 }
             }
 

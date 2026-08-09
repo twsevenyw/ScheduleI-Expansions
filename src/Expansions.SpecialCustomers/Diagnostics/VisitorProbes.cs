@@ -506,6 +506,11 @@ internal static class VisitorProbes
             "Props are equippables rather than avatar layers, so they are not in the harvested catalogue; the paths " +
             "come from S1API's own `Equippables.Misc` constants. A path the game cannot resolve logs \"Couldn't find " +
             "equippable at path\" and leaves the hand empty, which is cosmetic.");
+        result.Fact(
+            "apply_archetype_appearance",
+            CustomerSettings.ApplyArchetypeAppearance
+                ? "**on** (runtime AvatarSettings writes enabled)"
+                : "off (default — visitors keep prefab looks; dresser is a no-op)");
         result.Fact("Cached looks for the current visit", VisitorDresser.CachedLookCount.ToString());
         result.Fact("Slots dressed at least once", VisitorDresser.DressedSlots.Count.ToString());
 
@@ -567,6 +572,15 @@ internal static class VisitorProbes
             result.Fail(
                 $"{overflowed} layer(s) across the sampled looks exceed the game's slot budget and are being dropped. " +
                 "Narrow a wardrobe rather than letting the avatar choose what to lose.");
+            return;
+        }
+
+        if (!CustomerSettings.ApplyArchetypeAppearance)
+        {
+            result.Ok(
+                "Wardrobe recipes are catalogue-valid and type-resolvable, but apply_archetype_appearance is off " +
+                "(the shipped default). Arrival never writes AvatarSettings — visitors keep their prefab looks. " +
+                "Turn the flag on only if wardrobe dressing is revisited.");
             return;
         }
 
@@ -688,6 +702,7 @@ internal static class VisitorProbes
             : "**off** (post_watchdog)");
         result.Fact("Drift tolerance", $"{CustomerSettings.PostDriftRadius:0.#} m horizontal, {CustomerSettings.PostDriftDepth:0.#} m vertical");
         result.Fact("Visitors pinned this session", $"{PostWatch.PinnedCount} of {VisitorSlot.Count}");
+        result.Fact("Visit-exempt (watchdog off)", PostWatch.ExemptCount.ToString());
         result.Fact("Corrections this session", PostWatch.TotalCorrections.ToString());
         result.Fact("Authority", HostGate.Evaluate(out var authority) ? authority : $"not authoritative ({authority})");
 
@@ -703,7 +718,7 @@ internal static class VisitorProbes
             if (npc is null)
             {
                 unresolved++;
-                rows.Add(new[] { slot.Index.ToString("00"), slot.FullName, "**not in the world**", "-", "-", "-", "-" });
+                rows.Add(new[] { slot.Index.ToString("00"), slot.FullName, "**not in the world**", "-", "-", "-", "-", "-" });
                 continue;
             }
 
@@ -723,12 +738,13 @@ internal static class VisitorProbes
                 Describe.Metres(horizontal),
                 $"{vertical:+0.#;-0.#} m",
                 Describe.YesNo(state.Pinned),
+                Describe.YesNo(state.VisitExempt),
                 ScheduleState(npc),
             });
         }
 
         result.Table(
-            new[] { "Slot", "Name", "Position", "Horizontal drift", "Vertical", "Pinned", "Schedule" },
+            new[] { "Slot", "Name", "Position", "Horizontal drift", "Vertical", "Pinned", "Visit-exempt", "Schedule" },
             rows);
 
         result.Line(
@@ -843,6 +859,9 @@ internal static class VisitorProbes
                 slot.Index == visit.LeaderSlot ? "leader" : "member",
                 status.WrapperResolved ? Describe.Of(status.Position) : $"**{status.Failure}**",
                 Describe.YesNo(status.IsVisible),
+                Describe.YesNo(status.Dressed),
+                Describe.YesNo(status.DialogueAttached),
+                Describe.YesNo(status.Finalized),
                 link is null ? $"**{linkFailure}**" : "yes",
                 link is null ? "-" : Describe.YesNo(link.IsUnlocked),
                 link is null ? "-" : link.HasOffer ? $"${link.OfferPayment:0}" : "none",
@@ -851,7 +870,11 @@ internal static class VisitorProbes
         }
 
         result.Table(
-            new[] { "Slot", "Name", "Role", "Position", "Visible", "Customer", "Unlocked", "Live offer", "Contract" },
+            new[]
+            {
+                "Slot", "Name", "Role", "Position", "Visible", "Dressed", "Dialogue", "Finalized",
+                "Customer", "Unlocked", "Live offer", "Contract",
+            },
             rows);
 
         result.Fact("Meeting point", $"{visit.DeliveryLocationName} at {Describe.Of(visit.StandPoint)}");
@@ -870,17 +893,39 @@ internal static class VisitorProbes
             return;
         }
 
+        if (CustomerSettings.ApplyArchetypeAppearance)
+        {
+            var undressed = visit.Members.Count(slot => !VisitorDresser.IsDressed(slot.Index));
+            if (undressed > 0)
+            {
+                result.Fail(
+                    $"{undressed} of {rows.Count} member(s) are not dressed in the archetype look. They will stand in " +
+                    "civilian clothes. Check MelonLoader for FAILED dress lines — usually an untyped AvatarSettings wrapper.");
+                return;
+            }
+        }
+        else
+        {
+            result.Fact(
+                "Archetype styling",
+                "off — members keep prefab civilian looks (expected; apply_archetype_appearance=false)");
+        }
+
         if (VisitorDialogue.AttachedCount < rows.Count)
         {
             result.Fail(
                 $"Only {VisitorDialogue.AttachedCount} of {rows.Count} member(s) have a group dialogue entry. The rest will " +
                 "greet you and offer nothing, which is a dead end: there is no way to reach the bulk order or a walk-up " +
-                "deal from a conversation with no choices in it.");
+                "deal from a conversation with no choices in it. " +
+                (VisitorDialogue.LastFailure.Length > 0 ? $"Last failure: {VisitorDialogue.LastFailure}." : string.Empty));
             return;
         }
 
+        var lookNote = CustomerSettings.ApplyArchetypeAppearance
+            ? "each dressed and with a dialogue entry"
+            : "each with a dialogue entry (prefab looks — styling off)";
         result.Ok(
-            $"{visit.Archetype.DisplayName} are in town with {rows.Count} sellable member(s), each with a dialogue entry. " +
+            $"{visit.Archetype.DisplayName} are in town with {rows.Count} sellable member(s), {lookNote}. " +
             "The leader manages the bulk contract; everyone else opens the shipped walk-up deal. See `sc.sale_loop` for where " +
             "a specific sale is stuck.");
     }
@@ -944,8 +989,8 @@ internal static class VisitorProbes
                 new[]
                 {
                     "5. Delivery location",
-                    link.DeliveryLocationName,
-                    "Where `CustomerAttendDealBehaviour` will send them and where the handover screen opens.",
+                    link.ActiveDeliveryLocationName,
+                    "Location on the live offer/contract (what handover uses). GetDeliveryLocation() alone can be a random unscheduled site.",
                 },
                 new[]
                 {
@@ -986,7 +1031,7 @@ internal static class VisitorProbes
         if (link.HasContract)
         {
             result.Ok(
-                $"A contract is live. Take the product to {link.DeliveryLocationName} and talk to {visit.Leader.FullName}: " +
+                $"A contract is live. Take the product to {link.ActiveDeliveryLocationName} and talk to {visit.Leader.FullName}: " +
                 "the shipped handover screen pays out, banks the XP and writes the receipt.");
             return;
         }

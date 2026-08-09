@@ -119,6 +119,15 @@ internal static class GameSave
             if (_quitState == QuitSaveState.Allowed || _quitOutcomeLogged)
                 return;
 
+            // Unity/MelonLoader can raise OnApplicationQuit even after wantsToQuit returned false.
+            // Do not collapse Waiting to Allowed here: Tick owns the save-complete/timeout decision
+            // and issues the second Application.Quit only after the save is settled.
+            if (_quitState == QuitSaveState.Waiting)
+            {
+                Log.Debug($"Autosave: quit callback arrived while waiting on {_quitSlotLabel}; wait remains active.");
+                return;
+            }
+
             if (!ExpansionConfig.AutosaveOnQuit)
             {
                 LogOutcome("Autosave: skipped — autosave_on_quit is off");
@@ -136,13 +145,6 @@ internal static class GameSave
             if (alreadySaving)
             {
                 LogOutcome($"Autosave: skipped — game was already saving ({slot}); no wait left on quit");
-                _quitState = QuitSaveState.Allowed;
-                return;
-            }
-
-            if (_quitState == QuitSaveState.Waiting)
-            {
-                LogOutcome($"Autosave: quit reached while still waiting on {slot}; not starting a second save");
                 _quitState = QuitSaveState.Allowed;
                 return;
             }

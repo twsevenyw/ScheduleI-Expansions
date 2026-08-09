@@ -63,9 +63,9 @@
      NEW SURFACE      Triggerable EVENTS on the UP ARROW: a short in-world list you raise while
                       playing. Police contributes five; Core contributes two so the list is
                       never empty. Shift+Up re-fires the last one.
-     DRIVERS          Reworked to the game's own screens (v0.6.0). Native fixer hiring is live-
-                      verified on 0.4.6f12; each driver now receives a Veeper, preserves unrelated
-                      trunk cargo and can truly "set off now". See section 5.
+     DRIVERS          Reworked to the game's own screens (v0.7.0). Driver is now one employee type
+                      in the Fixer's normal type -> location flow; the clipboard says Driver and
+                      the NPC wears a blue delivery uniform. See section 5.
      POLICE           Seven previously-deferred features built (v0.3.0): property raids,
                       stakeouts, custody and the lost day, equipment loss, informants, outlaw
                       economics, and the legal fee now actually spends. Then, on top: THE MAP'S
@@ -101,7 +101,7 @@
    2.  QUICK REFERENCE -- keys, menus, console, file locations
    3.  EXPANSIONS CORE                          [SHIPPED]                v0.1.0
    4.  THE ACTIONS AND EVENTS SURFACE -- every action, by owning mod
-   5.  HIREABLE DRIVERS                         [SHIPPED, UNVERIFIED]    v0.6.0
+   5.  HIREABLE DRIVERS                         [SHIPPED, UNVERIFIED]    v0.7.0
    6.  POLICE IMPROVEMENTS                      [SHIPPED]                v0.3.0
    7.  SPECIAL CUSTOMERS                        [SHIPPED, UNVERIFIED]    v1.0.0
    8.  QUALITY OF LIFE                          [SHIPPED]                v0.1.0
@@ -689,8 +689,8 @@
    Hire a driver
      (repair path)           picker   GREYED OUT with the reason "hire drivers at <the fixer>,
                                       with the rest of your staff" whenever the dialogue hook
-                                      took. Verified attached on 0.4.6f12: 13 property choices,
-                                      with 12 visible for the loaded save. Host only.
+                                      took. The normal path is Hire employee -> Driver -> location.
+                                      Host only.
    Choose which driver the repair
      paths apply to          picker   Only appears when the clipboard's own drop-off list is
                                       unavailable.
@@ -704,31 +704,30 @@
                                       are fired by talking to them, like any employee.
 
 ==================================================================================================
- 5.  HIREABLE DRIVERS                                       [SHIPPED, UNVERIFIED]   v0.6.0
+ 5.  HIREABLE DRIVERS                                       [SHIPPED, UNVERIFIED]   v0.7.0
 ==================================================================================================
 
   Module id:        hireable_drivers
   DLL:              Expansions.HireableDrivers.dll  -->  Mods\
   Config category:  HireableDrivers_01_Main
-  Size:             37 source files, ~7,300 lines
-  Contributes:      7 actions, 10 probes, 5 mutating-test notes, 10 Harmony patch targets,
+  Size:             38 source files, ~8,200 lines
+  Contributes:      7 actions, 10 probes, 5 mutating-test notes, 20 Harmony patch targets,
                     25 settings + enabled, a 6-objective tutorial chapter, one save blob
 
   --------------------------------------------------------------------------------------------
   NATIVE HIRING ON 0.4.6f12                                       [RUNTIME VERIFIED]
   --------------------------------------------------------------------------------------------
-  Drivers are hired from the employee-fixer NPC's own conversation through the public
-  DialogueController.AddDialogueChoice API. The 2026-08-09 live probe on 0.4.6f12 confirmed one
-  fixer, 13 attached property choices, 12 visible choices for the loaded save, all 10 Harmony
-  targets, 190 pickups, 169 drop-offs and 33 parking lots. The old failure was reflection against
-  UnityEngine.Object instead of the concrete DialogueController wrapper; every non-generic Unity
-  lookup is now cast before member resolution. If a future build moves the API, the F7 repair path
-  appears with the exact binding failure instead of silently losing hiring.
+  Drivers are hired from the employee-fixer NPC's own shipped conversation: choose to hire an
+  employee, pick Driver beside Botanist/Handler/Chemist/Cleaner, then choose one eligible location.
+  Five DialogueController_Fixer hooks inject the type, reuse SELECT_LOCATION, validate the dedicated
+  driver-slot budget, show driver fees and intercept CONFIRM before vanilla creates a Handler.
+  No per-property entries are added to the top-level numbered list. If a future build moves one of
+  those hooks, the F7 repair path appears with the exact binding failure.
 
   WHAT IT IS
   --------------------------------------------------------------------------------------------
   You already have Handlers who shuffle items around inside one property. A Driver does the same
-  job BETWEEN properties, businesses and dealers, using one of your cars. Same hiring, same wages,
+  job BETWEEN logistics properties and dealers, using one of your cars. Same hiring, same wages,
   same bed requirement, same five-route grammar. The only new verbs are "assign a vehicle" and
   "depart when the trunk holds N items" -- which is the dev's own wording from Community Vote #2.
 
@@ -740,10 +739,10 @@
 
   WHERE EACH SETTING LIVES
   --------------------------------------------------------------------------------------------
-     Hire                  Employee-fixer NPC dialogue, one entry per owned property
+     Hire                  Employee fixer: Hire employee -> Driver -> location
      Bed                   Shipped management clipboard, unchanged
      Routes                Same clipboard -- Stations row hidden for drivers, heading reads
-                           "Routes - collects at the Barn"
+                           "Routes · Barn"
      Pickup                Shipped worldspace picker; off-property refused in the game's own
                            hover text
      Drop-off              The clipboard's own ItemSelector list screen -- every owned storage
@@ -755,16 +754,25 @@
 
   DRIVER SLOTS ARE A SEPARATE BUDGET FROM EMPLOYEE CAPACITY
   --------------------------------------------------------------------------------------------
-  One driver per property regardless of how many botanists, handlers, chemists and cleaners are
-  already there; two at the docks warehouse, because that is the freight property.
+  One driver per logistics property regardless of how many botanists, handlers, chemists and
+  cleaners are already there; two at the Barn and Docks Warehouse. Laundering-only businesses
+  (Car Wash, Laundromat, Post Office, Taco Ticklers) are excluded from hiring and route endpoints.
+  The employee factory's own capacity check is bridged only for the synchronous create call, then
+  restored; normal employee validation subtracts drivers, so neither system consumes the other.
 
-     driver_slots_per_property = "*=1,dockswarehouse=2"
-     drivers_use_employee_capacity = false      (default -- flip it to spend real employee slots)
+     driver_slots_per_property = "*=1,barn=2,dockswarehouse=2"
+     drivers_use_employee_capacity = false      (forced -- the legacy setting can no longer enable it)
+
+  A driver remains a network-safe Packager internally, but that implementation detail is hidden:
+  the clipboard header is rewritten from Handler to Driver, the route heading is compact enough not
+  to overlap its rows, and the avatar wears a blue rolled shirt, charcoal cargo pants, black boots/
+  belt and blue cap. Face, hair, tattoos, glasses and facial hair remain unique to the employee.
 
   Keys are real Property.propertyCode values, read out of shipped save data rather than guessed
   from display names: barn, bungalow, dockswarehouse, manor, motelroom, rv, seweroffice,
-  storageunit, sweatshop, and the businesses carwash, laundromat, postoffice, tacoticklers. "*"
-  is the fallback for anything unlisted, and a value is clamped 0-16.
+  storageunit and sweatshop. Business codes carwash/laundromat/postoffice/tacoticklers are
+  deliberately ignored. "*" is the fallback for an unlisted logistics property. Values clamp to
+  16, with hard minimums of one everywhere and two at barn/dockswarehouse.
 
   UPKEEP
   --------------------------------------------------------------------------------------------
@@ -774,7 +782,9 @@
      Daily wage         $250/day, drawn from the bed's locker by the vanilla wage pipeline. There
                         is no separate driver economy.
      Bed                Required by default. Without one the driver refuses to work and says so
-                        on the clipboard. require_bed_and_wage = false lifts it.
+                        on the clipboard. Before assignment, its unsafe vanilla Handler tick is
+                        suppressed (GetHome otherwise null-dereferences). Once assigned, vanilla
+                        wage/bed bookkeeping resumes. require_bed_and_wage = false lifts the work gate.
      Working hours      07:00 to 04:00, the shipped day window.
      Curfew             Ignored by default, matching the shipped rule that dealers cannot be
                         arrested. respect_curfew = true makes them stop.
@@ -790,19 +800,18 @@
   in-world source/destination picker, the transit-line preview, the item-filter screen, FishNet
   replication and vanilla save/load for free, rather than a mod list that only looks like one.
 
-  Point the clipboard at a driver and you get Bed, Stations and Routes. Stations is refused with
-  a reason ("Drivers run transit routes, not stations.") because a station assigned to a driver
-  would silently never be worked. The five Route rows are the editor:
+  Point the clipboard at a driver and you get Bed and Routes; the inherited Stations row is hidden
+  because a station assigned to a driver would silently never be worked. The five Route rows are
+  the editor:
 
      From          Storage at THE PROPERTY THE DRIVER WAS HIRED TO. Shelves, racks, packaging
                    stations, presses, pots, mushroom beds, drying racks, ovens, cauldrons, mixing
                    and chemistry stations, loading docks.
-     To            Any of the above ANYWHERE YOU OWN, or a recruited dealer.
+     To            Any of the above at another logistics property you own, or a recruited dealer.
      What          The vanilla item filter, including blacklist and multi-item whitelist shapes;
                    blank means "anything the source holds".
      Depart at     Item count. Not a vanilla field, so it lives on the driver's dialogue.
                    0 means automatic: default_depart_threshold_percent of the trunk's capacity.
-     On / off      Per row.
 
   PICKUP IS PINNED TO THE HIRING PROPERTY, ENFORCED IN THREE PLACES: inside the game's own
   worldspace picker (a postfix on RouteEntryUI.ObjectValid, so hovering an invalid container shows
@@ -914,7 +923,7 @@
   TextField and breaks DrawTexture, and a diagnostic view has no business owning a canvas. 720 x
   520, Escape or F6 closes it.
 
-  HARMONY PATCHES (10 targets)
+  HARMONY PATCHES (20 targets)
   --------------------------------------------------------------------------------------------
      Packager.UpdateBehaviour            prefix, SKIPPING -- the only skipping prefix in the mod.
                                          It is the per-tick work dispatcher, and there is no other
@@ -923,6 +932,11 @@
                                          also carries bed-and-wage bookkeeping, and a permanently
                                          suppressed driver is never marked paid, so CanWork()
                                          stays false forever.
+     Employee.InitializeAppearance       postfix -- applies the Driver uniform on every peer after
+                                         the vanilla hire/load appearance RPC
+     EmployeeManager.CreateEmployee_Server prefix + postfix -- temporarily expands vanilla capacity
+                                         by occupied driver slots (plus the new Driver slot), then
+                                         restores the authored value; ordinary employee slots remain free
      Packager.ShouldIdle                 postfix -- never idle mid-trip
      Packager.IsAnyWorkInProgress        postfix -- report busy mid-trip
      Packager.Fire                       postfix -- tear the driver down when fired by vanilla
@@ -940,9 +954,24 @@
                                          object
      PackagerConfigPanel.BindInternal    postfix -- hides the Stations row and relabels the
                                          Routes heading for a driver
+     SelectionInfoUI.Set / Update        postfixes -- exact screenshot surface: `1x Driver`, with
+                                         split `Driver, Handler` counts for mixed Packager selections
+     ManagementInterface.UpdateMainLabels postfix -- rewrites Handler/Packager to Driver in the
+                                         clipboard header for all-driver selections
+     DialogueController_Fixer.ModifyChoiceList postfix -- one Driver type choice; location rows
+                                         come only on the shipped SELECT_LOCATION screen
+     DialogueController_Fixer.ChoiceCallback prefix + postfix -- tracks Driver, opens the shipped
+                                         location node and intercepts CONFIRM before Handler creation
+     DialogueController_Fixer.CheckChoice prefix -- dedicated driver-slot and fee validation,
+                                         independent of ordinary employee capacity
+     DialogueController_Fixer.ModifyDialogueText prefix -- Driver fee/wage confirmation text
+     DialogueController_Fixer.Confirm   prefix, SKIPPING for Driver only -- calls DriverHiring and
+                                         blocks vanilla Handler creation/double charging
 
-  There are NO Harmony patches for hiring. That is entirely the game's public AddDialogueChoice
-  API -- which is exactly why its absence on 0.4.6f12 degrades rather than throws.
+  Hiring uses the Fixer's four public virtual dialogue hooks rather than adding thirteen root
+  interaction choices. The labels/nodes (`Botanist`, `Driver`, `SELECT_LOCATION`, `FINALIZE`,
+  `CONFIRM`) follow the shipped flow. If a future build moves one, hiring degrades to the named
+  repair path rather than overflowing or dead-ending the conversation.
 
   A UI patch that fails has a repair path. The two load-bearing isolation patches are different:
   if UpdateBehaviour suppression or GetTransitRouteReady veto is missing, trips pause and
@@ -958,15 +987,17 @@
      Everything else        in the mod's own blob at
                             <save>\Modded\Saveables\hireable_drivers.json: which employees are
                             drivers, which property each was hired to, the assigned vehicle GUID,
-                            the departure thresholds and dealer destinations the vanilla row
-                            cannot express, and the trip counters.
+                            exact blacklist/whitelist filters, departure thresholds, dealer
+                            destinations, active-trip cargo manifests and trip counters.
 
   The roster is rebuilt from scratch on load rather than merged, because the deserialised records
   are new objects and a stale brain would keep editing the previous save's copy.
 
   Disabling the module first mirrors the latest clipboard rows into the sidecar and clears the
-  vanilla RouteListField. Re-enabling restores them. This prevents the now-ordinary Handler brain
-  from trying to walk a cross-town driver route while the Harmony patches are off.
+  vanilla RouteListField. Re-enabling restores endpoints AND the exact item filter. This prevents
+  the now-ordinary Handler brain from trying to walk a cross-town driver route while the Harmony
+  patches are off. Cargo already loaded when a save/reload, scene transition or toggle interrupts
+  a trip is resumed from its persisted per-slot manifest instead of becoming stranded trunk stock.
 
   INTEROP DISCIPLINE
   --------------------------------------------------------------------------------------------
@@ -1429,10 +1460,13 @@
   everything". Quantities respect the shipped rounding rule (orders of 14+ snap to a multiple of
   five) and the shipped 1,000-unit hard clamp.
 
-  THE PRODUCT ALLOW-LIST                                                       product_allow_list
+  THE PRODUCT ALLOW-LIST                       product_allow_list / enforce_allow_list_on_member_deals
   --------------------------------------------------------------------------------------------
   Comma-separated, default "Granddaddy Purple, Cocaine, Diddy's Powdered Semen". It decides what a
-  group is allowed to ask for; the archetype's own taste then chooses WITHIN the list.
+  group is allowed to ask for; the archetype's own taste then chooses WITHIN the list. Leader bulk
+  contracts always honour it. Member street deals honour it when
+  enforce_allow_list_on_member_deals is true (default): affinities are biased to allowed drug types
+  and GetProductEnjoyment is zeroed for off-list products before the game builds the offer.
 
   Resolution scans ItemManager.GetAllItemDefinitions() filtered to products -- which is where
   mod-created definitions land, and the default list already contains one -- unioned with
@@ -1444,9 +1478,9 @@
   are RETRIED EVERY 20 SECONDS rather than latched, because another mod can register products
   after a save has finished loading.
 
-  Leave the setting empty and there is no restriction at all: groups go back to buying anything
-  you have listed. "Show the product allow-list" on the Actions tab and the sc.products probe both
-  report what resolved and what did not.
+  Leave product_allow_list empty and there is no restriction at all: groups go back to buying
+  anything you have listed. "Show the product allow-list" on the Actions tab and the sc.products
+  probe both report what resolved and what did not.
 
   PER-VISITOR RANDOMISED APPEARANCE
   --------------------------------------------------------------------------------------------
@@ -2105,19 +2139,20 @@
                                                         matching the shipped employee rule.
      daily_wage                        float   250      Drawn from the bed locker by the vanilla
                                                         wage pipeline, like any employee.
-     driver_slots_per_property         string  "*=1,dockswarehouse=2"
+     driver_slots_per_property         string  "*=1,barn=2,dockswarehouse=2"
                                                         Comma-separated <propertyCode>=<slots>;
-                                                        "*" is the default for anything unlisted,
-                                                        and each value is clamped 0-16. Real
+                                                        "*" is the default for anything unlisted.
+                                                        Max 16; minimum 1 everywhere, 2 at
+                                                        barn/dockswarehouse. Real
                                                         codes: barn, bungalow, dockswarehouse,
                                                         manor, motelroom, rv, seweroffice,
-                                                        storageunit, sweatshop, carwash,
-                                                        laundromat, postoffice, tacoticklers.
+                                                        storageunit, sweatshop. Laundering
+                                                        businesses are always excluded.
      drivers_use_employee_capacity     bool    false    Off: a driver slot is its own budget, so
-                                                        every property can take one however many
-                                                        other staff it already has. On: drivers
-                                                        compete for Property.EmployeeCapacity
-                                                        like everyone else.
+                                                        every logistics property can take one however many
+                                                        other staff it already has. Forced off;
+                                                        the legacy key is retained only for config
+                                                        compatibility.
      max_routes_per_driver             int     5        Parity with the Handler clipboard.
                                                         Clamped 1-10.
      default_depart_threshold_percent  int     50       Percent of the trunk that must be loaded
@@ -2354,10 +2389,12 @@
      quantity_multiplier                       float   1.0         Scales every group order. 2.0
                                                                    doubles what they ask for and
                                                                    what they pay. Clamped 0.1-10.
-     quantity_min                              int     40          Floor, before the archetype
-                                                                   band is applied.
-     quantity_max                              int     80          Ceiling. The game's own hard
-                                                                   clamp is 1000.
+     quantity_min                              int     200         Bulk-order floor, before the
+                                                                   archetype band. Several hundred
+                                                                   is the point of the feature.
+     quantity_max                              int     700         Bulk-order ceiling. Hard game
+                                                                   clamp is Customer.MaxOrder
+                                                                   QuantityPerProduct = 1000.
      global_price_multiplier                   float   1.0         Multiplies each archetype's own
                                                                    0.80-0.92 rate. Clamped 0.1-5.
      offer_expiry_minutes                      int     120         How long an unanswered offer
@@ -2365,6 +2402,9 @@
      allow_walkup_sales                        bool    true        Let non-leader members be
                                                                    approached directly for smaller
                                                                    deals while in town.
+     enforce_allow_list_on_member_deals        bool    true        Keep member street deals inside
+                                                                   product_allow_list (leader bulk
+                                                                   always respects it).
      announce_arrivals                         bool    true        Send the leader's phone message
                                                                    and drop a map marker.
      archetype_bikers_enabled                  bool    true        The Ashfall MC.
@@ -2480,7 +2520,7 @@
          Expansions.Core.dll               shared library, NOT a MelonMod        v0.1.0
 
      <GameDir>\Mods\
-         Expansions.HireableDrivers.dll    expansion mod                         v0.6.0
+         Expansions.HireableDrivers.dll    expansion mod                         v0.7.0
          Expansions.PoliceOverhaul.dll     expansion mod                         v0.3.0
          Expansions.SpecialCustomers.dll   expansion mod                         v1.0.0
          Expansions.Tweaks.dll             expansion mod ("Quality of Life")     v0.1.0
@@ -2588,13 +2628,17 @@
       as "self-drives: yes" means you get the real driving path; all "no" is not a bug, but every
       trip will relay.
 
-   4. HIRING. Talk to the employee fixer and choose "Hire a driver for <property>".
-      PASS: the line is present, you are charged, a driver appears on the roster, and a persistent
-      16-slot Veeper is parked for them. The F7 repair action must be greyed out because native
-      hiring works. FAIL: run drivers.hiring_desk; it names the exact missing API or scene object.
+   4. HIRING. Talk to the employee fixer: choose to hire an employee, choose Driver in the type
+      list, then choose the location.
+      PASS: only one Driver type choice exists (no per-property top-level clutter); every eligible
+      location appears on the next screen; Barn and Docks Warehouse allow two drivers; ordinary
+      employee capacity is ignored; Car Wash/Laundromat/Post Office/Taco Ticklers do not appear;
+      you are charged and a persistent 16-slot Veeper is parked.
+      FAIL: run drivers.hiring_desk; it names the exact missing hook or scene object.
 
    5. THE CLIPBOARD. Point the management clipboard at that driver.
-      PASS: Bed and five Route rows; the Stations row is hidden. Set the Bed. Put one unrelated
+      PASS: the header says Driver (not Handler), the NPC wears the blue delivery uniform, and the
+      panel shows Bed plus five Route rows with no text overlap; Stations is hidden. Set the Bed. Put one unrelated
       product in the Veeper, then set a route's pickup with the worldspace picker -- hovering
       a container at a DIFFERENT property must refuse with "Driver X only collects from the Barn".
       Set a drop-off at another property you own; the vanilla out-of-range refusal must be
@@ -2912,9 +2956,9 @@
                                    Quality of Life 4)
      Config keys     130           (shared 9, Police 46, Customers 37, Drivers 26, Quality of
                                    Life 12 -- each module count includes its automatic "enabled")
-     Harmony patches  42 targets   (Police 20, Quality of Life 11, Drivers 10, Customers 1,
-                                   Core 0). 41 apply at default settings.
-     Mutating notes   24           (Core 20, Drivers 4)
+     Harmony patches  52 targets   (Police 20, Quality of Life 11, Drivers 20, Customers 1,
+                                   Core 0). 51 apply at default settings.
+     Mutating notes   25           (Core 20, Drivers 5)
      Tutorial          9 chapters, 37 objectives in this package
                                    (Core 2+2+2+3+3, Police 8, Drivers 6, Customers 6, Quality of
                                    Life 5), all reachable, none self-completing

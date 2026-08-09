@@ -18,8 +18,9 @@ namespace Expansions.SpecialCustomers.Visitors;
 /// Two halves. <see cref="Pin"/> is the fix: clear the schedule, disable the manager and opt out of
 /// curfew, so nothing is telling him to walk anywhere. <see cref="Pump"/> is the safety net for
 /// everything a schedule is not — being shoved, ragdolled, or dropped through the floor — and it
-/// only ever touches a visitor who is <i>meant</i> to be standing still, so it can never fight the
-/// shipped deal-attendance behaviour that walks a leader to a handover.
+/// only ever touches a visitor who is <i>meant</i> to be standing still. Active visit members are
+/// registered with <see cref="ExemptVisit"/> for the whole stay so the watchdog cannot yank them
+/// home the moment <see cref="Visits.Congregation.Place"/> puts them at the meeting point.
 /// </para>
 /// </summary>
 internal static class PostWatch
@@ -33,6 +34,7 @@ internal static class PostWatch
     private static readonly Dictionary<int, Correction> Corrections = new();
     private static readonly Dictionary<int, float> LastDrift = new();
     private static readonly HashSet<int> Pinned = new();
+    private static readonly HashSet<int> VisitExempt = new();
     private static readonly object Gate = new();
 
     private static int _frames;
@@ -56,6 +58,15 @@ internal static class PostWatch
         }
     }
 
+    internal static int ExemptCount
+    {
+        get
+        {
+            lock (Gate)
+                return VisitExempt.Count;
+        }
+    }
+
     internal static bool IsArmed => _armed;
 
     /// <summary>Drops the per-scene state. The NPCs and their schedules die with the scene.</summary>
@@ -65,6 +76,7 @@ internal static class PostWatch
         {
             Pinned.Clear();
             LastDrift.Clear();
+            VisitExempt.Clear();
         }
 
         _frames = 0;
@@ -78,6 +90,34 @@ internal static class PostWatch
     /// exists to fix.
     /// </summary>
     internal static void Arm() => _armed = true;
+
+    /// <summary>
+    /// Visit members must not be re-parked for the whole stay. Schedule pinning
+    /// (<see cref="Pin"/>) still runs so the civilian routine cannot walk them off the meeting
+    /// point; only the distance watchdog is suppressed.
+    /// </summary>
+    internal static void ExemptVisit(IEnumerable<int> slotIndices)
+    {
+        lock (Gate)
+        {
+            VisitExempt.Clear();
+            foreach (var index in slotIndices)
+                VisitExempt.Add(index);
+        }
+    }
+
+    /// <summary>Clears the visit exemption so the watchdog can keep them on their posts again.</summary>
+    internal static void ClearVisitExemption()
+    {
+        lock (Gate)
+            VisitExempt.Clear();
+    }
+
+    internal static bool IsVisitExempt(int slotIndex)
+    {
+        lock (Gate)
+            return VisitExempt.Contains(slotIndex);
+    }
 
     /// <summary>
     /// Takes a visitor out of the generic NPC routine so nothing walks him off his post.
@@ -136,8 +176,8 @@ internal static class PostWatch
     }
 
     /// <summary>
-    /// Re-parks any parked visitor who has left his post. <paramref name="busySlots"/> is the set of
-    /// slots taking part in a live visit; they are the group's own business and are left alone.
+    /// Re-parks any parked visitor who has left his post. Active visit members registered via
+    /// <see cref="ExemptVisit"/> are never touched, even if the caller forgets to pass them as busy.
     /// </summary>
     internal static void Pump(IReadOnlyList<int> busySlots)
     {
@@ -157,8 +197,9 @@ internal static class PostWatch
 
         foreach (var slot in VisitorSlot.All)
         {
-            // Index loop rather than LINQ: this runs four times a second for the whole session, and
-            // an enumerator per slot per tick is a pointless allocation to leave in a frame hook.
+            if (IsVisitExempt(slot.Index))
+                continue;
+
             var busy = false;
             for (var i = 0; i < busySlots.Count && !busy; i++)
                 busy = busySlots[i] == slot.Index;
@@ -190,7 +231,12 @@ internal static class PostWatch
         {
             Corrections.TryGetValue(slot.Index, out var correction);
             LastDrift.TryGetValue(slot.Index, out var drift);
-            return new Report(Pinned.Contains(slot.Index), drift, correction.Count, correction.LastReason);
+            return new Report(
+                Pinned.Contains(slot.Index),
+                VisitExempt.Contains(slot.Index),
+                drift,
+                correction.Count,
+                correction.LastReason);
         }
     }
 
@@ -222,6 +268,10 @@ internal static class PostWatch
 
     private static void Correct(NPC npc, VisitorSlot slot, float horizontal, float vertical)
     {
+        // Belt-and-braces: never yank a live group member home, even if exemption was cleared early.
+        if (IsVisitExempt(slot.Index))
+            return;
+
         var reason = Math.Abs(vertical) > CustomerSettings.PostDriftDepth
             ? $"{horizontal:0.#} m from his post and {vertical:+0.#;-0.#} m vertically — he has left the walkable surface"
             : $"{horizontal:0.#} m from his post";
@@ -280,15 +330,18 @@ internal static class PostWatch
     /// <summary>One slot's watchdog state.</summary>
     internal readonly struct Report
     {
-        internal Report(bool pinned, float lastDrift, int corrections, string lastReason)
+        internal Report(bool pinned, bool visitExempt, float lastDrift, int corrections, string lastReason)
         {
             Pinned = pinned;
+            VisitExempt = visitExempt;
             LastDrift = lastDrift;
             Corrections = corrections;
             LastReason = lastReason ?? string.Empty;
         }
 
         internal bool Pinned { get; }
+
+        internal bool VisitExempt { get; }
 
         internal float LastDrift { get; }
 

@@ -28,6 +28,7 @@ internal static class CustomerSettings
     private static ConfigValue<float>? _globalPriceMultiplier;
     private static ConfigValue<int>? _offerExpiryMinutes;
     private static ConfigValue<bool>? _allowWalkUpSales;
+    private static ConfigValue<bool>? _enforceAllowListOnMemberDeals;
 
     private static ConfigValue<bool>? _bikers;
     private static ConfigValue<bool>? _businessmen;
@@ -45,6 +46,7 @@ internal static class CustomerSettings
     private static ConfigValue<int>? _customerStandardMemberBaseline;
 
     private static ConfigValue<bool>? _announceArrivals;
+    private static ConfigValue<bool>? _applyArchetypeAppearance;
 
     private static ConfigValue<bool>? _pinSchedules;
     private static ConfigValue<bool>? _postWatchdog;
@@ -70,9 +72,9 @@ internal static class CustomerSettings
 
     internal static float QuantityMultiplier => Clamp(_quantityMultiplier?.Value ?? 1f, 0.1f, 10f);
 
-    internal static int QuantityMin => Clamp(_quantityMin?.Value ?? 40, 1, 1000);
+    internal static int QuantityMin => Clamp(_quantityMin?.Value ?? 200, 1, 1000);
 
-    internal static int QuantityMax => Math.Max(QuantityMin, Clamp(_quantityMax?.Value ?? 80, 1, 1000));
+    internal static int QuantityMax => Math.Max(QuantityMin, Clamp(_quantityMax?.Value ?? 700, 1, 1000));
 
     internal static float GlobalPriceMultiplier => Clamp(_globalPriceMultiplier?.Value ?? 1f, 0.1f, 5f);
 
@@ -80,7 +82,20 @@ internal static class CustomerSettings
 
     internal static bool AllowWalkUpSales => _allowWalkUpSales?.Value ?? true;
 
+    /// <summary>
+    /// When true (default), member street deals may only ask for products on
+    /// <c>product_allow_list</c>. Turn off to let members buy whatever the game would normally want.
+    /// </summary>
+    internal static bool EnforceAllowListOnMemberDeals => _enforceAllowListOnMemberDeals?.Value ?? true;
+
     internal static bool AnnounceArrivals => _announceArrivals?.Value ?? true;
+
+    /// <summary>
+    /// When false (the shipped default), visitors keep their prefab look — no AvatarSettings clone,
+    /// layer/morph writes, LoadAvatarSettings, ApplyShapeKeys, or equippable props. Wardrobe code
+    /// stays in the assembly for a later revisit; the default arrival path cannot reach it.
+    /// </summary>
+    internal static bool ApplyArchetypeAppearance => _applyArchetypeAppearance?.Value ?? false;
 
     /// <summary>Stops a parked visitor following the generic civilian schedule off his post.</summary>
     internal static bool PinVisitorSchedules => _pinSchedules?.Value ?? true;
@@ -164,16 +179,22 @@ internal static class CustomerSettings
 
         _quantityMultiplier = config.Bind("quantity_multiplier", 1f, "Order quantity multiplier",
             "Scales every group order. 2.0 doubles what they ask for and what they pay.");
-        _quantityMin = config.Bind("quantity_min", 40, "Order quantity floor",
-            "No group order is smaller than this, before the archetype band is applied.");
-        _quantityMax = config.Bind("quantity_max", 80, "Order quantity ceiling",
-            "No group order is larger than this. The game's own hard clamp is 1000.");
+        _quantityMin = config.Bind("quantity_min", 200, "Order quantity floor",
+            "No group bulk order is smaller than this, before the archetype band is applied. Bulk buyers — several hundred is the point.");
+        _quantityMax = config.Bind("quantity_max", 700, "Order quantity ceiling",
+            "No group bulk order is larger than this. The game's hard per-product clamp (Customer.MaxOrderQuantityPerProduct) is 1000 on 0.4.6.");
         _globalPriceMultiplier = config.Bind("global_price_multiplier", 1f, "Global price multiplier",
             "Multiplies each archetype's own 0.80-0.92 rate. 1.0 keeps the intended below-market margin.");
         _offerExpiryMinutes = config.Bind("offer_expiry_minutes", 120, "Offer expiry (in-game minutes)",
             "How long an unanswered group offer stays on the phone. 120 matches the shipped two-hour order window.");
         _allowWalkUpSales = config.Bind("allow_walkup_sales", true, "Allow walk-up sales",
             "Lets non-leader members be approached directly for smaller deals while the group is in town.");
+        _enforceAllowListOnMemberDeals = config.Bind(
+            "enforce_allow_list_on_member_deals",
+            true,
+            "Enforce allow-list on member deals",
+            "When on, every visitor purchase — leader bulk contracts and member street deals — stays inside " +
+            "product_allow_list. When off, members may ask for whatever the game would normally want.");
 
         _bikers = config.Bind("archetype_bikers_enabled", true, "Bikers", "The Ashfall MC. Meth, very low standards, largest orders, hardest bargain.");
         _businessmen = config.Bind("archetype_businessmen_enabled", true, "Businessmen", "The Wexler Group. Cocaine, high standards, pays closest to market.");
@@ -203,6 +224,14 @@ internal static class CustomerSettings
 
         _announceArrivals = config.Bind("announce_arrivals", true, "Announce arrivals",
             "Sends the group leader's phone message and drops a map marker when a group arrives.");
+
+        _applyArchetypeAppearance = config.Bind(
+            "apply_archetype_appearance",
+            false,
+            "Apply archetype appearance",
+            "OFF by default. When off, visitors keep the look of their NPC prefab (ordinary townspeople) " +
+            "and the mod never writes AvatarSettings / layers / morphs / hair / skin / LoadAvatarSettings. " +
+            "Archetype behaviour and economics still apply. Turn on only to revisit wardrobe dressing.");
 
         _pinSchedules = config.Bind("pin_visitor_schedules", true, "Pin visitors to their post",
             "Clears and disables the generic NPC schedule on every visitor, and takes them out of curfew " +

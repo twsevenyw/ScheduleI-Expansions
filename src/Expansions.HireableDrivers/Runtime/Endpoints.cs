@@ -162,7 +162,7 @@ internal static class EndpointCatalog
         {
             foreach (var property in WorldApi.OwnedProperties())
             {
-                if (!Gx.Alive(property))
+                if (!Gx.Alive(property) || WorldApi.IsBusiness(property))
                     continue;
 
                 foreach (var buildable in WorldApi.BuildableItems(property))

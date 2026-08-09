@@ -66,11 +66,21 @@ internal static class VisitorDialogue
             if (!AttachSlot(visit, slot, out var failure))
             {
                 LastFailure = failure;
-                VisitorLog.Instance.Warn(
-                    $"{slot.FullName} could not be given a group dialogue entry ({failure}); " +
-                    "talking to them will fall back to the plain civilian greeting.");
+                VisitorLog.Instance.Error(
+                    $"FAILED to attach group dialogue for {slot.FullName}: {failure}. " +
+                    "Talking to them will fall back to the plain civilian greeting. " +
+                    (GameDialogue.LastAddFailure.Length > 0
+                        ? $"AddChoice detail: {GameDialogue.LastAddFailure}."
+                        : string.Empty));
             }
         }
+    }
+
+    /// <summary>True when this slot currently has a group dialogue choice on its controller.</summary>
+    internal static bool IsAttached(int slotIndex)
+    {
+        lock (Gate)
+            return Attached.ContainsKey(slotIndex);
     }
 
     /// <summary>Takes every entry back out, so a parked visitor is an ordinary background NPC again.</summary>

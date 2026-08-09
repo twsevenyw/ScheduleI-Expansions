@@ -3,6 +3,8 @@ using Expansions.SpecialCustomers.Archetypes;
 using Expansions.SpecialCustomers.Configuration;
 using Expansions.SpecialCustomers.Game;
 using Expansions.SpecialCustomers.Visitors;
+using S1API.Products;
+using UnityEngine;
 
 namespace Expansions.SpecialCustomers.Visits;
 
@@ -37,6 +39,7 @@ internal static class CustomerTuner
 
     private static readonly Dictionary<int, Dictionary<string, object?>> Baselines = new();
     private static readonly Dictionary<int, float> RelationshipBaselines = new();
+    private static readonly Dictionary<int, List<(object Entry, float Affinity)>> AffinityBaselines = new();
 
     /// <summary>Session-scoped, not visit-scoped: the shipped dialogue setup appends, so it runs once.</summary>
     private static readonly HashSet<int> DialogueRefreshed = new();
@@ -52,7 +55,7 @@ internal static class CustomerTuner
         }
     }
 
-    internal static bool Apply(VisitorSlot slot, Archetype archetype, bool isLeader, float budget, out string failure)
+    internal static bool Apply(VisitorSlot slot, Archetype archetype, Visit visit, bool isLeader, float budget, out string failure)
     {
         var npc = GameNpc.Resolve(slot.Id, out failure);
         if (npc is null)
@@ -62,18 +65,30 @@ internal static class CustomerTuner
         if (data is null)
             return false;
 
+        var customer = npc.Customer(out _);
+        if (customer is not null)
+            customer = InteropCast.As(customer, GameTypes.Customer) ?? customer;
+
         Snapshot(slot, data);
         SnapshotRelationship(slot);
+        SnapshotAffinities(slot, data, customer);
 
-        // Generous but finite: the shipped counter-offer maths reads the weekly spend, and a group
-        // whose budget is zero would reject its own contract.
-        var spend = Math.Max(budget * 2f, 1000f);
+        // Member street deals size off weekly spend (quantity ≈ spend / unit price). Aim at a
+        // fraction of the bulk floor so a walk-up is still a special-customer sale. Payment scales
+        // with that quantity through the game's own formula.
+        var memberTarget = OfferFactory.MemberTargetQuantity(visit);
+        var unitAnchor = MostValuableUnitPrice(archetype);
+        var memberSpend = Mathf.Max(memberTarget * unitAnchor * 1.25f, 5000f);
+        var spend = isLeader
+            ? Mathf.Max(budget * 2f, memberSpend)
+            : memberSpend;
 
         Write(data, "MinWeeklySpend", spend);
         Write(data, "MaxWeeklySpend", spend);
 
-        // Zero either way. The mod authors every offer by hand; a visitor that also generated its
-        // own orders would put deals on the phone that nobody is in town to fulfil.
+        // Zero either way. The mod authors every bulk offer by hand; a visitor that also generated
+        // its own scheduled orders would put deals on the phone that nobody is in town to fulfil.
+        // Street deals (RequestProduct / approach texts) still run — those are the member path.
         Write(data, "MinOrdersPerWeek", 0);
         Write(data, "MaxOrdersPerWeek", 0);
 
@@ -94,6 +109,11 @@ internal static class CustomerTuner
         Write(data, "DependenceMultiplier", 0f);
         Write(data, "MinMutualRelationRequirement", 0f);
         Write(data, "MaxMutualRelationRequirement", 0f);
+
+        ConstrainAffinities(slot, data, customer, archetype);
+
+        if (customer is not null)
+            VisitProductGate.Register(customer);
 
         Unlock(slot);
         RefreshDialogue(slot);
@@ -123,15 +143,21 @@ internal static class CustomerTuner
         if (data is null)
             return false;
 
+        var customer = npc.Customer(out _);
+        if (customer is not null)
+            VisitProductGate.Unregister(InteropCast.As(customer, GameTypes.Customer) ?? customer);
+
         foreach (var pair in baseline!)
             Write(data, pair.Key, pair.Value);
 
+        RestoreAffinities(slot);
         RestoreRelationship(slot);
 
         lock (Gate)
         {
             Baselines.Remove(slot.Index);
             RelationshipBaselines.Remove(slot.Index);
+            AffinityBaselines.Remove(slot.Index);
         }
 
         failure = string.Empty;
@@ -144,7 +170,10 @@ internal static class CustomerTuner
         {
             Baselines.Clear();
             RelationshipBaselines.Clear();
+            AffinityBaselines.Clear();
         }
+
+        VisitProductGate.Clear();
     }
 
     /// <summary>
@@ -287,18 +316,189 @@ internal static class CustomerTuner
         Write(data, "Standards", value);
     }
 
+    /// <summary>
+    /// Soft preference layer for the generator: boost drug types that appear on the allow-list (or
+    /// the archetype's preferred drugs when the list is unrestricted), and crush everything else so
+    /// a missing preferred product falls through to the most valuable allowed one via enjoyment.
+    /// </summary>
+    private static void ConstrainAffinities(VisitorSlot slot, object data, object? customer, Archetype archetype)
+    {
+        if (!CustomerSettings.EnforceAllowListOnMemberDeals)
+            return;
+
+        var allowedTypes = AllowedDrugTypes(archetype);
+        if (allowedTypes.Count == 0)
+            return;
+
+        foreach (var affinityData in AffinitySources(data, customer))
+            ApplyAffinityTargets(affinityData, allowedTypes);
+    }
+
+    private static void SnapshotAffinities(VisitorSlot slot, object data, object? customer)
+    {
+        lock (Gate)
+        {
+            if (AffinityBaselines.ContainsKey(slot.Index))
+                return;
+        }
+
+        var snapshot = new List<(object Entry, float Affinity)>(16);
+        foreach (var affinityData in AffinitySources(data, customer))
+        {
+            if (!GameReflection.TryRead(affinityData, "ProductAffinities", out var list, out _) || list is null)
+                continue;
+
+            foreach (var entry in GameReflection.Enumerate(list))
+            {
+                if (entry is null)
+                    continue;
+
+                if (GameReflection.TryRead(entry, "Affinity", out var value, out _) && value is float affinity)
+                    snapshot.Add((entry, affinity));
+            }
+        }
+
+        lock (Gate)
+            AffinityBaselines[slot.Index] = snapshot;
+    }
+
+    private static void RestoreAffinities(VisitorSlot slot)
+    {
+        List<(object Entry, float Affinity)>? snapshot;
+        lock (Gate)
+        {
+            if (!AffinityBaselines.TryGetValue(slot.Index, out snapshot))
+                return;
+        }
+
+        foreach (var (entry, affinity) in snapshot!)
+        {
+            try
+            {
+                GameReflection.TryWrite(entry, "Affinity", affinity, out _);
+            }
+            catch (Exception ex)
+            {
+                VisitorLog.Instance.Debug(
+                    $"Restoring affinity on slot {slot.Index:00} failed ({Describe.Of(ex)}).");
+            }
+        }
+    }
+
+    private static IEnumerable<object> AffinitySources(object data, object? customer)
+    {
+        if (GameReflection.TryRead(data, "DefaultAffinityData", out var defaults, out _) &&
+            GameReflection.IsPresent(defaults) &&
+            defaults is not null)
+        {
+            yield return defaults;
+        }
+
+        if (customer is not null &&
+            GameReflection.TryRead(customer, "currentAffinityData", out var current, out _) &&
+            GameReflection.IsPresent(current) &&
+            current is not null)
+        {
+            yield return current;
+        }
+    }
+
+    private static void ApplyAffinityTargets(object affinityData, HashSet<int> allowedTypes)
+    {
+        if (!GameReflection.TryRead(affinityData, "ProductAffinities", out var list, out _) || list is null)
+            return;
+
+        foreach (var entry in GameReflection.Enumerate(list))
+        {
+            if (entry is null)
+                continue;
+
+            if (!GameReflection.TryRead(entry, "DrugType", out var drug, out _) || drug is null)
+                continue;
+
+            var drugValue = Convert.ToInt32(drug);
+            var target = allowedTypes.Contains(drugValue) ? 1f : -1f;
+            GameReflection.TryWrite(entry, "Affinity", target, out _);
+        }
+    }
+
+    private static HashSet<int> AllowedDrugTypes(Archetype archetype)
+    {
+        var types = new HashSet<int>();
+        var allowed = ProductAllowList.Current();
+
+        if (allowed.IsRestricted && allowed.Matched.Count > 0)
+        {
+            foreach (var match in allowed.Matched)
+            {
+                try
+                {
+                    types.Add((int)match.Product.PrimaryDrugType);
+                    foreach (var drug in match.Product.DrugTypeValues)
+                        types.Add((int)drug);
+                }
+                catch
+                {
+                    // Skip definitions that cannot report a drug type.
+                }
+            }
+
+            return types;
+        }
+
+        foreach (var drug in archetype.EffectiveDrugs())
+            types.Add((int)drug);
+
+        return types;
+    }
+
+    /// <summary>
+    /// Anchor unit price for member spend. Prefer the most valuable allow-listed product so an
+    /// expensive cocaine walk-up still reaches the target quantity band.
+    /// </summary>
+    private static float MostValuableUnitPrice(Archetype archetype)
+    {
+        float best = 0f;
+        var allowed = ProductAllowList.Current();
+        var catalogue = allowed.IsRestricted
+            ? (allowed.AvailableProducts.Count > 0 ? allowed.AvailableProducts : allowed.Products)
+            : Array.Empty<ProductDefinition>();
+
+        foreach (var product in catalogue)
+        {
+            try
+            {
+                best = Math.Max(best, product.MarketValue);
+            }
+            catch
+            {
+                // Skip.
+            }
+        }
+
+        if (best > 1f)
+            return best;
+
+        // No allow-list / nothing resolved: enough headroom for a mid-tier product at member target.
+        return 200f * Math.Max(0.5f, archetype.PriceMultiplier);
+    }
+
     private static void Write(object data, string member, object? value)
     {
         try
         {
-            var property = data.GetType().GetProperty(member);
+            var typed = InteropCast.As(data, GameTypes.CustomerData) ?? data;
+            var dataType = GameReflection.FindType(GameTypes.CustomerData) ?? typed.GetType();
+            var property = dataType.GetProperty(member);
             if (property is null || !property.CanWrite)
             {
-                VisitorLog.Instance.Debug($"CustomerData.{member} is not writable on this build; skipping it.");
+                VisitorLog.Instance.Debug(
+                    $"CustomerData.{member} is not writable on {dataType.Name} " +
+                    $"(runtime wrapper was {data.GetType().Name}); skipping it.");
                 return;
             }
 
-            property.SetValue(data, value);
+            property.SetValue(typed, value);
         }
         catch (Exception ex)
         {

@@ -101,8 +101,8 @@ internal static class DialogueApi
 
     /// <summary>
     /// Builds a choice and hands it to the controller. <paramref name="shouldShow"/> is re-evaluated by
-    /// the game every time the interaction list is built, which is what keeps a per-property entry's
-    /// fee and slot count current without a polling loop.
+    /// the game every time the interaction list is built, which keeps driver-specific actions current
+    /// without a polling UI.
     /// </summary>
     internal static object? AddChoice(
         object? controller,

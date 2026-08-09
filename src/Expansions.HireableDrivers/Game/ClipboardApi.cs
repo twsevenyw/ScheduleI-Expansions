@@ -15,10 +15,21 @@ namespace Expansions.HireableDrivers.Game;
 internal static class ClipboardApi
 {
     /// <summary>The <c>PackagerConfiguration</c> behind an employee, or null if it has not spawned yet.</summary>
-    internal static object? Configuration(object? employee) =>
-        Gx.GetAlive(employee, "configuration") ?? Gx.GetAlive(employee, "Configuration");
+    internal static object? Configuration(object? employee)
+    {
+        // EmployeeManager.AllEmployees is List<Employee>, so IL2CPP returns a base wrapper even when
+        // the native object is a Packager. Re-cast before reading its derived configuration field.
+        var packager = Gx.Cast(employee, GameTypes.Packager) ?? employee;
+        return Gx.GetAlive(packager, "configuration") ?? Gx.GetAlive(packager, "Configuration");
+    }
 
     internal static object? RouteField(object? employee) => Gx.Get(Configuration(employee), "Routes");
+
+    internal static bool HasAssignedHome(object? employee)
+    {
+        var home = Gx.Get(Configuration(employee), "Home");
+        return Gx.GetAlive(home, "SelectedObject") is not null;
+    }
 
     internal static IReadOnlyList<object?> Routes(object? employee) =>
         Gx.List(Gx.Get(RouteField(employee), "Routes"));
@@ -235,7 +246,8 @@ internal static class ClipboardApi
     /// </summary>
     internal static bool IsBeingConfigured(object? employee)
     {
-        var configurer = Gx.Get(employee, "CurrentPlayerConfigurer");
+        var packager = Gx.Cast(employee, GameTypes.Packager) ?? employee;
+        var configurer = Gx.Get(packager, "CurrentPlayerConfigurer");
         return Gx.Alive(configurer);
     }
 }

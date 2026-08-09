@@ -58,6 +58,10 @@ internal static class PolicePatches
         Patch(harmony, GameTypes.NpcHealth, "NotifyAttackedByPlayer", 1, postfix: nameof(OfficerAttackedPostfix));
         Patch(harmony, GameTypes.NpcHealth, "Die", 0, postfix: nameof(OfficerDiedPostfix));
 
+        // Legal fee at the station door — StaticDoor knock/interact. Ownership is pointer-set only.
+        Patch(harmony, GameTypes.StaticDoor, "Hovered", 0, postfix: nameof(StationDoorHoveredPostfix));
+        Patch(harmony, GameTypes.StaticDoor, "Interacted", 0, prefix: nameof(StationDoorInteractedPrefix));
+
         Patch(harmony, GameTypes.BodySearchBehaviour, "DoesPlayerContainItemsOfInterest", 0, postfix: nameof(BodySearchPostfix));
         Patch(harmony, GameTypes.CheckpointBehaviour, "DoesVehicleContainIllicitItems", 0, postfix: nameof(VehicleSearchPostfix));
         // The hand-written body of the observers RPC, so the caller is recorded on the host as well
@@ -261,8 +265,18 @@ internal static class PolicePatches
         if (__result || !PoliceRuntime.IsLive || __args.Length < 1)
             return;
 
-        if (PoliceRuntime.Outlaw!.IsOutlawed(__args[0]))
-            __result = true;
+        if (!PoliceRuntime.Outlaw!.IsOutlawed(__args[0]))
+            return;
+
+        // Only latch the first recognition. Forcing CanInvestigate every poll while the player is
+        // already Investigating/Arresting re-enters the ?/! state machine and stutter-walks officers.
+        // Pointer-free: we only read the player's CrimeData here (not an officer we might own).
+        var crimeData = Members.ReadPath(__args[0], "CrimeData");
+        var level = Members.Read<object?>(crimeData, "CurrentPursuitLevel", null);
+        if (level is not null && Convert.ToInt32(level) > 0)
+            return;
+
+        __result = true;
     }
 
     private static void BodySearchPostfix(object __instance, ref bool __result)
@@ -314,6 +328,38 @@ internal static class PolicePatches
             config.PoliceDensity.Value);
 
         __args[0] = Math.Min(HeatModel.HardOfficerCap, Math.Max(requested, min));
+    }
+
+    /// <summary>
+    /// Police-station door hover: rewrite the interact prompt to the tiered legal fee (or why not).
+    /// Empty door set ⇒ no-op without touching the instance.
+    /// </summary>
+    private static void StationDoorHoveredPostfix(object __instance)
+    {
+        if (!PoliceRuntime.IsLive || !LegalFeeDesk.IsOurDoor(__instance))
+            return;
+
+        Guard("station door hover", () => LegalFeeDesk.OnHovered(__instance));
+    }
+
+    /// <summary>
+    /// Police-station door interact: pay the legal fee instead of summoning an NPC when outlawed.
+    /// Clean players keep vanilla knock. Empty door set ⇒ run original.
+    /// </summary>
+    private static bool StationDoorInteractedPrefix(object __instance)
+    {
+        if (!PoliceRuntime.IsLive || !LegalFeeDesk.IsOurDoor(__instance))
+            return true;
+
+        try
+        {
+            return LegalFeeDesk.OnInteracted(__instance);
+        }
+        catch (Exception ex)
+        {
+            PoliceLog.Error("Police Improvements threw on the station door; letting vanilla knock run.", ex);
+            return true;
+        }
     }
 
     /// <summary>Designated federal officers stay out until the event releases them.</summary>

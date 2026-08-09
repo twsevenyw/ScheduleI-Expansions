@@ -46,6 +46,18 @@ internal sealed class PoliceConfig
             "Deals raise heat",
             "Adds 1 heat per $2,000 of contract payment, capped per in-game day. Turn off if you want only crimes to matter.");
 
+        HeatResetOnArrest = config.Bind(
+            "heat_reset_on_arrest",
+            true,
+            "Arrest clears heat to zero",
+            "When you get arrested, heat drops to 0 — you paid for it. Marked/Hunted outlaw status is NOT cleared (that still needs clean days or the legal fee). Turn off to use the old +arrest_heat behaviour instead.");
+
+        ArrestHeat = config.Bind(
+            "arrest_heat",
+            State.HeatModel.ArrestHeat,
+            "Heat added on arrest (legacy)",
+            "Only used when heat_reset_on_arrest is off. Positive values add heat on arrest (vanilla mod behaviour was +15). Ignored when arrests clear heat.");
+
         EnableIntensity = config.Bind(
             "enable_dynamic_intensity",
             true,
@@ -316,11 +328,17 @@ internal sealed class PoliceConfig
             "Outlaw clear days",
             "Consecutive in-game days with no crimes and no arrests needed to drop one outlaw tier.");
 
-        OutlawLegalFee = config.Bind(
-            "outlaw_legal_fee",
+        LegalFeeMarked = config.Bind(
+            "legal_fee_marked",
             25000,
-            "Outlaw legal fee",
-            "Cost of buying your way down one outlaw tier, spent from the Police Improvements menu. Priced at the Barn, so it is a real mid-game decision. Cash first, then your bank balance.");
+            "Legal fee — Marked",
+            "Cash (then bank) to drop from Marked to Clean at the police station door. The F7 menu only offers this as a repair path if the door hook failed.");
+
+        LegalFeeHunted = config.Bind(
+            "legal_fee_hunted",
+            50000,
+            "Legal fee — Hunted",
+            "Cash (then bank) to drop from Hunted to Marked at the police station door. Max-wanted price. The F7 menu only offers this as a repair path if the door hook failed.");
 
         OutlawDealerCutBonus = config.Bind(
             "outlaw_dealer_cut_bonus",
@@ -507,6 +525,10 @@ internal sealed class PoliceConfig
 
     internal ConfigValue<bool> HeatFromDeals { get; }
 
+    internal ConfigValue<bool> HeatResetOnArrest { get; }
+
+    internal ConfigValue<float> ArrestHeat { get; }
+
     internal ConfigValue<bool> EnableIntensity { get; }
 
     internal ConfigValue<bool> EnableScheduleTuning { get; }
@@ -597,7 +619,17 @@ internal sealed class PoliceConfig
 
     internal ConfigValue<int> OutlawClearDays { get; }
 
-    internal ConfigValue<int> OutlawLegalFee { get; }
+    internal ConfigValue<int> LegalFeeMarked { get; }
+
+    internal ConfigValue<int> LegalFeeHunted { get; }
+
+    /// <summary>Tiered lawyer price. Clean → 0; Marked → <see cref="LegalFeeMarked"/>; Hunted → <see cref="LegalFeeHunted"/>.</summary>
+    internal int FeeFor(State.OutlawTier tier) => tier switch
+    {
+        State.OutlawTier.Hunted => Math.Max(0, LegalFeeHunted.Value),
+        State.OutlawTier.Marked => Math.Max(0, LegalFeeMarked.Value),
+        _ => 0,
+    };
 
     internal ConfigValue<float> OutlawDealerCutBonus { get; }
 

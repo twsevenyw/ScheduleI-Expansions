@@ -35,15 +35,29 @@ internal static class VisitAnnouncer
         SetMemberPins(visit, false);
     }
 
+    /// <summary>
+    /// Records what the bulk offer asked for. Does <b>not</b> send a phone text.
+    /// <para>
+    /// <c>Customer.OfferContract</c> already texts the player via
+    /// <c>NotifyPlayerOfContract</c> + <c>SetUpResponseCallbacks</c>, which is what attaches the
+    /// Accept / Reject / Counter buttons. A second plain <c>SendTextMessage</c> after that call
+    /// clears <c>currentResponses</c> and leaves a recorded offer with no way to accept it — the
+    /// exact failure the sale-loop probe reports. Member walk-up deals stay answerable because they
+    /// never send that extra flavour line; the leader must match that path.
+    /// </para>
+    /// </summary>
     internal static void AnnounceOffer(Visit visit, int quantity, string productName, float payment)
     {
-        var text = string.Format(
+        LastMessage = string.Format(
             visit.Archetype.OfferMessage,
             quantity,
             productName,
             payment.ToString("0"));
 
-        Send(visit, text);
+        VisitorLog.Instance.Msg(
+            $"{visit.Leader.FullName}'s bulk offer is on the phone ({quantity} x {productName} for " +
+            $"${payment:0}). Accept / reject / counter come from the game's own offer message — " +
+            "no extra flavour text is sent on top.");
     }
 
     /// <summary>Re-attaches the map marker after a load without re-sending the arrival text.</summary>
@@ -87,6 +101,8 @@ internal static class VisitAnnouncer
             }
 
             leader.SendTextMessage(text);
+            VisitorLog.Instance.Msg(
+                $"{visit.Leader.FullName} texted the player on arrival: \"{text}\"");
         }
         catch (Exception ex)
         {

@@ -128,6 +128,10 @@ internal static class DriverRegistry
 
     internal static bool IsDriver(object? employee) => TryGet(employee, out _);
 
+    internal static bool HasDriverIdentity(object? employee) =>
+        IsDriver(employee) ||
+        EmployeeApi.Id(employee).StartsWith("driver_", StringComparison.Ordinal);
+
     /// <summary>
     /// The driver the management clipboard is currently open on, if any. Read from the game's own
     /// <c>ManagementInterface.Configurables</c> so it is right for both a direct click and a
@@ -192,6 +196,7 @@ internal static class DriverRegistry
         }
 
         DriverDesk.Detach(employeeId);
+        DriverAppearance.Restore(employeeId, brain.Employee);
         brain.AbortAndRelease();
         DriverStore.Forget(employeeId);
     }
@@ -231,6 +236,7 @@ internal static class DriverRegistry
             {
                 // The driver's own dialogue is the only place some settings live, so a driver you can
                 // talk to but get no options from is a broken feature, not a cosmetic one.
+                DriverAppearance.Apply(brain);
                 DriverDesk.Ensure(brain);
 
                 // The clipboard is the route editor, so its rows are read before the loop plans a trip.
@@ -297,6 +303,7 @@ internal static class DriverRegistry
     {
         EmployeeApi.SetFees(brain.Employee, DriverSettings.SigningFee, DriverSettings.DailyWage);
         EmployeeApi.SetConfigName(brain.Employee, DriverName(brain.Record));
+        DriverAppearance.Apply(brain);
         DriverDesk.Attach(brain);
         AdoptRoutes(brain);
     }
@@ -400,6 +407,7 @@ internal static class DriverRegistry
     /// <summary>Drops runtime wrappers while retaining the world's current clipboard state.</summary>
     internal static void Clear()
     {
+        DriverAppearance.RestoreAll(Drivers);
         DriverDesk.DetachAll();
         RoutePicker.Reset();
 

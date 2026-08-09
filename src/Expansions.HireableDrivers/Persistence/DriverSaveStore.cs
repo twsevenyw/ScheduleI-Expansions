@@ -46,7 +46,8 @@ public sealed class DriverSaveStore : Saveable
             {
                 DriverLog.Warn(
                     $"This save's driver data is version {Data.Version} but this build reads {SupportedVersion}. " +
-                    "Reading the fields this build knows and preserving the roster; unknown fields remain harmless.");
+                    "Reading the fields this build knows and preserving the roster; newer-only fields may be dropped.");
+                Data.Version = SupportedVersion;
             }
 
             Data.Drivers ??= new List<DriverRecord>();

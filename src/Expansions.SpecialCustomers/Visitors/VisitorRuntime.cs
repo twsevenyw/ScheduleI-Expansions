@@ -1,4 +1,6 @@
 using Expansions.Core.Diagnostics;
+using Expansions.SpecialCustomers.Archetypes;
+using Expansions.SpecialCustomers.Visits;
 using S1API.Entities;
 using S1API.Lifecycle;
 using UnityEngine;
@@ -215,6 +217,8 @@ internal static class VisitorRuntime
                 FramesWaited = _framesWaited,
                 Finalized = integrity?.Finalized ?? false,
                 ActionListValid = integrity?.ActionListValid ?? false,
+                Dressed = VisitorDresser.IsDressed(slot.Index),
+                DialogueAttached = VisitorDialogue.IsAttached(slot.Index),
                 IntegritySummary = integrity?.Summary ?? string.Empty,
                 Failure = failure.Length > 0
                     ? failure
@@ -244,6 +248,8 @@ internal static class VisitorRuntime
             FramesWaited = _framesWaited,
             Finalized = live.Finalized,
             ActionListValid = live.ActionListValid,
+            Dressed = VisitorDresser.IsDressed(slot.Index),
+            DialogueAttached = VisitorDialogue.IsAttached(slot.Index),
             IntegritySummary = live.Summary,
             Failure = failure.Length > 0
                 ? failure

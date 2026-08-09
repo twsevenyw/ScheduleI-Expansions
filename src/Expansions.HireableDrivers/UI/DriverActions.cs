@@ -86,7 +86,7 @@ internal static class DriverActions
         id: Prefix + "hire",
         label: "Hire a driver (repair path)",
         description:
-            "Only appears when the mod could not put \"Hire a driver\" on the employee-hiring NPC. " +
+            "Only appears when the mod could not add Driver to the employee type → location hiring flow. " +
             "The exact reason is on the diagnostic panel and in the `drivers.hiring_desk` probe.",
         isAvailable: () =>
         {
@@ -98,6 +98,9 @@ internal static class DriverActions
 
             if (HiringDesk.LastFailure.Length == 0)
                 return ActionAvailability.Unavailable("still looking for the employee-hiring NPC in this scene");
+
+            if (DriverHiring.Candidates().Count == 0)
+                return ActionAvailability.Unavailable("every owned location's dedicated driver slots are full");
 
             return ActionAvailability.Ready;
         },
@@ -238,7 +241,7 @@ internal static class DriverActions
         if (drivers.Count == 0)
         {
             return ActionResult.NoChange(HiringDesk.IsAttached
-                ? $"No drivers hired yet. Talk to {HiringDesk.Location} and pick \"Hire a driver\" for one of your properties."
+                ? $"No drivers hired yet. Talk to {HiringDesk.Location}, choose Hire employee → Driver, then pick a location."
                 : "No drivers hired yet.");
         }
 

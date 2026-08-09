@@ -395,6 +395,11 @@ internal static class DriverDesk
                 {
                     Expansions.Core.Actions.ActionLog.Fail(refusal);
                     DriverLog.Msg($"{_brain.Name} cannot set off now: {refusal}");
+                    EmployeeApi.SubmitIssue(
+                        _brain.Employee,
+                        refusal,
+                        "Resolve that condition, then ask the driver to set off again.",
+                        5);
                     return;
                 }
 

@@ -75,6 +75,27 @@ internal static class PoliceMessages
             ? $"Police attention just stepped up to {tierName} (heat {heat:0}). {meaning}"
             : $"Police attention has eased to {tierName} (heat {heat:0}). {meaning}");
 
+    /// <summary>
+    /// Arrest wiped street heat. Outlaw tier is called out when still latched so the player does not
+    /// think booking also laundered Marked/Hunted.
+    /// </summary>
+    internal static void ArrestClearedHeat(float previousHeat, OutlawTier outlaw)
+    {
+        var outlawNote = outlaw switch
+        {
+            OutlawTier.Hunted =>
+                " Your Hunted flag is still on file — booking clears heat, not the record. Clean days or the legal fee clear that.",
+            OutlawTier.Marked =>
+                " You are still Marked — arrest wiped the heat score, not the outlaw latch. Clean days or the legal fee clear that.",
+            _ => string.Empty,
+        };
+
+        Message(
+            previousHeat > 0.5f
+                ? $"Arrest processed. Your heat was wiped from {previousHeat:0} back to 0 — street pressure resets when you pay the price.{outlawNote}"
+                : $"Arrest processed. Heat stays at 0.{outlawNote}");
+    }
+
     internal static void OutlawChanged(OutlawTier tier)
     {
         Message(tier switch
@@ -82,10 +103,11 @@ internal static class PoliceMessages
             OutlawTier.Hunted =>
                 "Your file just went Hunted. Every officer recognises you on sight, searches always turn something up, " +
                 "pursuits will not time out, card-only shops will not serve you, and your dealers are taking a hazard cut. " +
-                "Clear it with clean days or pay the legal fee from the Police Improvements menu.",
+                $"Clear it with clean days or knock on the police station door and pay the ${PoliceRuntime.Config?.LegalFeeHunted.Value:N0} legal fee.",
             OutlawTier.Marked =>
                 "You are Marked. Officers treat you as always-suspicious, body searches will find contraband, " +
-                "and pursuits stick around longer. Three clean days in a row (or the legal fee) drops you back toward Clean. " +
+                "and pursuits stick around longer. Three clean days in a row (or the legal fee at the station door) drops you back toward Clean. " +
+                $"Knock on the police station door to pay ${PoliceRuntime.Config?.LegalFeeMarked.Value:N0}. " +
                 "Stay Marked long enough and a second federal encounter or a second arrest promotes you to Hunted.",
             _ =>
                 "Your outlaw flag is cleared. Fines, searches and shops are back to the normal heat rules — " +

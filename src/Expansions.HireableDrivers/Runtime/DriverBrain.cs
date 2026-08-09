@@ -429,7 +429,7 @@ internal sealed class DriverBrain
                 break;
 
             case DriverState.AtSource:
-                RunWalkTo(now, _source!, DriverState.Loading, $"Loading at {_source.Label}.");
+                RunWalkTo(now, _source!, DriverState.Loading, $"Loading at {_source!.Label}.");
                 break;
 
             case DriverState.Loading:

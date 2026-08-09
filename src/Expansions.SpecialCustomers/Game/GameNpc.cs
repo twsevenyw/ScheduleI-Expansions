@@ -43,10 +43,20 @@ internal sealed class GameNpc
             : null;
 
     /// <summary>The dialogue handler the in-world interaction menu is built on.</summary>
-    internal object? DialogueHandler =>
-        GameReflection.TryRead(_npc, "DialogueHandler", out var value, out _) && GameReflection.IsPresent(value)
-            ? value
-            : null;
+    internal object? DialogueHandler
+    {
+        get
+        {
+            if (!GameReflection.TryRead(_npc, "DialogueHandler", out var value, out _) ||
+                !GameReflection.IsPresent(value))
+            {
+                return null;
+            }
+
+            // Base-typed fields / GetComponent shells hide DialogueHandler members until cast.
+            return InteropCast.As(value, GameTypes.DialogueHandler) ?? value;
+        }
+    }
 
     internal GameObject? GameObject =>
         GameReflection.TryRead(_npc, "gameObject", out var value, out _) && value is GameObject gameObject && gameObject != null
@@ -72,16 +82,23 @@ internal sealed class GameNpc
             return null;
         }
 
+        // GetNPC can hand back an Object/Component shell depending on the interop signature.
+        var typed = InteropCast.As(npc, GameTypes.Npc) ?? npc!;
+
         failure = string.Empty;
-        return new GameNpc(npc!, id);
+        return new GameNpc(typed, id);
     }
 
     /// <summary>
     /// Shows or hides the visitor. <c>networked: true</c> is not optional — a host-only hide leaves
     /// the group standing in the street on every other client.
     /// </summary>
-    internal bool SetVisible(bool visible, out string failure) =>
-        GameReflection.TryInvoke(_npc.GetType(), _npc, "SetVisible", new object?[] { visible, true }, out _, out failure);
+    internal bool SetVisible(bool visible, out string failure)
+    {
+        var npcType = GameReflection.FindType(GameTypes.Npc) ?? _npc.GetType();
+        var typed = InteropCast.As(_npc, npcType) ?? _npc;
+        return GameReflection.TryInvoke(npcType, typed, "SetVisible", new object?[] { visible, true }, out _, out failure);
+    }
 
     internal bool IsVisible =>
         GameReflection.TryRead(_npc, "isVisible", out var value, out _) && value is true;
@@ -101,14 +118,16 @@ internal sealed class GameNpc
 
         try
         {
-            var member = _npc.GetType().GetProperty("Region");
+            var npcType = GameReflection.FindType(GameTypes.Npc) ?? _npc.GetType();
+            var typed = InteropCast.As(_npc, npcType) ?? _npc;
+            var member = npcType.GetProperty("Region");
             if (member is null || !member.CanWrite)
             {
-                failure = "NPC.Region is not writable on this build";
+                failure = $"NPC.Region is not writable on {npcType.Name} (runtime wrapper was {_npc.GetType().Name})";
                 return false;
             }
 
-            member.SetValue(_npc, value);
+            member.SetValue(typed, value);
             failure = string.Empty;
             return true;
         }
@@ -119,10 +138,19 @@ internal sealed class GameNpc
         }
     }
 
-    internal object? Avatar =>
-        GameReflection.TryRead(_npc, "Avatar", out var avatar, out _) && GameReflection.IsPresent(avatar)
-            ? avatar
-            : null;
+    internal object? Avatar
+    {
+        get
+        {
+            if (!GameReflection.TryRead(_npc, "Avatar", out var avatar, out _) ||
+                !GameReflection.IsPresent(avatar))
+            {
+                return null;
+            }
+
+            return InteropCast.As(avatar, GameTypes.Avatar) ?? avatar;
+        }
+    }
 
     /// <summary>The avatar's live settings asset — also the donor every archetype clone is built from.</summary>
     internal object? CurrentAvatarSettings
@@ -130,26 +158,41 @@ internal sealed class GameNpc
         get
         {
             var avatar = Avatar;
-            return avatar is not null &&
-                   GameReflection.TryRead(avatar, "CurrentSettings", out var settings, out _) &&
-                   GameReflection.IsPresent(settings)
-                ? settings
-                : null;
+            if (avatar is null ||
+                !GameReflection.TryRead(avatar, "CurrentSettings", out var settings, out _) ||
+                !GameReflection.IsPresent(settings))
+            {
+                return null;
+            }
+
+            // CurrentSettings is often projected as Object/ScriptableObject — cast before cloning.
+            return InteropCast.As(settings, GameTypes.AvatarSettings) ?? settings;
         }
     }
 
     /// <summary>Wholesale appearance replacement. The shipped entry point; nothing is appended.</summary>
     internal bool LoadAvatarSettings(object settings, out string failure)
     {
+        var avatarType = GameReflection.FindType(GameTypes.Avatar);
         var avatar = Avatar;
-        if (avatar is null)
+        if (avatar is null || avatarType is null)
         {
             failure = "the NPC has no Avatar component";
             return false;
         }
 
+        var typedAvatar = InteropCast.As(avatar, avatarType) ?? avatar;
+        var typedSettings = InteropCast.As(settings, GameTypes.AvatarSettings);
+        if (typedSettings is null)
+        {
+            failure =
+                "LoadAvatarSettings refused an untyped UnityEngine.Object — cast to AvatarSettings first " +
+                $"(got {settings.GetType().Name})";
+            return false;
+        }
+
         return GameReflection.TryInvoke(
-            avatar.GetType(), avatar, "LoadAvatarSettings", new[] { settings }, out _, out failure);
+            avatarType, typedAvatar, "LoadAvatarSettings", new[] { typedSettings }, out _, out failure);
     }
 
     internal Vector3 Position
@@ -202,7 +245,7 @@ internal sealed class GameNpc
                     string.Equals(text, Id, StringComparison.Ordinal))
                 {
                     failure = string.Empty;
-                    return candidate;
+                    return InteropCast.As(candidate, customerType) ?? candidate;
                 }
             }
         }
@@ -237,7 +280,11 @@ internal sealed class GameNpc
             }
 
             var component = gameObject.GetComponent(Il2CppInterop.Runtime.Il2CppType.From(customerType));
-            return GameReflection.IsPresent(component) ? component : null;
+            if (!GameReflection.IsPresent(component))
+                return null;
+
+            // GetComponent(Il2CppType) returns an Object wrapper — Customer members are invisible on it.
+            return InteropCast.As(component, customerType) ?? component;
         }
         catch
         {
@@ -260,7 +307,7 @@ internal sealed class GameNpc
         }
 
         failure = string.Empty;
-        return data;
+        return InteropCast.As(data, GameTypes.CustomerData) ?? data;
     }
 
     /// <summary>Turns the standard "potential customer" map marker on or off for this visitor.</summary>

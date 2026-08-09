@@ -140,7 +140,26 @@ internal sealed class HeatDirector
         if (record.Outlaw != OutlawTier.Clean)
             record.ArrestsWhileOutlaw++;
 
-        Add(record, HeatModel.ArrestHeat, "arrest");
+        // Arrest resets street pressure, not the latched record. Marked/Hunted stay until clean days
+        // or the legal fee — getting bagged is not a laundry service.
+        if (_config.HeatResetOnArrest.Value)
+        {
+            var before = record.Heat;
+            record.Heat = 0f;
+            PoliceLog.Detail(
+                $"Heat {before:0.#} -> 0 (arrest reset). Outlaw {OutlawState.Describe(record.Outlaw)} unchanged.");
+            AnnounceTierIfChanged();
+            ApplyWorldNow();
+
+            if (_config.ShowHud.Value)
+                PoliceMessages.ArrestClearedHeat(before, record.Outlaw);
+
+            return;
+        }
+
+        var gain = Math.Max(0f, _config.ArrestHeat.Value);
+        if (gain > 0f)
+            Add(record, gain, "arrest");
     }
 
     /// <summary>
@@ -232,6 +251,10 @@ internal sealed class HeatDirector
         // is switched off, so calling it every minute is what makes turning the setting off mid-session
         // actually take the labels back off and put the dealer cuts back.
         _outlaw.Sync();
+
+        // Station doors can appear after the first wire (scene settle). Retry until attached.
+        if (!LegalFeeDesk.IsAttached)
+            LegalFeeDesk.Attach();
 
         if (!_config.EnableIntensity.Value || lawController is null)
             return;

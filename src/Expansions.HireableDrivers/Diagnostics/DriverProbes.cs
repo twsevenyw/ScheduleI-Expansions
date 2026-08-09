@@ -245,7 +245,7 @@ internal static class DriverProbes
         }
 
         result.Table(
-            new[] { "Driver", "State", "Vehicle", "Provided", "Trips", "Items", "Note" },
+            new[] { "Driver", "State", "Vehicle", "Provided", "Pending cargo", "Trips", "Items", "Note" },
             drivers
                 .Select(d => (IReadOnlyList<string>)new[]
                 {
@@ -253,6 +253,9 @@ internal static class DriverProbes
                     d.State.ToString(),
                     d.Vehicle is null ? d.Record.VehicleGuid.Length == 0 ? "none" : "missing" : VehicleApi.Name(d.Vehicle),
                     d.Record.SpawnedVehicle ? "yes" : "no",
+                    d.Record.PendingCargo.IsActive
+                        ? $"{d.Record.PendingCargo.Units}x {d.Record.PendingCargo.ItemId} → {d.Record.PendingCargo.Destination.Label}"
+                        : "none",
                     d.Record.CompletedTrips.ToString(),
                     d.Record.UnitsDelivered.ToString(),
                     d.StatusNote,
@@ -291,7 +294,7 @@ internal static class DriverProbes
                 var source = EndpointCatalog.Resolve(route.Source);
                 var destination = EndpointCatalog.Resolve(route.Destination);
 
-                var verdict = Verdict(route.ItemId, source, destination);
+                var verdict = Verdict(driver, i, route.ItemId, source, destination);
                 if (verdict.StartsWith("ok", StringComparison.Ordinal))
                     runnable++;
                 else if (verdict.StartsWith("broken", StringComparison.Ordinal))
@@ -332,7 +335,12 @@ internal static class DriverProbes
         result.Ok($"{runnable} of {rows.Count} route(s) can run right now; the rest are simply waiting on stock or space.");
     }
 
-    private static string Verdict(string itemId, Endpoint? source, Endpoint? destination)
+    private static string Verdict(
+        DriverBrain driver,
+        int routeIndex,
+        string itemId,
+        Endpoint? source,
+        Endpoint? destination)
     {
         if (source is null || !source.IsUsable)
             return "broken: the source is gone";
@@ -340,7 +348,9 @@ internal static class DriverProbes
         if (destination is null || !destination.IsUsable)
             return "broken: the destination is gone";
 
-        if (TransitApi.FindOutputSlot(source.Transit, itemId) is null)
+        var nativeRoutes = ClipboardApi.Routes(driver.Employee);
+        var nativeRoute = routeIndex < nativeRoutes.Count ? nativeRoutes[routeIndex] : null;
+        if (TransitApi.FindOutputSlot(source.Transit, itemId, nativeRoute) is null)
             return "waiting: the source has nothing matching";
 
         if (destination.Kind == EndpointKind.Dealer)
@@ -494,12 +504,14 @@ internal static class DriverProbes
 
     private static void HiringDeskProbe(ProbeContext context, ProbeResult result)
     {
-        var apiOk = DialogueApi.CanAddChoices(out var apiReason);
         var controllers = DialogueApi.HiringControllers();
 
-        result.Fact("AddDialogueChoice API", apiOk ? "resolves" : "**missing** — " + apiReason);
+        result.Fact("Native Fixer flow patches", DriverPatches.NativeHiringSafe
+            ? "type list + choice callback + validation + confirmation text"
+            : "**incomplete**");
         result.Fact("Hiring NPCs found", controllers.Count == 0 ? "**none**" : controllers.Count.ToString());
-        result.Fact("Driver options attached", HiringDesk.ChoiceCount.ToString());
+        result.Fact("Injected top-level choices", "0 (Driver is one employee-type choice)");
+        result.Fact("Injected employee-type choices", HiringDesk.ChoiceCount.ToString());
         result.Fact("Attach attempts", HiringDesk.Attempts.ToString());
         result.Fact("Attached to", HiringDesk.Location.Length > 0 ? HiringDesk.Location : "nothing yet");
         result.Fact("Status", HiringDesk.StatusLine);
@@ -508,21 +520,19 @@ internal static class DriverProbes
         if (HiringDesk.LastFailure.Length > 0)
             result.Fact("Why it is not attached", "**" + HiringDesk.LastFailure + "**");
 
-        if (DialogueApi.LastAddFailure.Length > 0)
-            result.Fact("Last AddChoice failure", "**" + DialogueApi.LastAddFailure + "**");
-
         var rows = WorldApi.OwnedProperties()
             .Select(property =>
             {
                 var code = WorldApi.PropertyCode(property);
-                var free = DriverCapacity.Free(code);
+                var business = WorldApi.IsBusiness(property);
+                var free = business ? 0 : DriverCapacity.Free(code);
                 return new[]
                 {
                     WorldApi.PropertyName(property),
                     code,
-                    DriverCapacity.ForProperty(property).ToString(),
+                    business ? "excluded (laundering business)" : DriverCapacity.ForProperty(property).ToString(),
                     DriverCapacity.Used(code).ToString(),
-                    free > 0 ? free.ToString() : "**0 (option hidden)**",
+                    free > 0 ? free.ToString() : business ? "n/a" : "**0 (option hidden)**",
                 };
             })
             .ToList();
@@ -530,11 +540,11 @@ internal static class DriverProbes
         if (rows.Count > 0)
             result.Table(new[] { "Property", "Code", "Driver slots", "Used", "Free" }, rows);
 
-        if (!apiOk)
+        if (!DriverPatches.NativeHiringSafe)
         {
             result.Fail(
-                "DialogueController.AddDialogueChoice is not callable on this build, so driver hiring cannot attach. " +
-                apiReason);
+                "One or more DialogueController_Fixer hooks did not bind, so Driver cannot join the shipped " +
+                "employee-type → location → confirmation flow.");
             return;
         }
 
@@ -560,13 +570,13 @@ internal static class DriverProbes
         {
             result.Inconclusive(
                 $"Driver hiring is attached to {HiringDesk.Location}, but every owned property's driver slot is full " +
-                "so shouldShowCheck hides every option. Fire a driver or buy another property.");
+                "so the Driver location stage has nothing to offer. Fire a driver or buy another property.");
             return;
         }
 
         result.Ok(
-            $"Driver hiring lives on {HiringDesk.Location} alongside the other employee types " +
-            $"({HiringDesk.ChoiceCount} option(s), {ownedWithRoom} currently visible).");
+            $"Driver is one employee-type choice in {HiringDesk.Location}'s shipped hiring conversation; " +
+            $"its next screen lists {ownedWithRoom} location(s) with a free dedicated driver slot.");
     }
 
     private static void ClipboardProbe(ProbeContext context, ProbeResult result)
@@ -635,8 +645,12 @@ internal static class DriverProbes
         var hiring = HiringDesk.IsAttached;
         var pickerOk = RoutePicker.IsAvailable(out var pickerReason);
         var panelPatched = DriverPatches.IsApplied("BindInternal");
+        var headerPatched = DriverPatches.IsApplied("Set") &&
+                            DriverPatches.IsApplied("Update") &&
+                            DriverPatches.IsApplied("UpdateMainLabels");
         var drivers = DriverRegistry.Drivers;
         var withDialogue = drivers.Count(d => DriverDesk.IsAttached(d.Record.EmployeeId));
+        var uniformed = drivers.Count(d => DriverAppearance.IsApplied(d.Record.EmployeeId));
 
         result.Table(
             new[] { "Setting", "Game screen it lives on", "Working" },
@@ -645,7 +659,9 @@ internal static class DriverProbes
                 new[]
                 {
                     "Hire a driver",
-                    hiring ? $"{HiringDesk.Location}'s interaction list" : "the employee fixer's interaction list",
+                    hiring
+                        ? $"{HiringDesk.Location}: Hire employee → Driver → location"
+                        : "the employee fixer's employee-type list",
                     hiring ? "yes" : $"**no** — {Reason(HiringDesk.LastFailure, "still searching for the NPC")}",
                 },
                 new[] { "Bed", "management clipboard, Bed row", "yes (shipped)" },
@@ -661,6 +677,18 @@ internal static class DriverProbes
                     "Stations row hidden",
                     "management clipboard",
                     panelPatched ? "yes" : "**no** — the row shows but refuses with a reason",
+                },
+                new[]
+                {
+                    "Clipboard role label",
+                    "management clipboard header",
+                    headerPatched ? "Driver (not Handler)" : "**no** — still reads Handler",
+                },
+                new[]
+                {
+                    "Driver uniform",
+                    "employee avatar",
+                    drivers.Count == 0 ? "no drivers to check" : $"{uniformed}/{drivers.Count} dressed",
                 },
                 new[]
                 {
@@ -689,9 +717,9 @@ internal static class DriverProbes
 
         result.Fact("Hiring desk status", HiringDesk.StatusLine);
 
-        if (!DialogueApi.CanAddChoices(out var apiReason))
+        if (!DriverPatches.NativeHiringSafe)
         {
-            result.Fail("Native hiring is impossible on this build: " + apiReason);
+            result.Fail("Native Driver type/location hiring patches are incomplete on this build.");
             return;
         }
 
@@ -712,6 +740,18 @@ internal static class DriverProbes
             return;
         }
 
+        if (!headerPatched)
+        {
+            result.Fail("The management clipboard header patch is missing, so drivers still read as Handlers.");
+            return;
+        }
+
+        if (drivers.Count > 0 && uniformed < drivers.Count)
+        {
+            result.Fail($"{drivers.Count - uniformed} driver(s) still have the base Handler outfit.");
+            return;
+        }
+
         if (drivers.Count > 0 && withDialogue < drivers.Count)
         {
             result.Fail(
@@ -721,9 +761,8 @@ internal static class DriverProbes
         }
 
         result.Ok(
-            "Every driver setting is on a screen the game drew: hiring on the fixer's interaction list, bed and " +
-            "routes on the management clipboard, vehicle and departure size in the driver's own conversation. " +
-            "The mod's own menu carries diagnostics only.");
+            "Driver is one type in the Fixer's normal hiring flow; the clipboard says Driver, the avatar wears the " +
+            "delivery uniform, bed/routes stay on the clipboard, and vehicle/departure settings stay in dialogue.");
     }
 
     private static string Reason(string reason, string fallback) => reason.Length > 0 ? reason : fallback;
@@ -749,13 +788,20 @@ internal static class DriverProbes
         yield return ("the clock", GameTypes.TimeManager);
         yield return ("the signing fee", GameTypes.MoneyManager);
         yield return ("clipboard routes", GameTypes.PackagerConfiguration);
+        yield return ("clipboard Driver type badge", GameTypes.SelectionInfoUi);
         yield return ("the route list field", GameTypes.RouteListField);
         yield return ("a single route", GameTypes.AdvancedTransitRoute);
         yield return ("the route's item filter", GameTypes.ManagementItemFilter);
+        yield return ("restoring route filter definitions", GameTypes.Registry);
         yield return ("the clipboard route row", GameTypes.RouteEntryUi);
         yield return ("the open clipboard", GameTypes.ManagementInterface);
         yield return ("hiring dialogue", GameTypes.DialogueControllerFixer);
+        yield return ("hiring type/location choices", GameTypes.DialogueChoiceData);
+        yield return ("hiring dialogue navigation", GameTypes.DialogueHandler);
         yield return ("a dialogue option", GameTypes.DialogueChoice);
         yield return ("the option's availability check", GameTypes.ShouldShowCheck);
+        yield return ("driver uniforms", GameTypes.AvatarSettings);
+        yield return ("driver uniform clothing layers", GameTypes.AvatarLayerSetting);
+        yield return ("driver uniform accessories", GameTypes.AvatarAccessorySetting);
     }
 }

@@ -132,7 +132,8 @@ internal sealed class PoliceChapter : ITutorialChapter
             .AddStep("clear", "Get your record back")
             .Describe(
                 "Drop an outlaw tier. Serve three consecutive clean in-game days, press \"Serve out one outlaw " +
-                "tier\" to skip the wait, or pay the legal fee - cash first, then your bank balance. Clearing a tier " +
+                "tier\" to skip the wait, or knock on the police station door and choose Pay legal fee " +
+                "(Marked $25,000 / Hunted $50,000 by default — cash first, then bank). Clearing a tier " +
                 "also pulls heat back under the latch so it does not immediately re-apply.")
             .CompletesWhen(() => (PoliceRuntime.LocalRecord?.OutlawTiersCleared ?? 0) > startCleared);
     }

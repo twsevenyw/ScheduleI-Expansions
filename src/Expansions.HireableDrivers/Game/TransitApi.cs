@@ -181,12 +181,10 @@ internal static class TransitApi
         if (!Gx.TryCall(slot, "ChangeQuantity", new[] { "Int32", "Boolean" }, -amount, false))
             return 0;
 
-        var inserted = Gx.TryCall(storage, "InsertItem", new[] { "ItemInstance", "Boolean" }, payload, true);
-        var actual = inserted
-            ? amount
-            : Math.Clamp(UnitsInStorage(storage, id) - before, 0, amount);
+        Gx.TryCall(storage, "InsertItem", new[] { "ItemInstance", "Boolean" }, payload, true);
+        var actual = Math.Clamp(UnitsInStorage(storage, id) - before, 0, amount);
 
-        if (!inserted && actual == 0)
+        if (actual == 0)
         {
             // The source mutation already happened. Put it back before reporting a failed transfer;
             // silently losing product is worse than declining this tick.
@@ -278,16 +276,19 @@ internal static class TransitApi
                 if (!Gx.TryCall(slot, "ChangeQuantity", new[] { "Int32", "Boolean" }, -amount, false))
                     continue;
 
-                var inserted = Gx.TryCall(
+                Gx.TryCall(
                     destination,
                     "InsertItemIntoInput",
                     new[] { "ItemInstance", "NPC" },
                     chunk,
                     npc);
 
-                var actual = inserted
-                    ? amount
-                    : Math.Clamp(UnitsInTransitSlots(destination, "InputSlots", id) - before, 0, amount);
+                // The insertion API returns void and can refuse internally. Only the input-slot
+                // delta proves receipt; restore every unit that did not appear.
+                var actual = Math.Clamp(
+                    UnitsInTransitSlots(destination, "InputSlots", id) - before,
+                    0,
+                    amount);
 
                 if (actual < amount)
                     RestoreToStorage(storage, instance, amount - actual);
@@ -513,12 +514,21 @@ internal static class TransitApi
         if (amount <= 0)
             return;
 
+        var itemId = Gx.Get<string>(template, "ID", string.Empty);
+        var before = UnitsInStorage(storage, itemId);
         var rollback = Gx.Call(template, "GetCopy", new[] { "Int32" }, amount);
-        if (rollback is null ||
-            !Gx.TryCall(storage, "InsertItem", new[] { "ItemInstance", "Boolean" }, rollback, true))
+        if (rollback is null)
         {
             DriverLog.Error($"A failed destination transfer could not restore {amount} item(s) to the vehicle.");
             return;
+        }
+
+        Gx.TryCall(storage, "InsertItem", new[] { "ItemInstance", "Boolean" }, rollback, true);
+        var restored = Math.Clamp(UnitsInStorage(storage, itemId) - before, 0, amount);
+        if (restored < amount)
+        {
+            DriverLog.Error(
+                $"A failed destination transfer restored only {restored}/{amount} item(s) to the vehicle.");
         }
 
         Gx.TryCall(storage, "ContentsChanged", Array.Empty<string>());

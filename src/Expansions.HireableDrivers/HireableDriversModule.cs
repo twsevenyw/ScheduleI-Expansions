@@ -37,7 +37,7 @@ public sealed class HireableDriversModule : ExpansionModule
     public override string Description =>
         "Driver employees who can transport items between your properties, businesses, and dealers.";
 
-    public override string Version => "0.6.0";
+    public override string Version => "0.7.0";
 
     protected override void OnRegistered()
     {
@@ -83,7 +83,7 @@ public sealed class HireableDriversModule : ExpansionModule
             Lifetime.OnDispose(DriverPanel.Detach);
         });
 
-        // Adding the hiring options is a game-API call, not a patch, so it has to be undone by hand.
+        // The Harmony hooks come off automatically; this clears per-conversation selection state.
         Lifetime.OnDispose(HiringDesk.Detach);
 
         // Returns every driver to being an ordinary Handler: patches come off with the Harmony
@@ -95,7 +95,7 @@ public sealed class HireableDriversModule : ExpansionModule
 
         if (_inGameplayScene)
         {
-            Try("adding driver hiring to the hiring NPC", HiringDesk.Attach);
+            Try("binding Driver into the Fixer's native hiring flow", HiringDesk.Attach);
             Log.Msg($"Hiring desk after enable: {HiringDesk.StatusLine}");
         }
 
@@ -145,7 +145,7 @@ public sealed class HireableDriversModule : ExpansionModule
         _inGameplayScene = true;
         EndpointCatalog.Invalidate();
         GameClock.Reset();
-        Try("adding driver hiring to the hiring NPC", HiringDesk.Attach);
+        Try("binding Driver into the Fixer's native hiring flow", HiringDesk.Attach);
         Log.Msg($"Hiring desk on save/scene load: {HiringDesk.StatusLine}");
         Try("binding existing drivers", BindExisting);
     }

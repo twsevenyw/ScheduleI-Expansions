@@ -106,6 +106,15 @@ internal static class PoliceOverhaulProbes
             ? "**no save state** — heat is session-only until a save loads"
             : "live; written to Modded/Saveables/expansions_police.json");
 
+        var config = PoliceRuntime.Config;
+        result.Fact(
+            "Arrest → heat",
+            config is null
+                ? "-"
+                : config.HeatResetOnArrest.Value
+                    ? "heat_reset_on_arrest=true — booking clears heat to 0 (outlaw latch kept)"
+                    : $"heat_reset_on_arrest=false — booking adds +{config.ArrestHeat.Value:0.#} (legacy)");
+
         var rows = new List<IReadOnlyList<string>>();
         foreach (var record in heat.Records)
         {
@@ -335,6 +344,25 @@ internal static class PoliceOverhaulProbes
             "Honest ceiling note",
             "Closed officer set only. Density opens more posts and asks for more per post (Dispatch hard-caps 4); it never invents bodies.");
 
+        result.Heading("Detection writes (idempotency probe)");
+        var detection = PoliceRuntime.Detection;
+        if (detection is null)
+        {
+            result.Fact("Managed officers", "detection tuner not wired");
+        }
+        else
+        {
+            result.Fact("Managed officers", detection.TrackedOfficers.ToString());
+            result.Fact(
+                "Total instance writes this session",
+                $"{detection.TotalOfficerWrites} — must stay flat between ticks once heat is stable; a climbing number is the stutter bug returning");
+            var writeLines = detection.ProbeLines(24);
+            if (writeLines.Count == 0)
+                result.Fact("Per-officer write counts", "none managed yet (first minute tick after wire applies once)");
+            else
+                result.Code(writeLines);
+        }
+
         result.Heading("Revive / dispatch paths");
         result.Fact("Daily restore", config is null ? "-" : config.RespawnOfficersDaily.Value ? "on" : "**off**");
         result.Fact("Restored so far", $"{PoliceForce.TotalRevived} officer(s), {PoliceForce.LastRevived} at the last day rollover");
@@ -436,6 +464,15 @@ internal static class PoliceOverhaulProbes
         result.Fact("Schedule posts snapshotted", PoliceRuntime.Schedule?.TrackedPosts.ToString() ?? "0");
         result.Fact("Officers snapshotted", PoliceRuntime.Detection?.TrackedOfficers.ToString() ?? "0");
         result.Fact("Anyone outlawed", PoliceRuntime.Outlaw is { AnyoneOutlawed: true } ? "yes" : "no");
+        result.Fact(
+            "Legal fee desk",
+            LegalFeeDesk.IsAttached
+                ? $"attached — {LegalFeeDesk.Status}; {LegalFeeDesk.AttachedTo}"
+                : $"**not attached** — {LegalFeeDesk.Status}" +
+                  (LegalFeeDesk.LastFailure.Length > 0 ? $" ({LegalFeeDesk.LastFailure})" : string.Empty) +
+                  "; F7 repair path stays visible");
+        result.Fact("Legal fee Marked", $"${config.LegalFeeMarked.Value:N0} (legal_fee_marked)");
+        result.Fact("Legal fee Hunted", $"${config.LegalFeeHunted.Value:N0} (legal_fee_hunted)");
 
         if (PoliceRuntime.Consequences is { } consequences)
         {
@@ -500,6 +537,14 @@ internal static class PoliceOverhaulProbes
                 new[] { "Dealer cut surcharge", Yes(config.OutlawDealerCutBonus.Value > 0f), $"{Economy()?.DealersAffected ?? 0} dealer(s) raised" },
                 new[] { "Customer snitch bonus", Yes(config.OutlawSnitchBonus.Value > 0f), $"{Economy()?.CustomersAffected ?? 0} customer(s) raised" },
                 new[] { "Card-only vendors closed", Yes(config.OutlawBlocksCardVendors.Value), Economy() is { IsApplied: true } ? "applied" : "not applied (nobody is outlawed)" },
+                new[]
+                {
+                    "Legal fee at station door",
+                    Yes(config.EnableOutlaw.Value),
+                    LegalFeeDesk.IsAttached
+                        ? $"{LegalFeeDesk.DoorCount} door(s) on {LegalFeeDesk.StationCount} station(s): {LegalFeeDesk.AttachedTo}"
+                        : $"**door hook down** — {LegalFeeDesk.Status}; menu repair path exposed",
+                },
             });
 
         result.Fact("Owned properties", owned.Count.ToString());
@@ -703,7 +748,9 @@ internal static class PoliceOverhaulProbes
         "police_overhaul.heat_clear" => "heat=0, world back toward vanilla intensity now",
         "police_overhaul.outlaw_next" => "promote Clean→Marked or Marked→Hunted + economy sync",
         "police_overhaul.outlaw_clear" => "demote one outlaw tier and pull heat under the latch",
-        "police_overhaul.outlaw_pay" => $"spend ${PoliceRuntime.Config?.OutlawLegalFee.Value:N0} to demote one tier",
+        "police_overhaul.outlaw_pay" => LegalFeeDesk.IsAttached
+            ? "hidden — knock on the police station door instead"
+            : $"repair path: spend ${PoliceRuntime.Config?.FeeFor(PoliceRuntime.LocalRecord?.Outlaw ?? OutlawTier.Marked):N0} to demote one tier",
         "police_overhaul.spawn_federal" or "police_overhaul.federal_team" => "spawn plain-clothes agents (or stakeout if you are home)",
         "police_overhaul.raid_trigger" or "police_overhaul.raid_warning" => "schedule a warned raid on an owned property",
         "police_overhaul.raid_now" => "execute a raid immediately on an owned property",

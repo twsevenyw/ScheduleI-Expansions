@@ -54,10 +54,10 @@ internal sealed class DriversChapter : ITutorialChapter
         builder
             .AddStep(StepHire, "Hire a driver from the employee fixer")
             .Describe(
-                "Go to whoever you buy botanists and handlers from and pick \"Hire a driver\" for one of your " +
-                "properties. Every property has one driver slot however many other staff it has; the docks " +
-                "warehouse has two. Properties with no free slot are simply not offered. A new driver takes the " +
-                "first vehicle you own that nobody else is using.")
+                "Go to whoever you buy botanists and handlers from, choose to hire an employee, pick Driver, then " +
+                "pick the location. Driver slots never consume ordinary employee capacity: every location has one, " +
+                "while the Barn and Docks Warehouse have two. Full locations are omitted. A new driver receives " +
+                "a Veeper and wears a blue delivery uniform.")
             .CompletesWhen(() => DriverRegistry.Count > driversAtStart);
 
         builder

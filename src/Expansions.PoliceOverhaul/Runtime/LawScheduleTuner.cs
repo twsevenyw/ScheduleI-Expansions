@@ -30,6 +30,12 @@ internal sealed class LawScheduleTuner
 
     private (int Min, int Max, int Widen, float Density) _applied = (-1, -1, -1, -1f);
 
+    /// <summary>
+    /// True once <see cref="DeployExtraVehicles"/> has run for the current applied band/density.
+    /// Re-firing StartPatrol every minute was resetting officer destinations (stutter-walk).
+    /// </summary>
+    private bool _vehiclesDeployedForApplied;
+
     internal int TrackedPosts => _posts.Count;
 
     internal bool HasSnapshot => _posts.Count > 0;
@@ -80,18 +86,18 @@ internal sealed class LawScheduleTuner
         }
 
         if (settled && added == 0)
-        {
-            if (density > 1f)
-                DeployExtraVehicles(density);
             return;
-        }
 
         _applied = (min, max, widen, density);
+        _vehiclesDeployedForApplied = false;
         AppliedBand = (min, max);
         PostsOpened = _posts.Values.Count(post => post.Opened);
         Evaluate(controller);
-        if (density > 1f)
+        if (density > 1f && !_vehiclesDeployedForApplied)
+        {
             DeployExtraVehicles(density);
+            _vehiclesDeployedForApplied = true;
+        }
 
         PoliceLog.Detail(
             $"Schedule tuned to {min}-{max} officers per post, checkpoints +/-{widen}h, density x{density:0.##} " +
@@ -159,6 +165,7 @@ internal sealed class LawScheduleTuner
         PoliceLog.Msg($"Restored vanilla law schedule on {restored}/{_posts.Count} post(s).");
         _posts.Clear();
         _applied = (-1, -1, -1, -1f);
+        _vehiclesDeployedForApplied = false;
         AppliedBand = default;
         PostsOpened = 0;
 
@@ -170,6 +177,7 @@ internal sealed class LawScheduleTuner
     {
         _posts.Clear();
         _applied = (-1, -1, -1, -1f);
+        _vehiclesDeployedForApplied = false;
         AppliedBand = default;
         PostsOpened = 0;
     }

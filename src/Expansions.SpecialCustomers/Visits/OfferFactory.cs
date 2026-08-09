@@ -1,3 +1,4 @@
+using Expansions.Core.Diagnostics;
 using Expansions.SpecialCustomers.Archetypes;
 using Expansions.SpecialCustomers.Configuration;
 using Expansions.SpecialCustomers.Game;
@@ -25,8 +26,11 @@ namespace Expansions.SpecialCustomers.Visits;
 /// </summary>
 internal static class OfferFactory
 {
-    /// <summary>The shipped hard clamp on a contract line.</summary>
-    private const int AbsoluteMaxQuantity = 1000;
+    /// <summary>
+    /// Fallback when <c>Customer.MaxOrderQuantityPerProduct</c> cannot be read. Live probes on
+    /// 0.4.6 report that static as <c>1000</c> — the same ceiling the deal formula clamps to.
+    /// </summary>
+    private const int FallbackMaxQuantity = 1000;
 
     /// <summary>The shipped rounding rule: orders of 14 or more snap to a multiple of five.</summary>
     private const int RoundingThreshold = 14;
@@ -127,11 +131,13 @@ internal static class OfferFactory
 
         var products = Name(lines);
         var total = lines.Sum(line => line.Quantity);
+        // Log only — OfferContract already put the answerable offer on the phone. Sending flavour
+        // text here was wiping Accept/Reject/Counter (see VisitAnnouncer.AnnounceOffer).
         VisitAnnouncer.AnnounceOffer(visit, total, products, payment);
 
         LastDiagnosis =
             $"Offer recorded on {visit.Leader.FullName}: ${link.OfferPayment:0} for {total} x {products}, " +
-            $"offer #{link.OfferedDeals} (was {dealsBefore}), delivery at {link.DeliveryLocationName}.";
+            $"offer #{link.OfferedDeals} (was {dealsBefore}), delivery at {link.ActiveDeliveryLocationName}.";
 
         failure = string.Empty;
         return new Result(true, total, payment, lines[0].MinQuality, products);
@@ -236,7 +242,7 @@ internal static class OfferFactory
             if (product is null)
                 continue;
 
-            var quantity = Quantity(visit.Archetype, ref rng);
+            var quantity = Quantity(visit, ref rng);
             var payment = Payment(product, quantity, quality, visit.Archetype);
             lines.Add(new Line(product, quantity, quality, payment));
 
@@ -257,7 +263,7 @@ internal static class OfferFactory
                 return lines;
             }
 
-            var quantity = Quantity(visit.Archetype, ref rng);
+            var quantity = Quantity(visit, ref rng);
             lines.Add(new Line(fallback, quantity, quality, Payment(fallback, quantity, quality, visit.Archetype)));
         }
 
@@ -380,23 +386,74 @@ internal static class OfferFactory
         return best;
     }
 
-    private static int Quantity(Archetype archetype, ref LookRandom rng)
+    private static int Quantity(Visit visit, ref LookRandom rng)
     {
+        var archetype = visit.Archetype;
+        var ceiling = HardQuantityCeiling();
         var low = Math.Clamp(Math.Max(CustomerSettings.QuantityMin, archetype.QuantityMin), 1, CustomerSettings.QuantityMax);
-        var high = Math.Clamp(Math.Min(CustomerSettings.QuantityMax, archetype.QuantityMax), low, AbsoluteMaxQuantity);
+        var high = Math.Clamp(Math.Min(CustomerSettings.QuantityMax, archetype.QuantityMax), low, ceiling);
 
         // Rides the shipped rank curve rather than inventing one, so the mod self-calibrates to a
         // future balance patch: early game sits near the bottom of the band, endgame near the top.
         var rank = Mathf.Clamp01(RankScale() / 10f);
         var position = Mathf.Clamp01(0.35f + (0.65f * rank) + rng.Range(-0.15f, 0.15f));
 
-        var quantity = Round(Mathf.Lerp(low, high, position) * CustomerSettings.QuantityMultiplier);
-        quantity = Math.Clamp(quantity, 1, AbsoluteMaxQuantity);
+        // Bigger crews buy more: a full six-person caravan is not the same order as three.
+        var groupScale = GroupQuantityScale(visit);
+        var quantity = Round(Mathf.Lerp(low, high, position) * CustomerSettings.QuantityMultiplier * groupScale);
+        quantity = Math.Clamp(quantity, 1, ceiling);
 
         if (quantity >= RoundingThreshold)
             quantity = Math.Max(5, Round(quantity / 5f) * 5);
 
         return quantity;
+    }
+
+    /// <summary>
+    /// Live <c>Customer.MaxOrderQuantityPerProduct</c> (1000 on 0.4.6). Hand-built
+    /// <c>ContractInfo</c> lines are not re-clamped by <c>TryGenerateContract</c>, but the handover
+    /// path and member auto-deals both honour this static, so the bulk author stays inside it.
+    /// </summary>
+    internal static int HardQuantityCeiling()
+    {
+        try
+        {
+            if (GameReflection.TryReadStatic(GameTypes.Customer, "MaxOrderQuantityPerProduct", out var value, out _) &&
+                value is int ceiling &&
+                ceiling > 0)
+            {
+                return ceiling;
+            }
+        }
+        catch
+        {
+            // Fall through to the probed default.
+        }
+
+        return FallbackMaxQuantity;
+    }
+
+    /// <summary>
+    /// Member street deals target this many units (before the game's own spend÷price maths and the
+    /// hard ceiling). Roughly 40% of the bulk floor, so a walk-up is still a special-customer sale
+    /// without matching the leader's whole truck.
+    /// </summary>
+    internal static int MemberTargetQuantity(Visit visit)
+    {
+        var ceiling = HardQuantityCeiling();
+        var bulkFloor = Math.Max(CustomerSettings.QuantityMin, visit.Archetype.QuantityMin);
+        var target = Round(bulkFloor * 0.40f * GroupQuantityScale(visit) * CustomerSettings.QuantityMultiplier);
+        if (target >= RoundingThreshold)
+            target = Math.Max(5, Round(target / 5f) * 5);
+
+        return Math.Clamp(target, 40, ceiling);
+    }
+
+    private static float GroupQuantityScale(Visit visit)
+    {
+        var members = Math.Max(1, visit.MemberSlots.Count);
+        var typical = Math.Max(1, visit.Archetype.DefaultMemberCount);
+        return Mathf.Clamp(0.75f + (0.25f * members / (float)typical), 0.75f, 1.50f);
     }
 
     private static float RankScale()

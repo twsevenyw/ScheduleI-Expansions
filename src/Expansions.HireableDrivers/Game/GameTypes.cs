@@ -30,6 +30,7 @@ internal static class GameTypes
     internal const string RouteEntryUi = "Il2CppScheduleOne.UI.Management.RouteEntryUI";
     internal const string RouteListFieldUi = "Il2CppScheduleOne.UI.Management.RouteListFieldUI";
     internal const string PackagerConfigPanel = "Il2CppScheduleOne.UI.Management.PackagerConfigPanel";
+    internal const string SelectionInfoUi = "Il2CppScheduleOne.UI.Management.SelectionInfoUI";
     internal const string ManagementInterface = "Il2CppScheduleOne.Management.ManagementInterface";
 
     /// <summary>The clipboard's own option-list screen, reused for picks the worldspace picker cannot reach.</summary>
@@ -39,6 +40,8 @@ internal static class GameTypes
     internal const string DialogueController = "Il2CppScheduleOne.Dialogue.DialogueController";
     internal const string DialogueControllerFixer = "Il2CppScheduleOne.Dialogue.DialogueController_Fixer";
     internal const string DialogueChoice = "Il2CppScheduleOne.Dialogue.DialogueController+DialogueChoice";
+    internal const string DialogueChoiceData = "Il2CppScheduleOne.Dialogue.DialogueChoiceData";
+    internal const string DialogueHandler = "Il2CppScheduleOne.Dialogue.DialogueHandler";
     internal const string ShouldShowCheck = "Il2CppScheduleOne.Dialogue.DialogueController+DialogueChoice+ShouldShowCheck";
 
     internal const string Player = "Il2CppScheduleOne.PlayerScripts.Player";
@@ -63,6 +66,10 @@ internal static class GameTypes
     internal const string Npc = "Il2CppScheduleOne.NPCs.NPC";
     internal const string NpcMovement = "Il2CppScheduleOne.NPCs.NPCMovement";
     internal const string NavMeshUtility = "Il2CppScheduleOne.DevUtilities.NavMeshUtility";
+    internal const string Avatar = "Il2CppScheduleOne.AvatarFramework.Avatar";
+    internal const string AvatarSettings = "Il2CppScheduleOne.AvatarFramework.AvatarSettings";
+    internal const string AvatarLayerSetting = "Il2CppScheduleOne.AvatarFramework.AvatarSettings+LayerSetting";
+    internal const string AvatarAccessorySetting = "Il2CppScheduleOne.AvatarFramework.AvatarSettings+AccessorySetting";
 
     internal const string TimeManager = "Il2CppScheduleOne.GameTime.TimeManager";
     internal const string CurfewManager = "Il2CppScheduleOne.Law.CurfewManager";

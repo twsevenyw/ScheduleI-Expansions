@@ -191,7 +191,7 @@ internal static class DriverPanel
             ? "the drop-off button lists every destination"
             : $"the drop-off button falls back to the game's own picker ({reason})";
 
-        return $"Hire at {HiringDesk.Location}. Bed and routes on the management clipboard — {picker}. " +
+        return $"Hire at {HiringDesk.Location}: Hire employee → Driver → location. Bed and routes on the clipboard — {picker}. " +
                "Vehicle, departure size and \"set off now\" are on the driver's own dialogue.";
     }
 
@@ -201,6 +201,9 @@ internal static class DriverPanel
 
         foreach (var property in WorldApi.OwnedProperties())
         {
+            if (WorldApi.IsBusiness(property))
+                continue;
+
             var code = WorldApi.PropertyCode(property);
             lines.Add($"{WorldApi.PropertyName(property)} — {DriverCapacity.Describe(code)}");
         }

@@ -145,6 +145,11 @@ public sealed class PoliceOverhaulModule : ExpansionModule
                 "police patch apply after scene load",
                 () => FinishWire(gen, $"OnSceneLoaded-requeue({sceneName})", "re-queue"));
         }
+        else if (_wired && _patchesApplied && IsGameplayScene(sceneName, buildIndex))
+        {
+            // Doors were forgotten on unload — rebind after the scene settles.
+            Deferred.After(PatchDeferFrames, "legal fee desk re-attach", LegalFeeDesk.Attach);
+        }
     }
 
     public override void OnSceneUnloaded(int buildIndex, string sceneName)
@@ -156,6 +161,7 @@ public sealed class PoliceOverhaulModule : ExpansionModule
         // references; services stay wired and re-snapshot on the next minute tick after Main returns.
         FederalAgents.Forget();
         PoliceForce.Forget();
+        LegalFeeDesk.Forget();
         OfficerDeployment.ClearHeldPosts();
         Deferred.Clear();
         Estate.Forget();
@@ -306,6 +312,7 @@ public sealed class PoliceOverhaulModule : ExpansionModule
             _patchesApplied = true;
 
             _response?.Apply();
+            LegalFeeDesk.Attach();
 
             if (_config.EnableFederalAgents.Value)
             {
@@ -322,6 +329,7 @@ public sealed class PoliceOverhaulModule : ExpansionModule
                 $"schedule posts pending first minute tick, detection snapshots empty until Apply, " +
                 $"npc-policy=no-create/clone/re-id/destroy, " +
                 $"federal=designate-shipped (tagged={FederalAgents.OwnedCount}), " +
+                $"legal-fee-desk={LegalFeeDesk.Status}, " +
                 $"statics re-resolved (no pointers carried across disable).";
 
             PoliceRuntime.WireStatus = summary;
@@ -367,6 +375,7 @@ public sealed class PoliceOverhaulModule : ExpansionModule
         SafeStep("dropping deferred work", Deferred.Clear);
         SafeStep("calling off any raid", () => _raids?.Cancel("the module was switched off"));
         SafeStep("clearing deployment posts", OfficerDeployment.ClearHeldPosts);
+        SafeStep("detaching the legal-fee desk", LegalFeeDesk.Detach);
         SafeStep("releasing federal designations", () =>
         {
             _federal?.Abort();

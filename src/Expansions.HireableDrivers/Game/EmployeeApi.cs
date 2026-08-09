@@ -66,14 +66,42 @@ internal static class EmployeeApi
         Gx.Call(manager, "GetRandomAppearance", new[] { "Boolean", "Int32", "AvatarSettings" }, appearance);
         var appearanceIndex = appearance[1] as int? ?? 0;
 
-        var created = Gx.Call(
-            manager,
-            "CreateEmployee_Server",
-            new[] { "Property", "EEmployeeType", "String", "String", "String", "Boolean", "Int32", "Vector3", "Quaternion", "String" },
-            property, handler, firstName, lastName, id, male, appearanceIndex, position, rotation, guid);
+        // The factory repeats Property.EmployeeCapacity internally. Drivers have a separate budget,
+        // so expose one temporary slot plus the slots occupied by existing drivers, then restore the
+        // authored capacity immediately after the synchronous server creation call.
+        var originalCapacity = WorldApi.EmployeeCapacity(property);
+        var employeeCount = WorldApi.Employees(property).Count(Gx.Alive);
+        var temporaryCapacity = Math.Max(
+            originalCapacity + Runtime.DriverCapacity.Used(WorldApi.PropertyCode(property)) + 1,
+            employeeCount + 1);
+
+        object? created;
+        Gx.Set(property, "EmployeeCapacity", temporaryCapacity);
+        try
+        {
+            created = Gx.Call(
+                manager,
+                "CreateEmployee_Server",
+                new[] { "Property", "EEmployeeType", "String", "String", "String", "Boolean", "Int32", "Vector3", "Quaternion", "String" },
+                property, handler, firstName, lastName, id, male, appearanceIndex, position, rotation, guid);
+        }
+        finally
+        {
+            Gx.Set(property, "EmployeeCapacity", originalCapacity);
+        }
 
         if (!Gx.Alive(created))
         {
+            var recovered = FindById(id);
+            if (recovered is not null)
+            {
+                DriverLog.Warn(
+                    $"CreateEmployee_Server returned no wrapper for '{id}', but the employee exists in the manager; " +
+                    "recovering that live instance.");
+                failure = string.Empty;
+                return recovered;
+            }
+
             failure = "CreateEmployee_Server returned nothing; check the MelonLoader log for a game-side error";
             return null;
         }
@@ -135,7 +163,8 @@ internal static class EmployeeApi
     /// </summary>
     internal static void SetConfigName(object? employee, string name)
     {
-        var configuration = Gx.GetAlive(employee, "configuration") ?? Gx.GetAlive(employee, "Configuration");
+        var packager = Gx.Cast(employee, GameTypes.Packager) ?? employee;
+        var configuration = Gx.GetAlive(packager, "configuration") ?? Gx.GetAlive(packager, "Configuration");
         var field = Gx.GetAlive(configuration, "Name");
         if (field is null)
             return;

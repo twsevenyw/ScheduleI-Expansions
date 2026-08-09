@@ -15,6 +15,7 @@ internal static class GameTypes
 {
     internal const string NpcManager = "Il2CppScheduleOne.NPCs.NPCManager";
     internal const string Npc = "Il2CppScheduleOne.NPCs.NPC";
+    internal const string NpcMovement = "Il2CppScheduleOne.NPCs.NPCMovement";
     internal const string Customer = "Il2CppScheduleOne.Economy.Customer";
     internal const string CustomerData = "Il2CppScheduleOne.Economy.CustomerData";
     internal const string CustomerStandard = "Il2CppScheduleOne.Economy.ECustomerStandard";
@@ -23,9 +24,13 @@ internal static class GameTypes
     internal const string Map = "Il2CppScheduleOne.Map.Map";
     internal const string SaveManager = "Il2CppScheduleOne.Persistence.SaveManager";
     internal const string LoadManager = "Il2CppScheduleOne.Persistence.LoadManager";
+    internal const string Avatar = "Il2CppScheduleOne.AvatarFramework.Avatar";
     internal const string AvatarSettings = "Il2CppScheduleOne.AvatarFramework.AvatarSettings";
     internal const string LayerSetting = "Il2CppScheduleOne.AvatarFramework.AvatarSettings+LayerSetting";
     internal const string AccessorySetting = "Il2CppScheduleOne.AvatarFramework.AvatarSettings+AccessorySetting";
+    internal const string DialogueController = "Il2CppScheduleOne.Dialogue.DialogueController";
+    internal const string DialogueChoice = "Il2CppScheduleOne.Dialogue.DialogueController+DialogueChoice";
+    internal const string DialogueHandler = "Il2CppScheduleOne.Dialogue.DialogueHandler";
     internal const string EconomyNamespace = "Il2CppScheduleOne.Economy";
 
     /// <summary>

@@ -20,6 +20,9 @@ internal static class GameTypes
     internal const string PoliceOfficer = "Il2CppScheduleOne.Police.PoliceOfficer";
     internal const string PoliceStation = "Il2CppScheduleOne.Map.PoliceStation";
     internal const string EDispatchType = "Il2CppScheduleOne.Map.PoliceStation+EDispatchType";
+    internal const string StaticDoor = "Il2CppScheduleOne.Doors.StaticDoor";
+    internal const string InteractableObject = "Il2CppScheduleOne.Interaction.InteractableObject";
+    internal const string EInteractableState = "Il2CppScheduleOne.Interaction.InteractableObject+EInteractableState";
     internal const string NpcHealth = "Il2CppScheduleOne.NPCs.NPCHealth";
     internal const string NpcManager = "Il2CppScheduleOne.NPCs.NPCManager";
 

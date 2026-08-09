@@ -67,7 +67,7 @@ internal static class DriverSettings
         }
     }
 
-    internal static bool DriversUseEmployeeCapacity => _driversUseEmployeeCapacity?.Value ?? false;
+    internal static bool DriversUseEmployeeCapacity => false;
 
     internal static int MaxRoutesPerDriver => Mathf.Clamp(_maxRoutesPerDriver?.Value ?? 5, 1, 10);
 
@@ -133,11 +133,22 @@ internal static class DriverSettings
             "Driver slots per property",
             "Comma-separated <propertyCode>=<slots>; '*' is the default for anything unlisted. Real codes: " +
             "barn, bungalow, dockswarehouse, manor, motelroom, rv, seweroffice, storageunit, sweatshop, " +
-            "carwash, laundromat, postoffice, tacoticklers.");
+            "carwash, laundromat, postoffice, tacoticklers. Laundering businesses are always excluded. " +
+            "Minimums are 1, or 2 for barn/dockswarehouse.");
+
+        if (string.Equals(
+                _driverSlotsPerProperty.Value?.Trim(),
+                Runtime.DriverCapacity.LegacyDefaultMap,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _driverSlotsPerProperty.Value = Runtime.DriverCapacity.DefaultMap;
+        }
 
         _driversUseEmployeeCapacity = config.Bind("drivers_use_employee_capacity", false,
             "Drivers count against the employee limit",
-            "Off: a driver slot is its own budget, so every property can take one however many other staff it has.");
+            "Deprecated and forced off: drivers always use their dedicated slots, never ordinary employee capacity.");
+        if (_driversUseEmployeeCapacity.Value)
+            _driversUseEmployeeCapacity.Value = false;
 
         _maxRoutesPerDriver = config.Bind("max_routes_per_driver", 5, "Routes per driver",
             "5 is parity with the shipped Handler clipboard.");

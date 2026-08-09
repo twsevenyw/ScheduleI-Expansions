@@ -83,6 +83,12 @@ public sealed class SpecialCustomersModule : ExpansionModule
             SpawnGraphFix.Apply();
         });
 
+        Try("patching the member allow-list gate", () =>
+        {
+            Lifetime.OnDispose(VisitProductGate.Disarm);
+            VisitProductGate.Apply(Harmony);
+        });
+
         Try("attaching the visitor runtime", () => Lifetime.OnDispose(VisitorRuntime.Attach()));
 
         Try("attaching the visit director", () =>

@@ -23,8 +23,10 @@ internal sealed class Wardrobe
     /// <summary>How often a member of this group is female. 0 makes an all-male crew.</summary>
     internal float FemaleChance { get; init; }
 
-    internal (float Min, float Max) Height { get; init; } = (0.95f, 1.05f);
+    /// <summary>Clamped to the shipped dump's safe band (≈0.94–1.04) at look-build time.</summary>
+    internal (float Min, float Max) Height { get; init; } = (0.94f, 1.04f);
 
+    /// <summary>Clamped to the shipped dump's safe band (≈0.15–0.90) at look-build time.</summary>
     internal (float Min, float Max) Weight { get; init; } = (0.35f, 0.6f);
 
     internal Color32[] SkinTones { get; init; } = AvatarAssets.Palette.SkinTones;

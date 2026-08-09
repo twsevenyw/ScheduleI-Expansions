@@ -1,5 +1,6 @@
 using System.Reflection;
 using Expansions.Core.Diagnostics;
+using Expansions.SpecialCustomers.Game;
 using Il2CppInterop.Runtime.InteropTypes;
 using S1API.Entities;
 using UnityEngine;
@@ -64,7 +65,24 @@ internal static class VisitorIntegrity
         {
             var native = typeof(NPC).GetProperty("S1NPC", BindingFlags.Public | BindingFlags.Instance)
                 ?.GetValue(wrapper);
-            return GameReflection.IsPresent(native) ? native : null;
+            if (GameReflection.IsPresent(native))
+                return InteropCast.As(native, GameTypes.Npc) ?? native;
+
+            // Finalize can briefly leave S1NPC null while the GameObject already has the component.
+            // Falling back here is what stops "native NPC missing" from sticking forever after spawn.
+            var go = wrapper.gameObject;
+            if (go is null)
+                return null;
+
+            var npcType = GameReflection.FindType(GameTypes.Npc);
+            if (npcType is null)
+                return null;
+
+            var component = go.GetComponent(Il2CppInterop.Runtime.Il2CppType.From(npcType));
+            if (!GameReflection.IsPresent(component))
+                return null;
+
+            return InteropCast.As(component, npcType) ?? component;
         }
         catch
         {
@@ -248,8 +266,10 @@ internal static class VisitorIntegrity
     }
 
     /// <summary>
-    /// Activate Avatar (and call its SetVisible when present) so the game's NPC.SetVisible does not
-    /// NRE on a null / inactive mesh during S1API finalize.
+    /// Hierarchy-only: activate the Avatar GameObject so S1API's Awake-graph check and
+    /// <c>NPC.SetVisible</c> see a present component. Does <b>not</b> call Avatar.SetVisible,
+    /// LoadAvatarSettings, ApplyShapeKeys, or write any AvatarSettings fields — appearance stays
+    /// whatever <c>Appearance.Build()</c> produced from the prefab.
     /// </summary>
     internal static void EnsureAvatarReady(object? native)
     {
@@ -274,16 +294,6 @@ internal static class VisitorIntegrity
                 avatarGoObj is GameObject avatarGo && avatarGo != null && !avatarGo.activeSelf)
             {
                 avatarGo.SetActive(true);
-            }
-
-            try
-            {
-                GameReflection.TryInvoke(avatar!.GetType(), avatar, "SetVisible",
-                    new object?[] { true }, out _, out _);
-            }
-            catch
-            {
-                // Optional on this build.
             }
         }
         catch (Exception ex)
@@ -413,26 +423,7 @@ internal static class VisitorIntegrity
         if (!GameReflection.IsPresent(raw))
             return null;
 
-        var type = GameReflection.FindType(NpcActionsType);
-        if (type is null)
-            return raw;
-
-        if (type.IsInstanceOfType(raw))
-            return raw;
-
-        if (raw is Il2CppObjectBase native)
-        {
-            try
-            {
-                return Activator.CreateInstance(type, native.Pointer);
-            }
-            catch
-            {
-                return raw;
-            }
-        }
-
-        return raw;
+        return InteropCast.As(raw, NpcActionsType) ?? raw;
     }
 
     private static object? FindUseUmbrella(object native)
@@ -459,14 +450,7 @@ internal static class VisitorIntegrity
                 if (!GameReflection.IsPresent(component))
                     continue;
 
-                try
-                {
-                    return Activator.CreateInstance(type, component.Pointer);
-                }
-                catch
-                {
-                    return component;
-                }
+                return InteropCast.As(component, type) ?? component;
             }
         }
         catch

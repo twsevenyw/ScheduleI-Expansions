@@ -73,8 +73,8 @@ internal static class ArchetypeCatalog
         standards: CustomerStandard.VeryLow,
         preferredDrugs: new[] { DrugType.Methamphetamine, DrugType.Marijuana },
         priceMultiplier: 0.80f,
-        quantityMin: 60,
-        quantityMax: 90,
+        quantityMin: 400,
+        quantityMax: 800,
         regionWeights: new[]
         {
             (Region.Northtown, 3),
@@ -93,8 +93,8 @@ internal static class ArchetypeCatalog
         wardrobe: new Wardrobe
         {
             FemaleChance = 0.2f,
-            Height = (0.98f, 1.1f),
-            Weight = (0.6f, 0.95f),
+            Height = (0.98f, 1.04f),
+            Weight = (0.55f, 0.90f),
             HairColors = Pal.NaturalHair,
             AltHairColors = Pal.GreyingHair,
             AltHairColorChance = 0.3f,
@@ -165,8 +165,8 @@ internal static class ArchetypeCatalog
         standards: CustomerStandard.High,
         preferredDrugs: new[] { DrugType.Cocaine },
         priceMultiplier: 0.92f,
-        quantityMin: 40,
-        quantityMax: 60,
+        quantityMin: 250,
+        quantityMax: 450,
         regionWeights: new[]
         {
             (Region.Uptown, 4),
@@ -184,7 +184,7 @@ internal static class ArchetypeCatalog
         wardrobe: new Wardrobe
         {
             FemaleChance = 0.4f,
-            Height = (0.95f, 1.04f),
+            Height = (0.95f, 1.03f),
             Weight = (0.35f, 0.68f),
             HairColors = Pal.NaturalHair,
             AltHairColors = Pal.GreyingHair,
@@ -251,8 +251,8 @@ internal static class ArchetypeCatalog
         standards: CustomerStandard.Low,
         preferredDrugs: new[] { DrugType.Marijuana, DrugType.Shrooms },
         priceMultiplier: 0.85f,
-        quantityMin: 50,
-        quantityMax: 80,
+        quantityMin: 300,
+        quantityMax: 600,
         regionWeights: new[]
         {
             (Region.Westville, 3),
@@ -271,7 +271,7 @@ internal static class ArchetypeCatalog
         wardrobe: new Wardrobe
         {
             FemaleChance = 0.5f,
-            Height = (0.92f, 1.03f),
+            Height = (0.94f, 1.03f),
             Weight = (0.25f, 0.6f),
             HairColors = Pal.NaturalHair,
             AltHairColors = Pal.DyedHair,
@@ -345,8 +345,8 @@ internal static class ArchetypeCatalog
         standards: CustomerStandard.Moderate,
         preferredDrugs: new[] { DrugType.Cocaine, DrugType.Shrooms },
         priceMultiplier: 0.88f,
-        quantityMin: 45,
-        quantityMax: 70,
+        quantityMin: 280,
+        quantityMax: 520,
         regionWeights: new[]
         {
             (Region.Downtown, 3),
@@ -364,8 +364,8 @@ internal static class ArchetypeCatalog
         wardrobe: new Wardrobe
         {
             FemaleChance = 0.35f,
-            Height = (0.94f, 1.06f),
-            Weight = (0.2f, 0.5f),
+            Height = (0.94f, 1.04f),
+            Weight = (0.20f, 0.55f),
             HairColors = Pal.DyedHair,
             AltHairColors = Pal.NaturalHair,
             AltHairColorChance = 0.4f,

@@ -95,9 +95,19 @@ internal static class Readiness
             : ActionAvailability.Ready;
     }
 
-    /// <summary>Buying a tier down: needs a tier to buy and the money to do it with.</summary>
+    /// <summary>
+    /// Menu repair path for the legal fee. Hidden while the station-door hook is attached — pay at
+    /// the door instead. Same pattern as Hireable Drivers' native hiring surface.
+    /// </summary>
     internal static ActionAvailability LegalFee()
     {
+        if (LegalFeeDesk.IsAttached)
+        {
+            return ActionAvailability.Unavailable(
+                "knock on the police station door — Pay legal fee is on the door prompt " +
+                $"(Marked ${PoliceRuntime.Config?.LegalFeeMarked.Value:N0}, Hunted ${PoliceRuntime.Config?.LegalFeeHunted.Value:N0})");
+        }
+
         var outlaw = Outlaw();
         if (!outlaw.IsAvailable)
             return outlaw;
@@ -106,11 +116,15 @@ internal static class Readiness
         if (record is null || record.Outlaw == OutlawTier.Clean)
             return ActionAvailability.Unavailable("your record is already clean");
 
-        var fee = Math.Max(0, PoliceRuntime.Config?.OutlawLegalFee.Value ?? 0);
+        var fee = PoliceRuntime.Config?.FeeFor(record.Outlaw) ?? 0;
         var funds = Wallet.Total();
+
+        var doorNote = LegalFeeDesk.LastFailure.Length > 0
+            ? $" Door hook unavailable ({LegalFeeDesk.LastFailure}), so this menu path is the repair."
+            : " Door hook is not attached yet — this menu path is the repair.";
 
         return funds >= fee
             ? ActionAvailability.Ready
-            : ActionAvailability.Unavailable($"a lawyer wants ${fee:N0} and you have ${funds:N0}");
+            : ActionAvailability.Unavailable($"clearing {OutlawState.Describe(record.Outlaw)} costs ${fee:N0} and you have ${funds:N0}.{doorNote}");
     }
 }

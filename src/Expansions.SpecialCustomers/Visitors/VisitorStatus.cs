@@ -38,6 +38,12 @@ internal sealed class VisitorStatus
     /// <summary>NPCActions graph is safe to tick (umbrella wired or explicitly disabled).</summary>
     internal bool ActionListValid { get; init; }
 
+    /// <summary>Archetype look is cached and was verified after write.</summary>
+    internal bool Dressed { get; init; }
+
+    /// <summary>Group dialogue choice is on their DialogueController right now.</summary>
+    internal bool DialogueAttached { get; init; }
+
     internal string IntegritySummary { get; init; } = string.Empty;
 
     /// <summary>Empty when everything the mod can check came back clean.</summary>
@@ -48,6 +54,7 @@ internal sealed class VisitorStatus
 
     internal string Summary => WrapperResolved
         ? $"{FullName} ({Id}) at {Describe.Of(Position)} in {Region}, " +
+          $"dressed={Describe.YesNo(Dressed)}, dialogue={Describe.YesNo(DialogueAttached)}, " +
           $"finalized={Describe.YesNo(Finalized)}, actions={Describe.YesNo(ActionListValid)}, " +
           $"visible={Describe.YesNo(IsVisible)}, mugshot={Describe.YesNo(HasMugshot)}"
         : $"{Id} is not in the world yet{(Failure.Length > 0 ? " — " + Failure : string.Empty)}";

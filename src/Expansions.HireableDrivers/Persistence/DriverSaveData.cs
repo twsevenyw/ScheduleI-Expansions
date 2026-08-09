@@ -83,7 +83,7 @@ public sealed class DriverRoute
     public string ItemLabel { get; set; } = string.Empty;
 
     /// <summary>The exact vanilla filter shape, retained while routes are suspended or rebuilt.</summary>
-    public string FilterMode { get; set; } = "Whitelist";
+    public string FilterMode { get; set; } = "Blacklist";
 
     public List<string> FilterItemIds { get; set; } = new();
 
@@ -99,7 +99,13 @@ public sealed class DriverRoute
         if (!IsComplete)
             return "incomplete";
 
-        var what = ItemLabel.Length > 0 ? ItemLabel : ItemId.Length > 0 ? ItemId : "anything";
+        var what = ItemLabel.Length > 0
+            ? ItemLabel
+            : ItemId.Length > 0
+                ? ItemId
+                : FilterItemIds.Count > 0
+                    ? $"{FilterMode.ToLowerInvariant()} [{string.Join(", ", FilterItemIds)}]"
+                    : "anything";
         var threshold = DepartAtUnits > 0 ? $"{DepartAtUnits}+" : "auto";
         return $"{Source.Label} → {Destination.Label} ({what}, depart at {threshold})";
     }

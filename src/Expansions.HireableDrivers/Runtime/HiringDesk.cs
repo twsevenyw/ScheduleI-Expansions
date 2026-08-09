@@ -1,58 +1,42 @@
+using Expansions.HireableDrivers.Config;
 using Expansions.HireableDrivers.Game;
 
 namespace Expansions.HireableDrivers.Runtime;
 
 /// <summary>
-/// Puts "Hire a driver" where you hire every other employee.
+/// Adds Driver to the Fixer's shipped employee-type → location → confirmation conversation.
 /// <para>
-/// The employee-hiring NPC's <c>DialogueController_Fixer</c> gets one extra interaction choice per
-/// property, added through the game's own <c>AddDialogueChoice</c> API. The game draws them in its own
-/// list with its own font, sounds and gamepad handling, re-runs each entry's visibility check every
-/// time you open the conversation, and fires the choice through the game's own click path — so selection
-/// works because it is the game's selection.
-/// </para>
-/// <para>
-/// One choice per property rather than a sub-menu because the dialogue graph's node links live in
-/// ScriptableObject data the mod cannot author: a choice that routes into a new conversation branch
-/// would dead-end, whereas a choice that just runs its <c>onChoosen</c> event does not.
+/// The previous implementation appended one top-level choice per property. That overflowed the
+/// numbered interaction list and did not match the game's hiring grammar. The Fixer's virtual
+/// dialogue hooks are the intended extension seam: inject one type choice, reuse SELECT_LOCATION,
+/// and intercept CONFIRM before vanilla creates a Handler.
 /// </para>
 /// </summary>
 internal static class HiringDesk
 {
-    /// <summary>
-    /// Neutral. The sort direction of <c>DialogueChoice.Priority</c> is not recoverable from the
-    /// metadata, and guessing wrong would push driver hiring above the shipped employee types.
-    /// </summary>
-    private const int ChoicePriority = 0;
+    private const string DriverChoice = "Driver";
+    private const string NoLocationsChoice = "NO_DRIVER_LOCATIONS";
+    private const string SelectLocationNode = "SELECT_LOCATION";
+    private const string FinalizeNode = "FINALIZE";
 
-    private const int MaxAttempts = 40;
-
-    private static readonly List<Entry> Entries = new();
+    private static readonly Dictionary<IntPtr, FlowState> States = new();
     private static readonly object Gate = new();
 
-    private static int _attempts;
     private static bool _attached;
-    private static bool _loggedExhausted;
-    private static bool _deferred;
-    private static string _pendingReason = string.Empty;
+    private static bool _stoodDown;
+    private static int _attempts;
 
     internal static bool IsAttached
     {
         get
         {
             lock (Gate)
-                return _attached && Entries.Count > 0;
+                return _attached;
         }
     }
 
-    internal static int ChoiceCount
-    {
-        get
-        {
-            lock (Gate)
-                return Entries.Count;
-        }
-    }
+    /// <summary>One injected type choice, regardless of the number of properties.</summary>
+    internal static int ChoiceCount => IsAttached ? 1 : 0;
 
     internal static int Attempts
     {
@@ -65,312 +49,394 @@ internal static class HiringDesk
 
     internal static string Location { get; private set; } = string.Empty;
 
-    /// <summary>
-    /// Why hiring is not on the NPC, in the player's words. Set as soon as a concrete failure is known
-    /// (missing API, empty property list, AddChoice refusal). Cleared on a successful attach.
-    /// </summary>
     internal static string LastFailure { get; private set; } = string.Empty;
 
-    /// <summary>
-    /// One-line status for the MelonLoader log and the probes. Always current after the latest attach
-    /// attempt — never empty while the module has tried.
-    /// </summary>
-    internal static string StatusLine { get; private set; } = "hiring desk has not been attempted yet";
+    internal static string StatusLine { get; private set; } = "native driver hiring has not been attempted yet";
 
-    /// <summary>
-    /// Called on every gameplay scene load and retried from the tick pump until the NPC exists — the
-    /// Fixer is a scene object that is not guaranteed to be awake when the scene-loaded event fires.
-    /// </summary>
+    internal static bool IsDriverSelection(object controller) => StateOf(controller).DriverSelected;
+
     internal static void Attach()
     {
         lock (Gate)
         {
-            if (_attached)
+            if (_attached || _stoodDown)
                 return;
 
             _attempts++;
         }
 
-        if (!DialogueApi.CanAddChoices(out var apiReason))
+        if (!Patches.DriverPatches.NativeHiringSafe)
         {
-            Fail(apiReason, giveUp: true);
+            StandDown("one or more Fixer dialogue patches did not bind");
             return;
         }
 
         var controllers = DialogueApi.HiringControllers();
         if (controllers.Count == 0)
         {
-            Defer("no employee-hiring NPC (DialogueController_Fixer) is in the scene yet");
-            return;
-        }
-
-        var properties = WorldApi.AllProperties().Where(Gx.Alive).ToArray();
-        if (properties.Length == 0)
-        {
-            Defer("the property list is empty, so there is nothing to hire a driver for yet");
-            return;
-        }
-
-        var added = 0;
-        string? addFailure = null;
-        _deferred = false;
-
-        foreach (var controller in controllers)
-        {
-            foreach (var property in properties)
-            {
-                var code = WorldApi.PropertyCode(property);
-                if (code.Length == 0)
-                    continue;
-
-                var entry = new Entry(controller, property, code);
-
-                // Rooted on the entry before the call: Il2CppInterop wraps each of these in a native
-                // object, and a collected interop delegate silently stops firing.
-                entry.OnChosen = entry.Hire;
-                entry.ShowCheck = entry.ShouldShow;
-
-                var choice = DialogueApi.AddChoice(
-                    controller,
-                    entry.BuildLabel(),
-                    entry.OnChosen,
-                    entry.ShowCheck,
-                    ChoicePriority);
-
-                if (choice is null)
-                {
-                    addFailure = DialogueApi.LastAddFailure.Length > 0
-                        ? DialogueApi.LastAddFailure
-                        : "AddDialogueChoice returned null";
-                    continue;
-                }
-
-                entry.Choice = choice;
-
-                lock (Gate)
-                    Entries.Add(entry);
-
-                added++;
-            }
-        }
-
-        if (added == 0)
-        {
-            Fail(
-                addFailure is null
-                    ? "the hiring NPC is present but every property was skipped (no propertyCode)"
-                    : "the hiring NPC is present but would not accept a driver choice: " + addFailure,
-                giveUp: addFailure is not null && addFailure.Contains("not on this build", StringComparison.Ordinal));
+            LastFailure = string.Empty;
+            StatusLine = $"waiting (attempt {Attempts}): the employee-hiring NPC has not spawned yet";
             return;
         }
 
         Location = DialogueApi.ControllerName(controllers[0]);
         LastFailure = string.Empty;
-        _pendingReason = string.Empty;
-        _deferred = false;
+        var logistics = WorldApi.OwnedProperties().Count(property => Gx.Alive(property) && !WorldApi.IsBusiness(property));
+        StatusLine =
+            $"Driver is injected into {Location}'s employee-type list; " +
+            $"{logistics} eligible logistics location(s), " +
+            $"{WorldApi.OwnedProperties().Count(DriverCapacity.HasRoom)} with a free driver slot";
 
         lock (Gate)
             _attached = true;
 
-        var ownedProperties = WorldApi.OwnedProperties().Where(Gx.Alive).ToArray();
-        var owned = ownedProperties.Length;
-        var visible = ownedProperties.Count(DriverCapacity.HasRoom);
-
-        StatusLine =
-            $"attached to {Location}: {added} option(s) across {controllers.Count} hiring NPC(s); " +
-            $"{owned} owned propert(ies), {visible} with a free driver slot (hidden when full)";
-
-        DriverLog.Msg($"Driver hiring {StatusLine}.");
+        DriverLog.Msg("Driver hiring " + StatusLine + ".");
     }
 
-    /// <summary>Cheap enough to call every tick; does nothing once attached or once we have given up.</summary>
     internal static void Retry()
     {
-        if (IsAttached)
-            return;
-
-        int attempts;
-        bool deferred;
-        lock (Gate)
-        {
-            attempts = _attempts;
-            deferred = _deferred;
-        }
-
-        if (attempts > MaxAttempts && !deferred)
-            return;
-
-        Attach();
-
-        lock (Gate)
-            attempts = _attempts;
-
-        lock (Gate)
-            deferred = _deferred;
-
-        if (attempts >= MaxAttempts && !deferred && !IsAttached && !_loggedExhausted)
-        {
-            _loggedExhausted = true;
-            if (LastFailure.Length == 0 && _pendingReason.Length > 0)
-                LastFailure = _pendingReason;
-
-            StatusLine = $"gave up after {attempts} attempt(s): {LastFailure}";
-            DriverLog.Warn(
-                $"Could not add driver hiring to the employee-hiring NPC ({LastFailure}). " +
-                "The Expansions menu's fallback \"Hire a driver\" action is available instead.");
-        }
-    }
-
-    /// <summary>
-    /// Scene is still waking up — keep retrying, but remember the reason so the probe/panel is not blank
-    /// while the ladder runs.
-    /// </summary>
-    private static void Defer(string reason)
-    {
-        _pendingReason = reason;
-        LastFailure = reason;
-        _deferred = true;
-        StatusLine = $"waiting (attempt {Attempts}): {reason}";
-
-        if (Attempts == 1 || Attempts % 10 == 0)
-            DriverLog.Msg($"Driver hiring not attached yet — {StatusLine}.");
-    }
-
-    /// <summary>Concrete failure. <paramref name="giveUp"/> skips the rest of the retry ladder.</summary>
-    private static void Fail(string reason, bool giveUp)
-    {
-        LastFailure = reason;
-        _pendingReason = reason;
-        _deferred = false;
-        StatusLine = giveUp
-            ? $"failed: {reason}"
-            : $"retrying ({Attempts}/{MaxAttempts}): {reason}";
-
-        if (giveUp)
-        {
-            lock (Gate)
-                _attempts = MaxAttempts + 1;
-
-            if (!_loggedExhausted)
-            {
-                _loggedExhausted = true;
-                DriverLog.Warn($"Driver hiring cannot attach — {reason}");
-            }
-
-            return;
-        }
-
-        if (Attempts == 1 || Attempts % 10 == 0)
-            DriverLog.Warn($"Driver hiring attach failed — {StatusLine}.");
+        if (!IsAttached)
+            Attach();
     }
 
     internal static void Detach()
     {
-        Entry[] entries;
+        lock (Gate)
+        {
+            States.Clear();
+            _attached = false;
+            _stoodDown = false;
+            _attempts = 0;
+        }
+
+        Location = string.Empty;
+        LastFailure = string.Empty;
+        StatusLine = "native driver hiring detached";
+    }
+
+    /// <summary>Postfix body for DialogueController_Fixer.ModifyChoiceList.</summary>
+    internal static void ModifyChoiceList(object? controller, string dialogueLabel, object? existingChoices)
+    {
+        if (!IsAttached || !HostGate.IsAuthority || controller is null || existingChoices is null)
+            return;
+
+        var choices = Gx.List(existingChoices);
+        var isTypeNode = choices.Any(choice =>
+            string.Equals(Gx.Get<string>(choice, "ChoiceLabel", string.Empty), "Botanist", StringComparison.Ordinal));
+        var state = StateOf(controller);
+
+        if (isTypeNode)
+            state.Reset();
+
+        if (isTypeNode &&
+            !choices.Any(choice =>
+                string.Equals(Gx.Get<string>(choice, "ChoiceLabel", string.Empty), DriverChoice, StringComparison.Ordinal)))
+        {
+            var driver = NewChoice(
+                "Driver (moves products between your locations)",
+                DriverChoice);
+            if (driver is null ||
+                !Gx.TryCall(existingChoices, "Add", new[] { Gx.Any }, driver))
+            {
+                StandDown("the Driver employee-type choice could not be added");
+            }
+        }
+
+        if (!state.DriverSelected || !string.Equals(dialogueLabel, SelectLocationNode, StringComparison.Ordinal))
+            return;
+
+        if (!Gx.TryCall(existingChoices, "Clear", Array.Empty<string>()))
+        {
+            StandDown("the Fixer's location list could not be replaced for Driver");
+            return;
+        }
+
+        var eligible = WorldApi.OwnedProperties()
+            .Where(property => Gx.Alive(property) && DriverCapacity.HasRoom(property))
+            .OrderBy(WorldApi.PropertyName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        StatusLine =
+            $"Driver type selected at {Location}; " +
+            $"{WorldApi.OwnedProperties().Count(property => Gx.Alive(property) && !WorldApi.IsBusiness(property))} logistics location(s), " +
+            $"{eligible.Length} with a free dedicated driver slot";
+
+        var added = 0;
+        foreach (var property in eligible)
+        {
+            var code = WorldApi.PropertyCode(property);
+            if (code.Length == 0)
+                continue;
+
+            var choice = NewChoice(
+                $"{WorldApi.PropertyName(property)} ({DriverCapacity.Free(code)} driver slot(s) free)",
+                code);
+            if (choice is not null &&
+                Gx.TryCall(existingChoices, "Add", new[] { Gx.Any }, choice))
+            {
+                added++;
+            }
+        }
+
+        if (eligible.Length == 0)
+        {
+            var none = NewChoice("No locations have a free driver slot", NoLocationsChoice);
+            if (none is not null)
+                Gx.Call(existingChoices, "Add", new[] { Gx.Any }, none);
+        }
+        else if (added == 0)
+        {
+            StandDown("the Driver location choices could not be added");
+        }
+    }
+
+    /// <summary>Prefix body for DialogueController_Fixer.ChoiceCallback.</summary>
+    internal static bool ChoiceCallbackPrefix(object? controller, string choiceLabel)
+    {
+        if (controller is null)
+            return true;
+
+        var state = StateOf(controller);
+
+        if (string.Equals(choiceLabel, DriverChoice, StringComparison.Ordinal))
+        {
+            state.DriverSelected = true;
+            state.SelectedProperty = null;
+            Gx.Set(controller, "selectedProperty", null);
+            return true;
+        }
+
+        if (IsVanillaEmployeeChoice(choiceLabel))
+        {
+            state.Reset();
+            return true;
+        }
+
+        return true;
+    }
+
+    /// <summary>Prefix body for DialogueController_Fixer.Confirm.</summary>
+    internal static bool ConfirmPrefix(object? controller)
+    {
+        if (controller is null)
+            return true;
+
+        var state = StateOf(controller);
+        if (!state.DriverSelected)
+            return true;
+
+        var property = state.SelectedProperty ?? Gx.GetAlive(controller, "selectedProperty");
+        if (!DriverHiring.TryHire(property, out var brain, out var message))
+        {
+            DriverLog.Warn(message);
+            Expansions.Core.Actions.ActionLog.Fail(message);
+        }
+        else
+        {
+            DriverSelection.Select(brain?.Record.EmployeeId ?? string.Empty);
+            Expansions.Core.Actions.ActionLog.Ok(message);
+        }
+
+        Gx.Set(controller, "selectedProperty", null);
+        state.Reset();
+        return false; // Never let vanilla create a Handler or charge its fee for this confirmation.
+    }
+
+    /// <summary>Postfix body for DialogueController_Fixer.ChoiceCallback.</summary>
+    internal static void ChoiceCallbackPostfix(object? controller, string choiceLabel)
+    {
+        if (controller is null)
+            return;
+
+        var state = StateOf(controller);
+
+        if (string.Equals(choiceLabel, DriverChoice, StringComparison.Ordinal))
+        {
+            state.DriverSelected = true;
+            var activeDialogue = Gx.GetStatic(GameTypes.DialogueHandler, "ActiveDialogue");
+            var node = Gx.Call(
+                activeDialogue,
+                "GetDialogueNodeByLabel",
+                new[] { "String" },
+                SelectLocationNode);
+            var handler = Gx.GetAlive(controller, "handler");
+
+            if (node is null ||
+                !Gx.TryCall(handler, "ShowNode", new[] { "DialogueNodeData" }, node))
+            {
+                StandDown("the Fixer's SELECT_LOCATION dialogue node could not be opened");
+            }
+
+            return;
+        }
+
+        if (!state.DriverSelected)
+            return;
+
+        var property = FindOwnedProperty(choiceLabel);
+        if (property is null)
+            return;
+
+        state.SelectedProperty = property;
+        Gx.Set(controller, "selectedProperty", property);
+    }
+
+    /// <summary>Prefix body for DialogueController_Fixer.CheckChoice.</summary>
+    internal static bool CheckChoice(
+        object? controller,
+        string choiceLabel,
+        ref string invalidReason,
+        ref bool result)
+    {
+        if (controller is null)
+            return true;
+
+        var state = StateOf(controller);
+
+        if (string.Equals(choiceLabel, DriverChoice, StringComparison.Ordinal))
+        {
+            result = HostGate.IsAuthority;
+            invalidReason = result ? string.Empty : "Only the host can hire drivers";
+            return false;
+        }
+
+        if (string.Equals(choiceLabel, NoLocationsChoice, StringComparison.Ordinal))
+        {
+            result = false;
+            invalidReason = "Every owned location's driver slots are full";
+            return false;
+        }
+
+        if (!state.DriverSelected)
+        {
+            // Vanilla counts Driver Packagers in Property.Employees. Preserve every ordinary employee
+            // slot by validating against non-driver staff instead.
+            var vanillaProperty = FindOwnedProperty(choiceLabel);
+            if (vanillaProperty is not null &&
+                DriverCapacity.Used(WorldApi.PropertyCode(vanillaProperty)) > 0)
+            {
+                var ordinaryEmployees = WorldApi.Employees(vanillaProperty)
+                    .Count(employee => Gx.Alive(employee) && !DriverRegistry.HasDriverIdentity(employee));
+                if (ordinaryEmployees < WorldApi.EmployeeCapacity(vanillaProperty))
+                {
+                    result = true;
+                    invalidReason = string.Empty;
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (string.Equals(choiceLabel, "CONFIRM", StringComparison.Ordinal))
+        {
+            var property = state.SelectedProperty ?? Gx.GetAlive(controller, "selectedProperty");
+            result = DriverHiring.CanHire(property, out invalidReason);
+            return false;
+        }
+
+        var selected = FindOwnedProperty(choiceLabel);
+        if (selected is null)
+            return true;
+
+        if (!DriverCapacity.HasRoom(selected))
+        {
+            result = false;
+            invalidReason =
+                $"{WorldApi.PropertyName(selected)} has no free driver slot " +
+                $"({DriverCapacity.Describe(WorldApi.PropertyCode(selected))})";
+            return false;
+        }
+
+        result = true;
+        invalidReason = string.Empty;
+        return false;
+    }
+
+    /// <summary>Prefix body for DialogueController_Fixer.ModifyDialogueText.</summary>
+    internal static bool ModifyDialogueText(
+        object? controller,
+        string dialogueLabel,
+        string dialogueText,
+        ref string result)
+    {
+        if (controller is null ||
+            !StateOf(controller).DriverSelected ||
+            !string.Equals(dialogueLabel, FinalizeNode, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var state = StateOf(controller);
+        var property = state.SelectedProperty ?? Gx.GetAlive(controller, "selectedProperty");
+        var signingFee = property is null ? DriverSettings.SigningFee : DriverHiring.FeeFor(property);
+
+        result = dialogueText
+            .Replace("<SIGN_FEE>", $"<color=#54E717>${signingFee:N0} ", StringComparison.Ordinal)
+            .Replace("<DAILY_WAGE>", $"<color=#54E717>${DriverSettings.DailyWage:N0} ", StringComparison.Ordinal)
+            .Replace("Handler", "Driver", StringComparison.OrdinalIgnoreCase)
+            .Replace("Packager", "Driver", StringComparison.OrdinalIgnoreCase);
+        return false;
+    }
+
+    private static object? NewChoice(string text, string label)
+    {
+        var choice = Gx.New(GameTypes.DialogueChoiceData);
+        if (choice is null)
+            return null;
+
+        Gx.Set(choice, "ChoiceText", text);
+        Gx.Set(choice, "ChoiceLabel", label);
+        Gx.Set(choice, "ShowWorldspaceDialogue", false);
+        return choice;
+    }
+
+    private static object? FindOwnedProperty(string code) =>
+        WorldApi.OwnedProperties().FirstOrDefault(property =>
+            string.Equals(WorldApi.PropertyCode(property), code, StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsVanillaEmployeeChoice(string label) =>
+        label is "Botanist" or "Packager" or "Handler" or "Chemist" or "Cleaner" or "Manager" or "Budtender";
+
+    private static void StandDown(string reason)
+    {
+        LastFailure = reason;
+        StatusLine = "failed: " + reason;
+        lock (Gate)
+        {
+            _attached = false;
+            _stoodDown = true;
+        }
+
+        DriverLog.Warn(reason + "; enabling the F7 hiring repair path.");
+    }
+
+    private static FlowState StateOf(object controller)
+    {
+        var pointer = Gx.PointerOf(controller);
 
         lock (Gate)
         {
-            entries = Entries.ToArray();
-            Entries.Clear();
-            _attached = false;
-            _attempts = 0;
-            _loggedExhausted = false;
-            _deferred = false;
+            if (!States.TryGetValue(pointer, out var state))
+            {
+                state = new FlowState();
+                States[pointer] = state;
+            }
+
+            return state;
         }
-
-        LastFailure = string.Empty;
-        _pendingReason = string.Empty;
-        StatusLine = "hiring desk detached";
-
-        foreach (var entry in entries)
-            DialogueApi.RemoveChoice(entry.Controller, entry.Choice);
-
-        Location = string.Empty;
     }
 
-    /// <summary>
-    /// One property's hiring option. Holds the managed delegates itself so the interop wrappers the
-    /// game keeps a native reference to are never collected out from under the click.
-    /// </summary>
-    private sealed class Entry
+    private sealed class FlowState
     {
-        private readonly string _code;
+        internal bool DriverSelected { get; set; }
 
-        internal Entry(object? controller, object? property, string code)
+        internal object? SelectedProperty { get; set; }
+
+        internal void Reset()
         {
-            Controller = controller;
-            Property = property;
-            _code = code;
-        }
-
-        internal object? Controller { get; }
-
-        internal object? Property { get; }
-
-        internal object? Choice { get; set; }
-
-        /// <summary>Kept alive for as long as the game holds the interop wrapper built from it.</summary>
-        internal Action? OnChosen { get; set; }
-
-        /// <summary>Kept alive for as long as the game holds the interop wrapper built from it.</summary>
-        internal Func<bool, bool>? ShowCheck { get; set; }
-
-        /// <summary>
-        /// Runs when the game builds the interaction list. Refreshing the label here is what keeps the
-        /// fee and the slot count live without the mod polling for them.
-        /// </summary>
-        internal bool ShouldShow(bool enabled)
-        {
-            try
-            {
-                if (!HostGate.IsAuthority)
-                    return false;
-
-                if (!Gx.Alive(Property) || Gx.Get(Property, "IsOwned") is not true)
-                    return false;
-
-                if (!DriverCapacity.HasRoom(Property))
-                    return false;
-
-                if (Choice is not null)
-                    Gx.Set(Choice, "ChoiceText", BuildLabel());
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                DriverLog.Warn($"A driver hiring option could not decide whether to show itself ({Gx.Explain(ex)}); hiding it.");
-                return false;
-            }
-        }
-
-        internal string BuildLabel()
-        {
-            var name = WorldApi.PropertyName(Property);
-            var fee = DriverHiring.FeeFor(Property);
-            var free = DriverCapacity.Free(_code);
-            var slots = free > 1 ? $", {free} slots" : string.Empty;
-            return $"Hire a driver for the {name} (${fee:N0}{slots})";
-        }
-
-        internal void Hire()
-        {
-            try
-            {
-                if (!DriverHiring.TryHire(Property, out var brain, out var message))
-                {
-                    DriverLog.Msg(message);
-                    Expansions.Core.Actions.ActionLog.Fail(message);
-                    return;
-                }
-
-                DriverSelection.Select(brain?.Record.EmployeeId ?? string.Empty);
-                Expansions.Core.Actions.ActionLog.Ok(message);
-            }
-            catch (Exception ex)
-            {
-                DriverLog.Error("Hiring a driver from the dialogue failed.", ex);
-            }
+            DriverSelected = false;
+            SelectedProperty = null;
         }
     }
 }

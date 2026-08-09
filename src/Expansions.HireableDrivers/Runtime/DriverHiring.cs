@@ -28,7 +28,10 @@ internal static class DriverHiring
 
     /// <summary>Properties a driver could be hired onto, in the order the picker should show them.</summary>
     internal static IReadOnlyList<object?> Candidates() =>
-        WorldApi.OwnedProperties().Where(Gx.Alive).ToArray();
+        WorldApi.OwnedProperties()
+            .Where(property => Gx.Alive(property) && DriverCapacity.HasRoom(property))
+            .OrderBy(WorldApi.PropertyName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     internal static bool CanHire(object? property, out string reason)
     {
@@ -50,15 +53,10 @@ internal static class DriverHiring
             return false;
         }
 
-        if (DriverSettings.DriversUseEmployeeCapacity)
+        if (WorldApi.IsBusiness(property))
         {
-            var employees = WorldApi.Employees(property).Count(Gx.Alive);
-            var capacity = WorldApi.EmployeeCapacity(property);
-            if (capacity > 0 && employees >= capacity)
-            {
-                reason = $"{WorldApi.PropertyName(property)} is at its employee limit ({employees}/{capacity}).";
-                return false;
-            }
+            reason = $"{WorldApi.PropertyName(property)} is a laundering business, not a logistics property.";
+            return false;
         }
 
         var code = WorldApi.PropertyCode(property);
@@ -229,8 +227,8 @@ internal static class DriverHiring
 
     /// <summary>
     /// Provides the shipped 16-slot Veeper. The code is verified from the live prefab catalogue and
-    /// real <c>OwnedVehicles.json</c>; a largest-cargo fallback keeps a future rename from producing a
-    /// driver with no vehicle.
+    /// real <c>OwnedVehicles.json</c>; dedicated mode refuses substitutes so the hiring promise stays
+    /// literal.
     /// <para>
     /// The vehicle is spawned player-owned so its GUID and trunk persist through the game's normal
     /// vehicle save path. The record marks it as provided so an empty one can be cleaned up on fire.

@@ -38,6 +38,7 @@ internal sealed class VisitDirector
     private Visit? _visit;
     private bool _attached;
     private bool _poolParked;
+    private bool _auditPlacement;
 
     private Action? _hourHandler;
     private Action? _dayHandler;
@@ -98,8 +99,18 @@ internal sealed class VisitDirector
 
         _stagger.Pump();
 
-        // Anyone in the current group is excluded: they were deliberately placed in a ring around
-        // the meeting point, and the leader is allowed to walk to a handover.
+        if (_auditPlacement && !_stagger.IsActive)
+        {
+            _auditPlacement = false;
+            Visit? live;
+            lock (_gate)
+                live = _visit;
+
+            if (live is not null)
+                Congregation.LogPositions(live, "post-reveal");
+        }
+
+        // Visit members are also registered with PostWatch.ExemptVisit for the whole stay.
         PostWatch.Pump(_stagger.IsActive ? AllSlotIndices : BusySlots());
     }
 
@@ -355,7 +366,9 @@ internal sealed class VisitDirector
             ? $"Accepted contract: {link.ContractTitle} ({link.ContractState}), ${link.ContractPayment:0}."
             : "Accepted contract: none.");
         lines.Add($"Phone: {link.PhoneMessageCount} message(s), {(link.PhoneResponsesActive ? $"{link.PhoneResponseCount} answerable response(s) showing" : "no answerable responses")}.");
-        lines.Add($"Delivery point the game would use: {link.DeliveryLocationName}.");
+        lines.Add($"Deal delivery point: {link.ActiveDeliveryLocationName}.");
+        if (!string.Equals(link.ActiveDeliveryLocationName, link.DeliveryLocationName, StringComparison.Ordinal))
+            lines.Add($"Unpinned GetDeliveryLocation() (can be random): {link.DeliveryLocationName}.");
         lines.Add($"Completed handovers with this leader: {link.CompletedDeliveries}.");
         lines.Add($"Offer attempts this visit: {visit.OfferAttempts} of {MaxOfferAttempts}{(visit.OfferSent ? ", one succeeded" : "")}.");
         lines.Add("Next step: " + NextStep(visit, link));
@@ -369,12 +382,12 @@ internal sealed class VisitDirector
     private static string NextStep(Visit visit, CustomerLink link)
     {
         if (link.HasContract)
-            return $"go to {link.DeliveryLocationName} with the product and talk to {visit.Leader.FullName} to hand it over.";
+            return $"go to {link.ActiveDeliveryLocationName} with the product and talk to {visit.Leader.FullName} to hand it over.";
 
         if (link.HasOffer)
             return link.PhoneResponsesActive
-                ? "open the phone's Messages app and accept the offer."
-                : "the offer is recorded but the phone is showing no buttons. Use \"Clear the group's stuck order\", then \"Make the group offer now\".";
+                ? "open the phone's Messages app and accept the offer (Accept / Reject / Counter)."
+                : "the offer is recorded but the phone is showing no buttons. Use \"Clear the group's stuck order\", then \"Make the group offer now\" so OfferContract can attach responses without a flavour-text wipe.";
 
         if (!link.IsUnlocked)
             return "the leader is locked as a customer. Send the group home and bring them back in - arrival unlocks them.";
@@ -586,15 +599,22 @@ internal sealed class VisitDirector
         if (HostGate.IsAuthority)
         {
             Dress(visit);
-            Congregation.Place(visit);
+            if (!Congregation.Place(visit, out var placeFailure))
+            {
+                VisitorLog.Instance.Error(
+                    $"Restored visit failed to put bodies at the meeting point: {placeFailure}");
+            }
 
             foreach (var slot in visit.Members)
                 ArrivalStagger.SetVisible(slot, true, out _);
+
+            Congregation.LogPositions(visit, "restore");
         }
 
         // Dialogue lives on runtime components, so it does not survive a load and has to be rebuilt
         // on every peer rather than only on the host.
         VisitorDialogue.Attach(visit);
+        LogMemberReadiness(visit);
         VisitAnnouncer.RestoreMarker(visit);
         VisitorLog.Instance.Msg(
             $"{visit.Archetype.DisplayName} are still in {WorldGeography.NameOf(visit.Region)} at {visit.DeliveryLocationName}.");
@@ -740,9 +760,18 @@ internal sealed class VisitDirector
         Dress(visit);
 
         // Warp first, while everyone is still hidden, so navmesh work never lands on the same frame
-        // as avatar compositing.
-        Congregation.Place(visit);
+        // as avatar compositing. Place also exempts them from the post watchdog for the whole stay.
+        if (!Congregation.Place(visit, out var placeFailure))
+        {
+            failure =
+                $"{archetype.DisplayName} could not be moved to {visit.DeliveryLocationName}: {placeFailure}";
+            VisitorLog.Instance.Error(failure);
+            End(visit, silent: true, reschedule: false);
+            return false;
+        }
+
         _stagger.Reveal(visit.Members);
+        _auditPlacement = true;
 
         // Anything the pool is still holding belongs to a group that has already gone home, and the
         // shipped OfferContract drops a new offer without a word while either is set. Wiping the
@@ -750,12 +779,18 @@ internal sealed class VisitDirector
         ClearPoolOfferState(includeContracts: true);
 
         VisitorDialogue.Attach(visit);
+        LogMemberReadiness(visit);
+        Congregation.LogPositions(visit, "arrival");
         VisitAnnouncer.AnnounceArrival(visit);
         Persist();
 
+        var stylingNote = CustomerSettings.ApplyArchetypeAppearance
+            ? string.Empty
+            : " (archetype styling is off; they look like locals)";
         VisitorLog.Instance.Msg(
             $"{archetype.DisplayName} arrived in {WorldGeography.NameOf(region.Value)} at {visit.DeliveryLocationName} " +
-            $"with {members.Count} member(s); they order at {GameClock.Format(visit.OrderTime)} and leave at {GameClock.Format(visit.DepartureTime)}.");
+            $"with {members.Count} member(s); they order at {GameClock.Format(visit.OrderTime)} and leave at " +
+            $"{GameClock.Format(visit.DepartureTime)}.{stylingNote}");
 
         failure = string.Empty;
         return true;
@@ -764,23 +799,46 @@ internal sealed class VisitDirector
     private void Dress(Visit visit)
     {
         var budget = EstimateBudget(visit.Archetype);
+        var style = CustomerSettings.ApplyArchetypeAppearance;
 
         foreach (var slot in visit.Members)
         {
-            // Seeded on the pool slot and the visit, not on the member's position in the group, so a
-            // group of four and a group of six put the same face on the same slot.
-            if (!VisitorDresser.Apply(slot, visit.Archetype, visit.AppearanceSeed, out var dressFailure))
+            // Appearance is opt-in and off by default. When off, VisitorDresser.Apply is a hard no-op
+            // (also gated inside the dresser) — CustomerTuner still writes economics.
+            if (style)
             {
-                VisitorLog.Instance.Warn(
-                    $"{slot.FullName} could not be dressed as {visit.Archetype.ShortName} ({dressFailure}); they join in civilian clothes.");
+                // Seeded on the pool slot and the visit, not on the member's position in the group, so a
+                // group of four and a group of six put the same face on the same slot.
+                if (!VisitorDresser.Apply(slot, visit.Archetype, visit.AppearanceSeed, out var dressFailure))
+                {
+                    VisitorLog.Instance.Error(
+                        $"FAILED to dress {slot.FullName} as {visit.Archetype.ShortName}: {dressFailure}. " +
+                        "They will join in civilian clothes.");
+                }
             }
 
-            if (!CustomerTuner.Apply(slot, visit.Archetype, slot.Index == visit.LeaderSlot, budget, out var tuneFailure))
+            if (!CustomerTuner.Apply(slot, visit.Archetype, visit, slot.Index == visit.LeaderSlot, budget, out var tuneFailure))
             {
                 VisitorLog.Instance.Warn(
                     $"{slot.FullName} could not be tuned as a {visit.Archetype.ShortName} customer ({tuneFailure}); " +
                     "they will be in the group but may not buy.");
             }
+        }
+    }
+
+    /// <summary>Per-member readiness line so a silent civilian-clothes / plain-greeting fallback cannot ship again.</summary>
+    private static void LogMemberReadiness(Visit visit)
+    {
+        var style = CustomerSettings.ApplyArchetypeAppearance;
+        foreach (var slot in visit.Members)
+        {
+            var status = VisitorRuntime.StatusOf(slot);
+            var dressed = style ? Describe.YesNo(status.Dressed) : "n/a (styling off)";
+            VisitorLog.Instance.Msg(
+                $"{slot.FullName}: dressed={dressed}, " +
+                $"dialogue={Describe.YesNo(status.DialogueAttached)}, " +
+                $"finalized={Describe.YesNo(status.Finalized)}, " +
+                $"actions={Describe.YesNo(status.ActionListValid)}");
         }
     }
 
@@ -802,6 +860,7 @@ internal sealed class VisitDirector
         }
 
         _stagger.Clear();
+        _auditPlacement = false;
         VisitorDialogue.Detach();
 
         var authoritative = HostGate.IsAuthority;
@@ -829,6 +888,9 @@ internal sealed class VisitDirector
             Congregation.Park(slot);
             ArrivalStagger.SetVisible(slot, slot.IsResidentScout, out _);
         }
+
+        // Re-arm the post watchdog only after everyone is back on their posts.
+        PostWatch.ClearVisitExemption();
 
         VisitAnnouncer.AnnounceDeparture(visit, silent);
 

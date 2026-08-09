@@ -66,7 +66,8 @@ internal static class PoliceMenuActions
             Readiness.Outlaw, ClearOutlawTier);
 
         AddDynamic("police_overhaul.outlaw_pay", LegalFeeLabel,
-            "Buy one outlaw tier down with money instead of time. Cash first, then your bank balance.",
+            "Repair path only — normally you knock on the police station door. Buys one outlaw tier down " +
+            "(Marked $25k / Hunted $50k by default). Cash first, then your bank balance. Hidden while the door hook is attached.",
             Readiness.LegalFee, PayLegalFee);
 
         Add("police_overhaul.spawn_federal", "Send a federal team",
@@ -165,7 +166,8 @@ internal static class PoliceMenuActions
             $"{(config.OutlawBlocksCardVendors.Value ? "Card-only vendors are refusing you." : "Card-only vendors are still serving you (setting off).")} " +
             $"Fines are x{config.OutlawFineMultiplier.Value:0.0} on top of the heat multiplier. " +
             $"An arrest right now costs the rest of the day plus ${consequences.Custody.ProcessingFeeDue():N0} in processing, " +
-            $"and takes your tools. Buying the tier down costs ${config.OutlawLegalFee.Value:N0}; serving it out takes " +
+            $"and takes your tools. Buying the tier down at the station door costs " +
+            $"${config.FeeFor(record.Outlaw):N0} for {OutlawState.Describe(record.Outlaw)}; serving it out takes " +
             $"{config.OutlawClearDays.Value - record.CleanDayStreak} more clean day(s).";
 
         PoliceMessages.Announce($"Outlaw: {OutlawState.Describe(record.Outlaw)}", bill);
@@ -263,10 +265,15 @@ internal static class PoliceMenuActions
 
     private static string LegalFeeLabel()
     {
-        // Null before the module wires into a scene, which is also when this label is first built.
-        // Showing "$0" then would be a lie about the price rather than an absence of one.
-        var fee = PoliceRuntime.Config?.OutlawLegalFee.Value;
-        return fee is null ? "Pay the legal fee" : $"Pay the legal fee (${fee.Value:N0})";
+        var config = PoliceRuntime.Config;
+        var record = PoliceRuntime.LocalRecord;
+        if (config is null)
+            return "Pay the legal fee (repair path)";
+
+        if (record is { Outlaw: not OutlawTier.Clean })
+            return $"Pay the legal fee (${config.FeeFor(record.Outlaw):N0}) (repair path)";
+
+        return $"Pay the legal fee (Marked ${config.LegalFeeMarked.Value:N0} / Hunted ${config.LegalFeeHunted.Value:N0}) (repair path)";
     }
 
     private static ActionResult SpawnFederal()

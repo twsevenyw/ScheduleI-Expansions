@@ -7,16 +7,18 @@ using UnityEngine;
 namespace Expansions.SpecialCustomers.Visitors;
 
 /// <summary>
-/// Crash guards for S1API custom visitor spawns:
+/// Crash guards for S1API custom visitor spawns. Hierarchy / action-graph only — never writes
+/// AvatarSettings, layers, morphs, or impostor textures.
 /// <list type="bullet">
-/// <item>Re-activate Avatar before <c>TryValidateNativeAwakeReferences</c>.</item>
-/// <item>Heal the action graph + Avatar before <c>FinalizeNetworkSpawn</c>.</item>
+/// <item>Re-activate the Avatar GameObject before <c>TryValidateNativeAwakeReferences</c>.</item>
+/// <item>Heal the action graph before <c>FinalizeNetworkSpawn</c>.</item>
 /// <item>Skip <c>NPC.SetVisible</c> when Avatar/Visibility are missing so S1API finalize completes.</item>
 /// <item>Skip <c>UpdateUmbrellaUse</c> when the action is unwired — this is the crash neuter; it is
 /// not a fault and must not trip the breaker.</item>
 /// </list>
 /// Visitors are kept alive. Destroy is only via <see cref="VisitorFaultGuard"/> after repeated
-/// actual faults.
+/// actual faults. Kept because visitors do not spawn without the Avatar(active) heal; it does not
+/// customise appearance.
 /// </summary>
 internal static class SpawnGraphFix
 {

@@ -25,7 +25,10 @@ internal static class HeatModel
     /// </summary>
     internal const float HeatPerFineDollar = 0.2f;
 
-    /// <summary>Calibrated to the assault tier — an arrest should cost more than one misdemeanour.</summary>
+    /// <summary>
+    /// Legacy default for <c>arrest_heat</c> when <c>heat_reset_on_arrest</c> is off.
+    /// Calibrated to the assault tier — an arrest used to cost more than one misdemeanour.
+    /// </summary>
     internal const float ArrestHeat = 15f;
 
     /// <summary>$2,000 is the smallest shipped business laundering cap, so 1 heat is one small launder.</summary>
