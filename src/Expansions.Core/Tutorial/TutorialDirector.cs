@@ -36,9 +36,38 @@ public static class TutorialDirector
 
     private const int MaxTrackedQuests = 32;
 
+    /// <summary>
+    /// How long an availability answer is reused. Every row on the Tutorial tab asks its chapter
+    /// whether it is ready on every frame the tab is open, and a chapter's answer can cost a registry
+    /// walk or a session-state read.
+    /// </summary>
+    private const float AvailabilityTtlSeconds = 0.5f;
+
+    /// <summary>
+    /// How long a slot that produced no objectives is left alone before it is tried again. Long enough
+    /// that the create-and-cancel cycle cannot spin, short enough that a module which finishes wiring
+    /// itself into the loaded game a few seconds later still gets played without a restart.
+    /// </summary>
+    private const float BarrenRetrySeconds = 15f;
+
     private static readonly ModuleLogger Log = new("Tutorial");
     private static readonly List<TutorialQuest> Tracked = new();
     private static readonly Dictionary<string, int> ConditionFailures = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, CachedAvailability> AvailabilityCache = new(StringComparer.Ordinal);
+    private static readonly HashSet<string> ReportedAvailabilityFailures = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Slots whose chapters claimed to be ready and then declared no objectives, and the moment each one
+    /// becomes worth trying again.
+    /// <para>
+    /// A cooldown rather than a permanent exclusion, deliberately. Retrying every frame would create and
+    /// cancel a quest forever, but writing the slot off for the session would mean one bad answer during a
+    /// save load permanently costs the player a chapter — which is the failure mode this whole design exists
+    /// to avoid. Nothing here ever marks a chapter complete; a slot on cooldown is simply stepped over, and
+    /// the line comes back to it.
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<string, float> BarrenUntil = new(StringComparer.Ordinal);
 
     private static bool _initialized;
     private static bool _parked;
@@ -110,6 +139,44 @@ public static class TutorialDirector
         }
     }
 
+    /// <summary>Chapters the loaded save records as done. Zero outside a game.</summary>
+    public static int CompletedChapterCount
+    {
+        get
+        {
+            try
+            {
+                if (!_sessionActive)
+                    return 0;
+
+                var progress = TutorialProgress.Current;
+                var done = 0;
+
+                foreach (var chapter in TutorialRegistry.Chapters)
+                {
+                    if (TutorialSettings.IsEnabled(chapter.Id) && progress.IsChapterComplete(chapter.Id))
+                        done++;
+                }
+
+                return done;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+    }
+
+    /// <summary>Title of the chapter being played, or empty.</summary>
+    public static string CurrentChapterTitle
+    {
+        get
+        {
+            var id = CurrentChapterId;
+            return id.Length == 0 ? string.Empty : TutorialRegistry.Find(id)?.Title ?? id;
+        }
+    }
+
     /// <summary>Where one chapter stands, for the Tutorial tab. Always safe to call.</summary>
     public static TutorialChapterState StateOf(string chapterId)
     {
@@ -123,11 +190,40 @@ public static class TutorialDirector
 
             // Compared through the slot map rather than by listing the slot's chapters: this is polled
             // per row per frame while the Tutorial tab is open.
-            return IsPlaying(chapterId) ? TutorialChapterState.Playing : TutorialChapterState.Pending;
+            if (IsPlaying(chapterId))
+                return TutorialChapterState.Playing;
+
+            var chapter = TutorialRegistry.Find(chapterId);
+            if (chapter is not null && !AvailabilityOf(chapter).IsAvailable)
+                return TutorialChapterState.Unavailable;
+
+            return TutorialChapterState.Pending;
         }
         catch
         {
             return TutorialChapterState.Pending;
+        }
+    }
+
+    /// <summary>
+    /// Why a chapter is not playable, or empty when it is. This is the chapter's own sentence, shown
+    /// verbatim on its row — the whole point of deferring instead of stubbing is that the owner is
+    /// told what to switch on.
+    /// </summary>
+    public static string ReasonFor(string chapterId)
+    {
+        try
+        {
+            var chapter = TutorialRegistry.Find(chapterId);
+            if (chapter is null)
+                return string.Empty;
+
+            var availability = AvailabilityOf(chapter);
+            return availability.IsAvailable ? string.Empty : availability.Reason;
+        }
+        catch
+        {
+            return string.Empty;
         }
     }
 
@@ -160,6 +256,35 @@ public static class TutorialDirector
         var run = _active;
         return run is not null &&
                string.Equals(TutorialSlots.SlotFor(chapterId), run.Slot, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Title of the objective the player is on, whichever chapter it belongs to, or empty. The Tutorial
+    /// tab shows this so the answer to "what am I meant to be doing?" is on the screen that started it.
+    /// </summary>
+    public static string CurrentObjective
+    {
+        get
+        {
+            try
+            {
+                var run = _active;
+                if (run is null)
+                    return string.Empty;
+
+                foreach (var step in run.Steps)
+                {
+                    if (!run.Quest.IsStepComplete(step.Id))
+                        return step.Title;
+                }
+
+                return string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
     }
 
     /// <summary>
@@ -276,8 +401,13 @@ public static class TutorialDirector
             if (_sessionActive)
                 TutorialProgress.Current.Wipe();
 
+            // Latched signals are dropped with everything else. A signal raised before the line was reset
+            // describes something the player did on the previous run, and honouring it would tick an
+            // objective off the moment it appeared.
             TutorialSignals.Clear();
             ConditionFailures.Clear();
+            ReportedAvailabilityFailures.Clear();
+            InvalidateAvailability();
             Log.Msg("Tutorial progress reset.");
             return Announce("Tutorial reset. Press Enable Quest to run it again.");
         }
@@ -357,6 +487,9 @@ public static class TutorialDirector
             var run = _active is not null && ReferenceEquals(_active.Quest, quest)
                 ? _active
                 : Adopt(quest);
+
+            if (run is null)
+                return;
 
             quest.BuildEntries(run.Steps);
             run.BuiltAtFrame = Time.frameCount;
@@ -461,21 +594,73 @@ public static class TutorialDirector
         if (!progress.Started)
             return;
 
+        // A live chapter keeps the floor for as long as any of its objectives can still be finished, even if
+        // an earlier chapter has just become playable. The alternative — always honouring the first playable
+        // slot — would yank a half-finished quest out of the journal the moment a module further up the line
+        // woke up, throwing away objectives the player had already earned.
+        if (_active is { } running)
+        {
+            if (StillPlayable(running, progress))
+            {
+                AdvanceRun(running, progress);
+                return;
+            }
+
+            StandDown(running);
+        }
+
         var slot = CurrentSlot(progress);
         if (slot is null)
         {
-            CompleteLine();
+            ReportIdle(progress);
             return;
         }
-
-        if (_active is not null && !string.Equals(_active.Slot, slot, StringComparison.Ordinal))
-            _active = null;
 
         _active ??= BeginChapter(slot);
         if (_active is null)
             return;
 
         AdvanceRun(_active, progress);
+    }
+
+    /// <summary>
+    /// True while at least one of the chapters that put objectives into this quest is still switched on,
+    /// unfinished and ready. Once none are, the quest holds nothing the player can act on.
+    /// </summary>
+    private static bool StillPlayable(SlotRun run, TutorialProgress progress)
+    {
+        foreach (var chapterId in run.PlayedChapterIds)
+        {
+            var chapter = TutorialRegistry.Find(chapterId);
+            if (chapter is not null && IsPlayable(chapter, progress))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Retires a live chapter whose objectives can no longer be met — the module was switched off, withdrew
+    /// its chapter, or reported itself not ready after the quest had begun.
+    /// <para>
+    /// Cancelled, never completed. Nothing is written to the save, so the chapter stays unfinished and the
+    /// line replays it in full once it is ready again, which is the same thing that happens when the owner
+    /// flips its switch off and on. Cancelling also matters for the journal: leaving the quest active would
+    /// park an entry the player can never tick off.
+    /// </para>
+    /// </summary>
+    private static void StandDown(SlotRun run)
+    {
+        Log.Msg(
+            $"Tutorial chapter '{run.Slot}' can no longer be played and has been withdrawn. It is not marked " +
+            $"complete and will run again from the start when it is ready.");
+
+        CancelQuest(run.Quest);
+
+        if (_active is not null && ReferenceEquals(_active, run))
+            _active = null;
+
+        SetStatus(Describe());
     }
 
     private static void RefreshSession()
@@ -502,6 +687,10 @@ public static class TutorialDirector
         {
             _sessionActive = true;
             _sessionFrames = 0;
+
+            // Readiness answers taken in the main menu, or during the load, describe a game that was not
+            // running yet. Keeping any of them is how a chapter ends up written off for the whole save.
+            InvalidateAvailability();
             Log.Debug("A save is loaded; the tutorial will settle before touching anything.");
         }
         else
@@ -520,29 +709,109 @@ public static class TutorialDirector
         _active = null;
         Tracked.Clear();
         TutorialProgress.Forget();
+        InvalidateAvailability();
         SetStatus("Not in a game.");
     }
 
     /// <summary>
-    /// The first slot with chapters that are still to play. A chapter switched off on the Tutorial tab
-    /// counts as nothing to play, but is deliberately <em>not</em> recorded as complete — switching it
-    /// back on has to replay it rather than leave a hole in the line.
+    /// The first slot with a chapter that can be played right now.
+    /// <para>
+    /// Three things make a chapter unplayable and none of them mark it complete: it is switched off on
+    /// the Tutorial tab, it is already recorded as done on this save, or it reports itself not ready.
+    /// The third is the one that matters here — the line steps past a deferred chapter and picks it up
+    /// on a later tick, so a mod switched on halfway through still gets played rather than skipped.
+    /// </para>
     /// </summary>
     private static string? CurrentSlot(TutorialProgress progress)
     {
         foreach (var slot in TutorialSlots.Ordered)
         {
-            var chapters = ChaptersFor(slot);
-            if (chapters.Count == 0)
+            if (IsOnBarrenCooldown(slot))
                 continue;
 
-            if (chapters.All(c => progress.IsChapterComplete(c.Id) || !TutorialSettings.IsEnabled(c.Id)))
-                continue;
-
-            return slot;
+            foreach (var chapter in ChaptersFor(slot))
+            {
+                if (IsPlayable(chapter, progress))
+                    return slot;
+            }
         }
 
         return null;
+    }
+
+    private static bool IsPlayable(ITutorialChapter chapter, TutorialProgress progress) =>
+        TutorialSettings.IsEnabled(chapter.Id) &&
+        !progress.IsChapterComplete(chapter.Id) &&
+        AvailabilityOf(chapter).IsAvailable;
+
+    private static bool IsOnBarrenCooldown(string slot) =>
+        BarrenUntil.TryGetValue(slot, out var until) && UnscaledNow() < until;
+
+    /// <summary>
+    /// Steps over a slot for a while. Said once per cooldown rather than once per session, because the
+    /// interesting case is a slot that recovers and this is the only trace of why it stalled.
+    /// </summary>
+    private static void MarkBarren(string slot)
+    {
+        // UnscaledNow yields infinity when there is no clock, which would turn a cooldown into a life
+        // sentence. Zero is the safe reading: the slot is retried on the next tick.
+        var now = UnscaledNow();
+        if (!float.IsFinite(now))
+            now = 0f;
+
+        if (!BarrenUntil.ContainsKey(slot) || now >= BarrenUntil[slot])
+        {
+            Log.Warn(
+                $"Tutorial slot '{slot}' had nothing to play; stepping over it and trying again in " +
+                $"{BarrenRetrySeconds:0} seconds. Nothing has been marked complete.");
+        }
+
+        BarrenUntil[slot] = now + BarrenRetrySeconds;
+    }
+
+    /// <summary>
+    /// Drops every cached readiness answer and every cooldown, so the next tick asks the chapters again.
+    /// Called whenever something that can change an answer changes: a chapter registered or withdrawn, a
+    /// per-chapter switch flipped, a save loaded, the line reset.
+    /// </summary>
+    private static void InvalidateAvailability()
+    {
+        AvailabilityCache.Clear();
+        BarrenUntil.Clear();
+    }
+
+    /// <summary>
+    /// Nothing to play. Either the line is finished, or every chapter left is waiting on something —
+    /// and in the second case the owner is told which one and why, rather than being congratulated.
+    /// </summary>
+    private static void ReportIdle(TutorialProgress progress)
+    {
+        var total = EnabledChapterCount;
+        var done = CompletedChapterCount;
+
+        if (total > 0 && done >= total)
+        {
+            if (!_status.StartsWith("Tutorial complete", StringComparison.Ordinal))
+                Log.Msg("Tutorial quest line complete.");
+
+            SetStatus($"Tutorial complete - all {total} chapters done. Reset to run it again.");
+            return;
+        }
+
+        foreach (var chapter in TutorialRegistry.Chapters)
+        {
+            if (!TutorialSettings.IsEnabled(chapter.Id) || progress.IsChapterComplete(chapter.Id))
+                continue;
+
+            var availability = AvailabilityOf(chapter);
+            if (availability.IsAvailable)
+                continue;
+
+            SetStatus($"Tutorial {done}/{total} - waiting on '{chapter.Title}': {availability.Reason}.");
+            return;
+        }
+
+        SetStatus($"Tutorial {done}/{total} - preparing the next chapter.");
     }
 
     private static SlotRun? BeginChapter(string slot)
@@ -594,44 +863,56 @@ public static class TutorialDirector
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static Quest CreateQuest(Type type) => QuestManager.CreateQuest(type);
 
-    /// <summary>Builds (or rebuilds) the run state describing what <paramref name="quest"/> must do.</summary>
-    private static SlotRun Adopt(TutorialQuest quest)
+    /// <summary>
+    /// Builds the run state describing what <paramref name="quest"/> must do, from the chapters in its
+    /// slot that are switched on, unfinished and ready. Null when that set turns out to be empty,
+    /// which is the one case where the quest is cancelled rather than played.
+    /// </summary>
+    private static SlotRun? Adopt(TutorialQuest quest)
     {
         var slot = quest.SlotKey;
-        var chapters = ChaptersFor(slot);
+        var progress = _sessionActive ? TutorialProgress.Current : null;
         var steps = new List<TutorialStep>();
+        var played = new List<string>();
 
-        foreach (var chapter in chapters)
+        foreach (var chapter in ChaptersFor(slot))
         {
-            // Contributes no objectives at all rather than a "skipped" one: the journal should not
-            // carry entries for a chapter the owner switched off.
+            // Each of these contributes no objectives at all rather than a self-completing one: the
+            // journal should never carry an entry the player did not earn.
             if (!TutorialSettings.IsEnabled(chapter.Id))
                 continue;
 
-            var availability = SafeAvailability(chapter);
-
-            if (!availability.IsAvailable)
-            {
-                steps.Add(PlaceholderStep(chapter, availability.Reason));
+            if (progress is not null && progress.IsChapterComplete(chapter.Id))
                 continue;
-            }
+
+            if (!AvailabilityOf(chapter).IsAvailable)
+                continue;
 
             var built = SafeBuild(chapter);
             if (built.Count == 0)
             {
-                steps.Add(PlaceholderStep(chapter, "nothing to do here yet"));
+                Log.Warn($"Chapter '{chapter.Id}' reported itself ready but declared no objectives.");
                 continue;
             }
 
             steps.AddRange(built);
+            played.Add(chapter.Id);
         }
 
         if (steps.Count == 0)
-            steps.Add(PlaceholderStep(null, "nothing to do here yet"));
+        {
+            MarkBarren(slot);
+            CancelQuest(quest);
 
-        var run = new SlotRun(slot, quest, steps);
+            if (_active is not null && ReferenceEquals(_active.Quest, quest))
+                _active = null;
+
+            return null;
+        }
+
+        var run = new SlotRun(slot, quest, steps, played);
         _active = run;
-        ApplyCompletionReward(quest, chapters);
+        ApplyCompletionReward(quest);
         return run;
     }
 
@@ -664,13 +945,11 @@ public static class TutorialDirector
         if (state == QuestState.Active || state == QuestState.Inactive)
             return;
 
-        foreach (var chapter in ChaptersFor(run.Slot))
-        {
-            // A chapter that was switched off contributed no objectives, so finishing the slot says
-            // nothing about it.
-            if (TutorialSettings.IsEnabled(chapter.Id))
-                progress.MarkChapterComplete(chapter.Id);
-        }
+        // Only the chapters that actually contributed objectives. A chapter switched off, already
+        // finished, or held back as not-ready put nothing in this quest, so finishing it says nothing
+        // about them.
+        foreach (var chapterId in run.PlayedChapterIds)
+            progress.MarkChapterComplete(chapterId);
 
         Tracked.Remove(quest);
         _active = null;
@@ -744,23 +1023,17 @@ public static class TutorialDirector
         }
     }
 
-    private static void CompleteLine()
-    {
-        if (_status.StartsWith("Tutorial complete", StringComparison.Ordinal))
-            return;
-
-        SetStatus($"Tutorial complete - all {EnabledChapterCount} chapters done. Reset to run it again.");
-        Log.Msg("Tutorial quest line complete.");
-    }
-
     private static void CancelActive()
     {
         var quest = _active?.Quest;
         _active = null;
 
-        if (quest is null)
-            return;
+        if (quest is not null)
+            CancelQuest(quest);
+    }
 
+    private static void CancelQuest(TutorialQuest quest)
+    {
         try
         {
             if (quest.CurrentState is QuestState.Active or QuestState.Inactive)
@@ -768,7 +1041,7 @@ public static class TutorialDirector
         }
         catch (Exception ex)
         {
-            Log.Warn($"Could not cancel the live chapter quest ({ex.GetType().Name}: {ex.Message}).");
+            Log.Warn($"Could not cancel the chapter quest ({ex.GetType().Name}: {ex.Message}).");
         }
 
         Tracked.Remove(quest);
@@ -787,6 +1060,38 @@ public static class TutorialDirector
         return matched;
     }
 
+    /// <summary>
+    /// A chapter's readiness, reused for <see cref="AvailabilityTtlSeconds"/>. Every row on the
+    /// Tutorial tab asks this on every frame the tab is open.
+    /// </summary>
+    private static TutorialAvailability AvailabilityOf(ITutorialChapter chapter)
+    {
+        var now = UnscaledNow();
+
+        if (AvailabilityCache.TryGetValue(chapter.Id, out var cached) &&
+            now - cached.Stamp < AvailabilityTtlSeconds)
+        {
+            return cached.Value;
+        }
+
+        var value = SafeAvailability(chapter);
+        AvailabilityCache[chapter.Id] = new CachedAvailability(now, value);
+        return value;
+    }
+
+    private static float UnscaledNow()
+    {
+        try
+        {
+            return Time.unscaledTime;
+        }
+        catch
+        {
+            // Off the Unity thread there is no clock; recompute rather than serve a stale answer.
+            return float.PositiveInfinity;
+        }
+    }
+
     private static TutorialAvailability SafeAvailability(ITutorialChapter chapter)
     {
         try
@@ -795,9 +1100,14 @@ public static class TutorialDirector
         }
         catch (Exception ex)
         {
-            Log.Warn(
-                $"Chapter '{chapter.Id}' threw while reporting availability " +
-                $"({ex.GetType().Name}: {ex.Message}); treating it as unavailable.");
+            // Once per chapter: this is polled, and a broken predicate would otherwise fill the log.
+            if (ReportedAvailabilityFailures.Add(chapter.Id))
+            {
+                Log.Warn(
+                    $"Chapter '{chapter.Id}' threw while reporting availability " +
+                    $"({ex.GetType().Name}: {ex.Message}); it will be held back until it stops.");
+            }
+
             return TutorialAvailability.ComingSoon("this chapter could not be prepared");
         }
     }
@@ -818,36 +1128,12 @@ public static class TutorialDirector
     }
 
     /// <summary>
-    /// A chapter with nothing to do still gets one objective, so the line reads honestly in the
-    /// journal and still advances. It ticks itself off a moment after the quest appears rather than
-    /// instantly, which is the difference between "acknowledged" and "already greyed out".
-    /// </summary>
-    private static TutorialStep PlaceholderStep(ITutorialChapter? chapter, string reason)
-    {
-        var readyAt = Time.unscaledTime + 3f;
-        var title = chapter is null ? $"Coming soon - {reason}" : $"{chapter.Title}: {reason}";
-
-        return new TutorialStep(
-            $"{chapter?.Id ?? "expansions.placeholder"}.pending",
-            title,
-            reason,
-            null,
-            () => Time.unscaledTime >= readyAt,
-            false,
-            string.Empty,
-            null);
-    }
-
-    /// <summary>
     /// Hands the chapter's XP to the game's own completion reward rather than granting anything
     /// ourselves. <c>CompletionXP</c> is a field on the game's quest behaviour, reachable only through
     /// S1API's internal handle to it, so the whole path is reflective and entirely optional.
     /// </summary>
-    private static void ApplyCompletionReward(TutorialQuest quest, IReadOnlyList<ITutorialChapter> chapters)
+    private static void ApplyCompletionReward(TutorialQuest quest)
     {
-        if (chapters.Count == 0)
-            return;
-
         try
         {
             var handle = typeof(Quest).GetField(
@@ -903,24 +1189,28 @@ public static class TutorialDirector
         }
     }
 
-    private static void OnRegistryChanged() => SetStatus(Describe());
+    /// <summary>
+    /// A chapter arriving or being withdrawn can change which slot is next, so every cached answer is
+    /// dropped rather than left to expire. A mod that registers its chapter late gets played on the next
+    /// tick, without a restart and without a tutorial reset.
+    /// </summary>
+    private static void OnRegistryChanged()
+    {
+        InvalidateAvailability();
+        SetStatus(Describe());
+    }
 
     /// <summary>
-    /// A chapter switched off while its own quest is live has to stop being played immediately, or the
-    /// owner is left staring at objectives for something they just turned off. Cancelling drops the
-    /// quest; the next tick picks whichever chapter is now first.
+    /// A chapter switched off while its own quest is live stops being played on the next tick, which sees the
+    /// switch through <see cref="StillPlayable"/> and withdraws the quest. Handled there rather than here so
+    /// there is exactly one rule for a chapter that stops being playable, whether the cause was a switch, a
+    /// mod withdrawing its chapter, or the chapter reporting itself not ready.
     /// </summary>
     private static void OnChapterSwitchesChanged()
     {
         try
         {
-            var run = _active;
-            if (run is not null && ChaptersFor(run.Slot).All(static c => !TutorialSettings.IsEnabled(c.Id)))
-            {
-                CancelActive();
-                Log.Msg($"Tutorial chapter '{run.Slot}' was switched off; skipping it.");
-            }
-
+            InvalidateAvailability();
             SetStatus(Describe());
         }
         catch (Exception ex)
@@ -995,11 +1285,16 @@ public static class TutorialDirector
     /// <summary>What one chapter slot is doing right now.</summary>
     private sealed class SlotRun
     {
-        internal SlotRun(string slot, TutorialQuest quest, IReadOnlyList<TutorialStep> steps)
+        internal SlotRun(
+            string slot,
+            TutorialQuest quest,
+            IReadOnlyList<TutorialStep> steps,
+            IReadOnlyList<string> playedChapterIds)
         {
             Slot = slot;
             Quest = quest;
             Steps = steps;
+            PlayedChapterIds = playedChapterIds;
             BuiltAtFrame = Time.frameCount;
         }
 
@@ -1009,7 +1304,25 @@ public static class TutorialDirector
 
         internal IReadOnlyList<TutorialStep> Steps { get; }
 
+        /// <summary>The chapters that actually put objectives in this quest, and therefore the only
+        /// ones finishing it may mark complete.</summary>
+        internal IReadOnlyList<string> PlayedChapterIds { get; }
+
         /// <summary>Frame the journal entries were added on; the quest is begun a few frames later.</summary>
         internal int BuiltAtFrame { get; set; }
+    }
+
+    /// <summary>One chapter's readiness plus when it was asked. See <see cref="AvailabilityOf"/>.</summary>
+    private readonly struct CachedAvailability
+    {
+        internal CachedAvailability(float stamp, TutorialAvailability value)
+        {
+            Stamp = stamp;
+            Value = value;
+        }
+
+        internal float Stamp { get; }
+
+        internal TutorialAvailability Value { get; }
     }
 }

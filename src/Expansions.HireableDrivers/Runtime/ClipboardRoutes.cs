@@ -34,7 +34,10 @@ internal static class ClipboardRoutes
         if (field is null)
             return false;
 
-        DriverStore.EnsureRouteSlots(brain.Record);
+        // The clipboard decides how many rows a Packager gets, so the mirror follows its number rather
+        // than the config's guess at it.
+        var max = ClipboardApi.MaxRoutes(employee);
+        DriverStore.EnsureRouteSlots(brain.Record, max > 0 ? max : Config.DriverSettings.MaxRoutesPerDriver);
 
         // A record from before the clipboard owned routes has to hand them over before it can start
         // reading back, or the first pull would see an empty list and wipe them.
@@ -90,7 +93,7 @@ internal static class ClipboardRoutes
         // the next pull would read it back into a different row.
         Compact(brain);
 
-        var built = new List<object?>();
+        var wanted = new List<(object? Source, object? Destination)>();
 
         foreach (var mirrored in brain.Record.Routes)
         {
@@ -112,9 +115,36 @@ internal static class ClipboardRoutes
                 return false;
             }
 
-            var route = ClipboardApi.NewRoute(source, destination);
+            wanted.Add((source, destination));
+        }
+
+        var existing = ClipboardApi.Routes(employee);
+
+        // Same shape: edit the game's own route objects in place. That keeps each RouteEntryUI bound to
+        // the object it is already showing, and keeps the item filter the player set on it — rebuilding
+        // the list would silently drop both.
+        if (existing.Count == wanted.Count)
+        {
+            for (var i = 0; i < wanted.Count; i++)
+            {
+                ClipboardApi.SetRouteSource(existing[i], wanted[i].Source);
+                ClipboardApi.SetRouteDestination(existing[i], wanted[i].Destination);
+            }
+
+            return ClipboardApi.Replicate(employee);
+        }
+
+        var built = new List<object?>();
+
+        for (var i = 0; i < wanted.Count; i++)
+        {
+            var route = ClipboardApi.NewRoute(wanted[i].Source, wanted[i].Destination);
             if (route is null)
                 return false;
+
+            // Carry the row's item filter across the rebuild rather than resetting it to "anything".
+            if (i < existing.Count && Gx.Get(existing[i], "Filter") is { } filter)
+                Gx.Set(route, "Filter", filter);
 
             built.Add(route);
         }

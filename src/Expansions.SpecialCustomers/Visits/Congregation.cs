@@ -47,6 +47,12 @@ internal static class Congregation
                 continue;
             }
 
+            // Pinned here too. The schedule is what would send a group member off to a park bench
+            // mid-visit; the shipped deal-attendance behaviour that walks the leader to a handover
+            // is a Behaviour rather than a schedule action, so it is unaffected.
+            if (!PostWatch.Pin(slot, out var pinFailure))
+                VisitorLog.Instance.Debug($"Could not pin slot {slot.Index:00} for the visit ({pinFailure}).");
+
             var position = RingPosition(centre, radius, index, count);
             Place(npc, position, centre, visit.Archetype);
 
@@ -72,6 +78,11 @@ internal static class Congregation
         var npc = VisitorRuntime.Resolve(slot);
         if (npc is null)
             return;
+
+        // Re-applied on every park, because the whole point of parking someone is that they stay
+        // there and the generic NPC schedule is what walks them away again.
+        if (!PostWatch.Pin(slot, out var pinFailure))
+            VisitorLog.Instance.Debug($"Could not pin slot {slot.Index:00} to its post ({pinFailure}).");
 
         try
         {

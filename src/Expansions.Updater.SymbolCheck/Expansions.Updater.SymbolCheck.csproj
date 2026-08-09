@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Expansions.Updater.SymbolCheck</RootNamespace>
+    <AssemblyName>Expansions.Updater.SymbolCheck</AssemblyName>
+    <ExpansionsGameApi>false</ExpansionsGameApi>
+    <Nullable>annotations</Nullable>
+    <!-- The SDK only warns about an end-of-life TFM for executables, and this has to be net6.0
+         because that is the runtime the game's MelonLoader loads. -->
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+
+    <!-- MetadataLoadContext ships in a package, and the shared props turn copy-local off for the
+         mods (which must not carry their references into the game folder). This one has to run. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
+    <!-- Not a member of Expansions.sln: it inspects the solution's output, so it cannot be part of
+         the same build. Not part of the distributable either, which is why it declares no
+         ExpansionsDeployDir and the publisher skips it. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="6.0.0" />
+  </ItemGroup>
+</Project>

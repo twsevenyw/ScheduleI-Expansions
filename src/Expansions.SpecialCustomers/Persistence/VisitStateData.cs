@@ -17,7 +17,7 @@ namespace Expansions.SpecialCustomers.Persistence;
 public sealed class VisitStateData
 {
     /// <summary>Bump on any shape change. A payload from the future is ignored, never half-read.</summary>
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     public int SchemaVersion = CurrentSchemaVersion;
 
@@ -26,6 +26,12 @@ public sealed class VisitStateData
 
     /// <summary>So the same group never turns up twice running.</summary>
     public string LastArchetypeId = string.Empty;
+
+    /// <summary>
+    /// How many visits this save has seen. Feeds the appearance seed, so two visits by the same
+    /// archetype on the same in-game day still bring visibly different people.
+    /// </summary>
+    public int VisitSerial;
 
     public bool SelfDisabledByDetection;
 
@@ -63,4 +69,11 @@ public sealed class ActiveVisitData
     /// mid-visit does not restart a retry loop the player already watched fail.
     /// </summary>
     public int OfferAttempts;
+
+    /// <summary>
+    /// Seeds every member's randomised appearance. Persisted because it is the only reason a group
+    /// looks like the same six people after a reload instead of six strangers. Zero means "written
+    /// by a build before appearance randomisation", and is derived from the arrival day instead.
+    /// </summary>
+    public int AppearanceSeed;
 }

@@ -166,6 +166,7 @@ public static class EventHotkey
 
         chooser.OpenChooser();
         AcquireUiState();
+        ChooserOpens++;
         GameSounds.PlayClick();
     }
 
@@ -226,6 +227,8 @@ public static class EventHotkey
 
     private static void FireLastFromHotkey()
     {
+        Repeats++;
+
         if (EventRegistry.Count == 0)
         {
             Toast("No expansion events are registered yet.", ActionOutcome.Failed);

@@ -210,7 +210,7 @@ internal static class OfferFactory
     }
 
     /// <summary>
-    /// One line per drug type the group cares about that the player actually sells. Hippies are the
+    /// One line per drug type the group cares about that is also on the allow-list. Hippies are the
     /// only archetype that normally produces two, which is what makes their order read as mixed.
     /// </summary>
     private static List<Line> BuildLines(Visit visit, out string failure)
@@ -228,7 +228,7 @@ internal static class OfferFactory
         }
 
         var quality = visit.Archetype.MinimumQuality;
-        var rng = new LookRandom(visit.Archetype.Id, visit.ArrivalDay);
+        var rng = new LookRandom(visit.Archetype.Id, visit.ArrivalDay, visit.AppearanceSeed);
 
         foreach (var drug in drugs)
         {
@@ -244,11 +244,19 @@ internal static class OfferFactory
                 break;
         }
 
-        // Nothing in the group's preferred drugs is on sale. They still travelled, so they take the
-        // best of whatever is listed rather than the visit being a no-op — at their own rate.
+        // Nothing the group prefers is available. They still travelled, so they take the most
+        // valuable thing they are allowed to ask for rather than the visit being a no-op. The
+        // fallback stays inside the allow-list: per-archetype taste is a preference within it, never
+        // a licence to step outside it.
         if (lines.Count == 0)
         {
-            var fallback = catalogue[0];
+            var fallback = MostValuable(catalogue);
+            if (fallback is null)
+            {
+                failure = "no product in the allow-list could be read well enough to put on a contract";
+                return lines;
+            }
+
             var quantity = Quantity(visit.Archetype, ref rng);
             lines.Add(new Line(fallback, quantity, quality, Payment(fallback, quantity, quality, visit.Archetype)));
         }
@@ -272,9 +280,32 @@ internal static class OfferFactory
         return lines;
     }
 
+    /// <summary>
+    /// What the group is allowed to ask for, in preference order.
+    /// <para>
+    /// With an allow-list configured this is exactly that list and nothing else — an entry the
+    /// player has already discovered wins over one they have not, but a product outside the list is
+    /// never a candidate, however much the archetype would like it. With the list cleared it falls
+    /// back to whatever is listed for sale, then to whatever has been discovered, so an early-game
+    /// group is a prompt to start selling rather than silence.
+    /// </para>
+    /// </summary>
     private static IReadOnlyList<ProductDefinition> Candidates(out string failure)
     {
         failure = string.Empty;
+
+        var allowed = ProductAllowList.Current();
+        if (allowed.IsRestricted)
+        {
+            if (allowed.Matched.Count == 0)
+            {
+                failure = allowed.BlockingReason;
+                return Array.Empty<ProductDefinition>();
+            }
+
+            var available = allowed.AvailableProducts;
+            return available.Count > 0 ? available : allowed.Products;
+        }
 
         try
         {
@@ -282,8 +313,6 @@ internal static class OfferFactory
             if (listed is { Length: > 0 })
                 return listed.Where(p => p is not null).ToArray();
 
-            // Nothing listed yet: fall back to what the player has discovered, so an early-game
-            // group is a prompt to start selling rather than silence.
             var discovered = ProductManager.DiscoveredProducts;
             if (discovered is { Length: > 0 })
                 return discovered.Where(p => p is not null).ToArray();
@@ -294,6 +323,32 @@ internal static class OfferFactory
         }
 
         return Array.Empty<ProductDefinition>();
+    }
+
+    /// <summary>Highest market value in the candidate set, for the "nothing they prefer" fallback.</summary>
+    private static ProductDefinition? MostValuable(IReadOnlyList<ProductDefinition> catalogue)
+    {
+        ProductDefinition? best = null;
+        var bestValue = float.MinValue;
+
+        foreach (var product in catalogue)
+        {
+            try
+            {
+                var value = product.MarketValue;
+                if (value <= bestValue && best is not null)
+                    continue;
+
+                best = product;
+                bestValue = value;
+            }
+            catch
+            {
+                // A definition that cannot be read is one the group cannot ask for.
+            }
+        }
+
+        return best;
     }
 
     /// <summary>Highest market value of the requested drug type, so the group asks for the good stuff.</summary>

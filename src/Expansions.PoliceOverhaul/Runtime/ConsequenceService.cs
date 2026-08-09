@@ -30,7 +30,18 @@ internal sealed class ConsequenceService
         _config = config;
         _heat = heat;
         _outlaw = outlaw;
+        Custody = new Custody(config, heat, outlaw);
+        Informants = new Informants(config);
     }
+
+    /// <summary>The day you lose and the fee you pay for an outlaw arrest.</summary>
+    internal Custody Custody { get; }
+
+    /// <summary>Who called it in, and what that costs them.</summary>
+    internal Informants Informants { get; }
+
+    /// <summary>Tools and equipment taken across the session, for the probe read-out.</summary>
+    internal int EquipmentSeized { get; private set; }
 
     /// <summary>
     /// Whether the game charges its own fine, learned by watching the cash balance across the arrest
@@ -62,7 +73,93 @@ internal sealed class ConsequenceService
 
     internal void ClearCharges(object? player) => _pending.Remove(GameBridge.KeyFor(player));
 
-    internal void ClearAllCharges() => _pending.Clear();
+    internal void ClearAllCharges()
+    {
+        _pending.Clear();
+        Informants.Clear();
+    }
+
+    /// <summary>
+    /// Everything that happens on release rather than at the notice: the fallout with whoever made the
+    /// call, then the day in custody. Each half announces itself in-world; this only records the pair
+    /// in the log so an arrest reads as one event when someone goes looking afterwards.
+    /// </summary>
+    internal void Release(object? player)
+    {
+        var informants = Informants.SettleAfterArrest(player);
+        var custody = Custody.Process(player);
+
+        ClearCharges(player);
+
+        if (custody.Length > 0 || informants.Length > 0)
+        {
+            PoliceLog.Msg(
+                $"Release processed for '{GameBridge.KeyFor(player)}': " +
+                $"{(custody.Length > 0 ? custody : "no custody consequences")} " +
+                $"{(informants.Length > 0 ? $"Informant(s): {informants}." : "Nobody informed.")}");
+        }
+    }
+
+    /// <summary>
+    /// Takes the tools and equipment as well as the product, once you are outlawed.
+    /// <para>
+    /// Removal goes through the game's own <c>RemoveAmountOfItem</c> rather than clearing the slot by
+    /// hand, so whatever the shipped inventory does about replication and the hotbar UI happens too.
+    /// Only Tools and Equipment are eligible — seizing someone's pots, lamps and furniture would be
+    /// theft rather than policing, and would quietly gut a farm the player then rebuilds by hand.
+    /// </para>
+    /// </summary>
+    internal int ConfiscateEquipment()
+    {
+        if (!_config.EnableConsequences.Value || !_config.EnableEquipmentLoss.Value)
+            return 0;
+
+        if (!_outlaw.IsOutlawed(GameBridge.LocalPlayer()))
+            return 0;
+
+        var inventory = GameBridge.Singleton(GameTypes.PlayerInventory);
+        if (inventory is null)
+            return 0;
+
+        var slots = Members.InvokeFor(inventory, "GetAllInventorySlots");
+        if (slots is null)
+            return 0;
+
+        var doomed = new List<(string Id, int Quantity, string Name)>();
+
+        foreach (var slot in GameReflection.Enumerate(slots, 32))
+        {
+            var instance = Members.ReadPath(slot, "ItemInstance");
+            if (instance is null || !Items.IsEquipment(instance))
+                continue;
+
+            var id = Members.Read(Members.ReadPath(instance, "Definition"), "ID", string.Empty);
+            if (id.Length == 0)
+                continue;
+
+            doomed.Add((id, Items.QuantityOf(instance), Items.NameOf(instance)));
+        }
+
+        var taken = 0;
+        foreach (var (id, quantity, _) in doomed)
+        {
+            if (Members.Invoke(inventory, "RemoveAmountOfItem", id, (uint)Math.Max(1, quantity)))
+                taken++;
+        }
+
+        if (taken == 0)
+            return 0;
+
+        EquipmentSeized += taken;
+
+        var names = string.Join(", ", doomed.Select(entry => entry.Name).Distinct(StringComparer.Ordinal).Take(4));
+        PoliceLog.Msg($"Seized {taken} equipment stack(s) from an outlawed player: {names}.");
+
+        if (_config.ShowHud.Value)
+            PoliceMessages.EquipmentSeized(names);
+
+        return taken;
+    }
 
     /// <summary>The multiplier the notice should show, and the one the charge uses.</summary>
     internal float MultiplierFor(object? player)
@@ -180,14 +277,7 @@ internal sealed class ConsequenceService
         _heat.AddPoliceTake(player, alreadyTaken + paid + LastDebtRaised);
 
         if (_config.ShowHud.Value && (LastFineCharged > 0f || LastDebtRaised > 0f))
-        {
-            GameBridge.Notify(
-                "Penalties applied",
-                LastDebtRaised > 0f
-                    ? $"${LastFineCharged:0} in cash and ${LastDebtRaised:0} taken from your bank balance."
-                    : $"${LastFineCharged:0} taken in cash.",
-                7f);
-        }
+            PoliceMessages.FineSettled(LastFineCharged, LastDebtRaised);
 
         PoliceLog.Msg(
             $"Arrest settled: base ${baseFine:0} x{MultiplierFor(player):0.00} = ${owed:0}; " +
@@ -219,7 +309,7 @@ internal sealed class ConsequenceService
         for (var i = 0; i < entries.Count; i++)
         {
             var instance = Members.ReadPath(entries[i], "ItemInstance");
-            if (instance is null || !IsProduct(instance))
+            if (instance is null || !Items.IsContraband(instance))
                 continue;
 
             // conn: null is the server-side path; SetStoredInstance is a ServerRpc whose logic body
@@ -234,16 +324,10 @@ internal sealed class ConsequenceService
             PoliceLog.Msg($"Seized {taken} stack(s) of product from the impounded vehicle.");
 
             if (_config.ShowHud.Value)
-                GameBridge.Notify("Vehicle searched", $"{taken} stack(s) of product seized from your vehicle.", 7f);
+                PoliceMessages.VehicleSearched(taken);
         }
 
         return taken;
-    }
-
-    private static bool IsProduct(object instance)
-    {
-        var category = Members.ReadPath(instance, "Definition.Category");
-        return category is not null && string.Equals(category.ToString(), "Product", StringComparison.Ordinal);
     }
 
     private static float SafeCash()

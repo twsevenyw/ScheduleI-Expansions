@@ -1,5 +1,6 @@
 using Expansions.Core.Configuration;
 using Expansions.Core.Diagnostics;
+using Expansions.Core.Tutorial;
 
 namespace Expansions.Core.Actions;
 
@@ -38,6 +39,11 @@ internal static class FileActions
         isAvailable: null,
         invoke: () =>
         {
+            // One of the guide chapter's objectives is "find this folder", and pressing this button is the
+            // only evidence of that there is. Counted rather than signalled so a press made before that
+            // objective opened does not complete it.
+            TutorialActivity.UserDataRevealed();
+
             var directory = ProbeRunner.OutputDirectory;
             ActionLog.Ok($"UserData: {directory}");
 

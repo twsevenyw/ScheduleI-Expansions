@@ -71,6 +71,51 @@ internal static class Components
         return found;
     }
 
+    /// <summary>
+    /// Re-reads an interop object as a more-derived type.
+    /// <para>
+    /// Il2CppInterop builds a wrapper of whatever type the <em>property</em> declared, not of whatever
+    /// the native object actually is, and reflection then follows the wrapper. So reading
+    /// <c>NPC.NPCData</c> hands back something typed <c>NPCData</c> even when the native object is a
+    /// <c>DealerNPCData</c>, and every member the subclass adds is invisible — silently, with no
+    /// exception and no log line.
+    /// </para>
+    /// <para>
+    /// The native class name is checked first, so a genuinely different subclass returns null rather
+    /// than a wrapper that reads whatever happens to sit at that offset.
+    /// </para>
+    /// </summary>
+    internal static object? Reinterpret(object? instance, string typeName)
+    {
+        if (instance is null)
+            return null;
+
+        var type = GameReflection.FindType(typeName);
+        if (type is null)
+            return null;
+
+        if (type.IsInstanceOfType(instance))
+            return instance;
+
+        var simpleName = typeName[(typeName.LastIndexOf('.') + 1)..];
+        if (!string.Equals(GameBridge.NativeClassName(instance), simpleName, StringComparison.Ordinal))
+            return null;
+
+        var pointer = PointerOf(instance);
+        if (pointer == IntPtr.Zero)
+            return null;
+
+        try
+        {
+            return Activator.CreateInstance(type, pointer);
+        }
+        catch (Exception ex)
+        {
+            PoliceLog.Detail($"Re-reading a {simpleName} wrapper failed: {PoliceLog.Describe(ex)}");
+            return null;
+        }
+    }
+
     internal static Transform? TransformOf(object? instance) => Members.ReadPath(instance, "transform") as Transform;
 
     internal static GameObject? GameObjectOf(object? instance) => Members.ReadPath(instance, "gameObject") as GameObject;

@@ -155,11 +155,20 @@ internal static class EmployeeApi
         Disable(Gx.GetAlive(employee, "WaitOutside"));
     }
 
+    /// <summary>
+    /// Hands the NPC back to the game's own behaviour tree.
+    /// <para>
+    /// <c>SetWaitOutside(false)</c>, not true: <c>WaitOutside</c> is the idle behaviour that parks an
+    /// employee outside the property when it cannot work, and the game sets it itself from
+    /// <c>UpdateBehaviour</c> — which is un-suppressed the moment a trip ends. Forcing it on here sent
+    /// every driver to stand outside after every delivery and kept them there.
+    /// </para>
+    /// </summary>
     internal static void ReleaseToVanilla(object? employee)
     {
         Stop(employee);
-        Gx.Call(employee, "SetWaitOutside", new[] { "Boolean" }, true);
-        Enable(Gx.GetAlive(employee, "WaitOutside"));
+        Gx.Call(employee, "SetWaitOutside", new[] { "Boolean" }, false);
+        Gx.Call(employee, "SetIdle", new[] { "Boolean" }, false);
         Enable(Gx.GetAlive(employee, "MoveItemBehaviour"));
     }
 
@@ -172,7 +181,43 @@ internal static class EmployeeApi
     internal static void SubmitIssue(object? employee, string reason, string fix, int priority) =>
         Gx.Call(employee, "SubmitNoWorkReason", new[] { "String", "String", "Int32" }, reason, fix, priority);
 
-    internal static void Fire(object? employee) => Gx.Call(employee, "Fire", Array.Empty<string>());
+    /// <summary>
+    /// Fires through <c>SendFire</c>, the server RPC the game's own Fire dialogue uses, so co-op peers
+    /// see it. <c>Fire()</c> itself is the observers-side body and is only a fallback.
+    /// </summary>
+    internal static void Fire(object? employee)
+    {
+        if (Gx.TryCall(employee, "SendFire", Array.Empty<string>()))
+            return;
+
+        Gx.Call(employee, "Fire", Array.Empty<string>());
+    }
+
+    /// <summary>
+    /// Drops the outstanding "why isn't my employee working" entries.
+    /// <para>
+    /// The game clears them from <c>UpdateBehaviour</c>, which this mod suppresses for the length of a
+    /// trip — so without this a driver that has since started working still answers with the complaint
+    /// that stopped it an hour ago.
+    /// </para>
+    /// </summary>
+    internal static void ClearWorkIssues(object? employee) =>
+        Gx.Call(Gx.Get(employee, "WorkIssues"), "Clear", Array.Empty<string>());
+
+    /// <summary>Every outstanding "why isn't my employee working" entry, newest priority first.</summary>
+    internal static IReadOnlyList<string> WorkIssues(object? employee)
+    {
+        var issues = new List<string>();
+
+        foreach (var issue in Gx.List(Gx.Get(employee, "WorkIssues")))
+        {
+            var reason = Gx.Get<string>(issue, "Reason", string.Empty);
+            if (reason.Length > 0)
+                issues.Add(reason);
+        }
+
+        return issues;
+    }
 
     // ── Movement ────────────────────────────────────────────────────────────────────────────────
 

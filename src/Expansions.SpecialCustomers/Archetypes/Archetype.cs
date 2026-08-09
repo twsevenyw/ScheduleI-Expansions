@@ -29,14 +29,13 @@ internal sealed class Archetype
         (Region Region, int Weight)[] regionWeights,
         string voiceId,
         float voicePitch,
-        string equippablePath,
         float walkSpeed,
         float clusterRadius,
         float aggressiveness,
         string arrivalMessage,
         string departureMessage,
         string offerMessage,
-        Func<int, ArchetypeLook> buildLook)
+        Wardrobe wardrobe)
     {
         Id = id;
         DisplayName = displayName;
@@ -51,14 +50,13 @@ internal sealed class Archetype
         RegionWeights = regionWeights;
         VoiceId = voiceId;
         VoicePitch = voicePitch;
-        EquippablePath = equippablePath;
         WalkSpeed = walkSpeed;
         ClusterRadius = clusterRadius;
         Aggressiveness = aggressiveness;
         ArrivalMessage = arrivalMessage;
         DepartureMessage = departureMessage;
         OfferMessage = offerMessage;
-        BuildLook = buildLook;
+        Wardrobe = wardrobe;
     }
 
     internal string Id { get; }
@@ -91,8 +89,6 @@ internal sealed class Archetype
 
     internal float VoicePitch { get; }
 
-    internal string EquippablePath { get; }
-
     internal float WalkSpeed { get; }
 
     /// <summary>Metres. How tightly the members stand around the delivery location.</summary>
@@ -108,9 +104,17 @@ internal sealed class Archetype
     /// <summary><c>{0}</c> quantity, <c>{1}</c> product, <c>{2}</c> payment.</summary>
     internal string OfferMessage { get; }
 
-    internal Func<int, ArchetypeLook> BuildLook { get; }
+    /// <summary>The parts pool every member of this group is randomised out of.</summary>
+    internal Wardrobe Wardrobe { get; }
 
     internal bool IsEnabled => CustomerSettings.IsArchetypeEnabled(Id);
+
+    /// <summary>
+    /// One member's appearance. <paramref name="visitSeed"/> is persisted with the visit, so the
+    /// same slot rebuilds the same person across a save/load and a different one next visit.
+    /// </summary>
+    internal ArchetypeLook BuildLook(int slotIndex, int visitSeed) =>
+        VisitorLookFactory.Build(this, slotIndex, visitSeed);
 
     /// <summary>
     /// The archetype's drugs, with the config override applied for the two whose preference is

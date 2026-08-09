@@ -290,6 +290,26 @@ internal static class Gx
 
     internal static object? Cast(object? value, string targetTypeName) => Cast(value, Type(targetTypeName));
 
+    /// <summary>
+    /// The native pointer behind an interop wrapper, or <see cref="IntPtr.Zero"/>. Two wrappers around
+    /// the same IL2CPP object are different managed objects, so identity comparisons must go through
+    /// this rather than <c>ReferenceEquals</c>.
+    /// </summary>
+    internal static IntPtr PointerOf(object? value)
+    {
+        if (value is not Il2CppObjectBase interop)
+            return IntPtr.Zero;
+
+        try
+        {
+            return interop.Pointer;
+        }
+        catch
+        {
+            return IntPtr.Zero;
+        }
+    }
+
     /// <summary>Materialises an IL2CPP list, an <c>Il2CppReferenceArray</c> or a managed sequence.</summary>
     internal static IReadOnlyList<object?> List(object? collection) => GameReflection.Enumerate(collection);
 

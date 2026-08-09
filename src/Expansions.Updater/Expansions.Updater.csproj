@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Expansions.Updater</RootNamespace>
+    <AssemblyName>Expansions.Updater</AssemblyName>
+    <Version>1.0.0</Version>
+    <Description>MelonLoader plugin that applies staged Schedule I Expansions updates before the mod assemblies load, then checks for the next one in the background.</Description>
+
+    <!-- A MelonLoader plugin, so it goes in Plugins and is loaded before Mods. -->
+    <ExpansionsDeployDir>$(GameDir)\Plugins</ExpansionsDeployDir>
+
+    <!-- No S1API, no Il2Cpp interop, no UnityEngine. This runs during Core.Start(), before the
+         support module is set up, so touching Unity here is not merely unnecessary - it is not
+         safe. Referencing Expansions.Core would be worse still: loading it would lock the very
+         file in UserLibs that this plugin exists to replace. -->
+    <ExpansionsGameApi>false</ExpansionsGameApi>
+  </PropertyGroup>
+</Project>

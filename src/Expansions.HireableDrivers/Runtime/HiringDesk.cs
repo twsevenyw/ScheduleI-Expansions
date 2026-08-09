@@ -1,6 +1,4 @@
-using Expansions.Core.Tutorial;
 using Expansions.HireableDrivers.Game;
-using Expansions.HireableDrivers.Tutorial;
 
 namespace Expansions.HireableDrivers.Runtime;
 
@@ -54,6 +52,12 @@ internal static class HiringDesk
     internal static string Location { get; private set; } = string.Empty;
 
     /// <summary>
+    /// Why hiring is not on the NPC yet, in the player's words. Empty while it is attached or while the
+    /// retry ladder is still running.
+    /// </summary>
+    internal static string LastFailure { get; private set; } = string.Empty;
+
+    /// <summary>
     /// Called on every gameplay scene load and retried from the tick pump until the NPC exists — the
     /// Fixer is a scene object that is not guaranteed to be awake when the scene-loaded event fires.
     /// </summary>
@@ -69,11 +73,17 @@ internal static class HiringDesk
 
         var controllers = DialogueApi.HiringControllers();
         if (controllers.Count == 0)
+        {
+            Note("no employee-hiring NPC (DialogueController_Fixer) is in the scene");
             return;
+        }
 
         var properties = WorldApi.AllProperties().Where(Gx.Alive).ToArray();
         if (properties.Length == 0)
+        {
+            Note("the property list is empty, so there is nothing to hire a driver for yet");
             return;
+        }
 
         var added = 0;
 
@@ -86,11 +96,17 @@ internal static class HiringDesk
                     continue;
 
                 var entry = new Entry(controller, property, code);
+
+                // Rooted on the entry before the call: Il2CppInterop wraps each of these in a native
+                // object, and a collected interop delegate silently stops firing.
+                entry.OnChosen = entry.Hire;
+                entry.ShowCheck = entry.ShouldShow;
+
                 var choice = DialogueApi.AddChoice(
                     controller,
                     entry.BuildLabel(),
-                    entry.Hire,
-                    entry.ShouldShow,
+                    entry.OnChosen,
+                    entry.ShowCheck,
                     ChoicePriority);
 
                 if (choice is null)
@@ -107,6 +123,8 @@ internal static class HiringDesk
 
         if (added == 0)
         {
+            Note("the hiring NPC is present but would not accept a driver choice");
+
             if (_attempts % 20 == 1)
                 DriverLog.Debug($"The hiring NPC is present but would not take a driver choice (attempt {_attempts}).");
 
@@ -114,6 +132,7 @@ internal static class HiringDesk
         }
 
         Location = DialogueApi.ControllerName(controllers[0]);
+        LastFailure = string.Empty;
 
         lock (Gate)
             _attached = true;
@@ -139,6 +158,16 @@ internal static class HiringDesk
 
     private const int MaxAttempts = 40;
 
+    /// <summary>
+    /// Records a reason only once the retry ladder has run out, so a reason is never shown while the
+    /// scene is still waking up and the answer would be wrong.
+    /// </summary>
+    private static void Note(string reason)
+    {
+        if (_attempts >= MaxAttempts)
+            LastFailure = reason;
+    }
+
     internal static void Detach()
     {
         Entry[] entries;
@@ -150,6 +179,8 @@ internal static class HiringDesk
             _attached = false;
             _attempts = 0;
         }
+
+        LastFailure = string.Empty;
 
         foreach (var entry in entries)
             DialogueApi.RemoveChoice(entry.Controller, entry.Choice);
@@ -177,6 +208,12 @@ internal static class HiringDesk
         internal object? Property { get; }
 
         internal object? Choice { get; set; }
+
+        /// <summary>Kept alive for as long as the game holds the interop wrapper built from it.</summary>
+        internal Action? OnChosen { get; set; }
+
+        /// <summary>Kept alive for as long as the game holds the interop wrapper built from it.</summary>
+        internal Func<bool, bool>? ShowCheck { get; set; }
 
         /// <summary>
         /// Runs when the game builds the interaction list. Refreshing the label here is what keeps the
@@ -226,7 +263,6 @@ internal static class HiringDesk
 
                 DriverSelection.Select(brain?.Record.EmployeeId ?? string.Empty);
                 Expansions.Core.Actions.ActionLog.Ok(message);
-                TutorialSignals.Raise(DriversChapter.ChapterId, DriversChapter.StepHire);
             }
             catch (Exception ex)
             {

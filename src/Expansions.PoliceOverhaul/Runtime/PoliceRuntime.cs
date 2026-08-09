@@ -23,6 +23,10 @@ internal static class PoliceRuntime
 
     internal static FederalEvents? Federal { get; private set; }
 
+    internal static RaidDirector? Raids { get; private set; }
+
+    internal static EventScheduler? Scheduler { get; private set; }
+
     internal static LawLevers? Levers { get; private set; }
 
     internal static LawScheduleTuner? Schedule { get; private set; }
@@ -39,7 +43,9 @@ internal static class PoliceRuntime
         OutlawState outlaw,
         HeatDirector heat,
         ConsequenceService consequences,
-        FederalEvents federal)
+        FederalEvents federal,
+        RaidDirector raids,
+        EventScheduler scheduler)
     {
         Config = config;
         Levers = levers;
@@ -49,6 +55,8 @@ internal static class PoliceRuntime
         Heat = heat;
         Consequences = consequences;
         Federal = federal;
+        Raids = raids;
+        Scheduler = scheduler;
     }
 
     internal static void Detach()
@@ -61,6 +69,8 @@ internal static class PoliceRuntime
         Heat = null;
         Consequences = null;
         Federal = null;
+        Raids = null;
+        Scheduler = null;
     }
 
     /// <summary>Convenience for the menu and the probes: the local player's record, or null.</summary>

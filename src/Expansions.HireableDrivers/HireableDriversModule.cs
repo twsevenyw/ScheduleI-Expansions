@@ -37,7 +37,7 @@ public sealed class HireableDriversModule : ExpansionModule
     public override string Description =>
         "Driver employees who can transport items between your properties, businesses, and dealers.";
 
-    public override string Version => "0.4.0";
+    public override string Version => "0.5.0";
 
     protected override void OnRegistered()
     {
@@ -121,6 +121,10 @@ public sealed class HireableDriversModule : ExpansionModule
 
         if (!_inGameplayScene)
             return;
+
+        // A clipboard pick has to apply on the frame after the option screen closes, or the shipped
+        // worldspace picker would be opened while that screen is still sliding out.
+        RoutePicker.Pump();
 
         // Pump throttles itself to the configured tick interval and gates on authority and the world
         // clock, so this costs one float add per frame outside of a tick.

@@ -134,6 +134,15 @@ internal static class DriverRegistry
     /// </summary>
     internal static DriverBrain? ConfiguredDriver()
     {
+        // Answered once per frame: the game's own picker asks a validity question per candidate entity
+        // per frame while it is open, and each one would otherwise walk the selection list.
+        var frame = UnityEngine.Time.frameCount;
+        if (_configuredFrame == frame)
+            return _configured;
+
+        _configuredFrame = frame;
+        _configured = null;
+
         var management = Gx.Singleton(GameTypes.ManagementInterface);
         if (management is null)
             return null;
@@ -141,11 +150,18 @@ internal static class DriverRegistry
         foreach (var configurable in Gx.List(Gx.Get(management, "Configurables")))
         {
             if (TryGet(Gx.Cast(configurable, GameTypes.Packager) ?? configurable, out var brain))
+            {
+                _configured = brain;
                 return brain;
+            }
         }
 
         return null;
     }
+
+    private static int _configuredFrame = -1;
+
+    private static DriverBrain? _configured;
 
     internal static void Unregister(string employeeId)
     {
@@ -163,6 +179,13 @@ internal static class DriverRegistry
                 ByPointer.Remove(pointer);
         }
 
+        if (ReferenceEquals(_configured, brain))
+        {
+            _configured = null;
+            _configuredFrame = -1;
+        }
+
+        DriverDesk.Detach(employeeId);
         brain.AbortAndRelease();
         DriverStore.Forget(employeeId);
     }
@@ -200,6 +223,10 @@ internal static class DriverRegistry
 
             try
             {
+                // The driver's own dialogue is the only place some settings live, so a driver you can
+                // talk to but get no options from is a broken feature, not a cosmetic one.
+                DriverDesk.Ensure(brain);
+
                 // The clipboard is the route editor, so its rows are read before the loop plans a trip.
                 if (ClipboardRoutes.Pull(brain))
                     brain.RequestStart();
@@ -259,11 +286,12 @@ internal static class DriverRegistry
             DriverLog.Msg($"Drivers restored: {bound} bound, {missing} awaiting their employee.");
     }
 
-    /// <summary>Re-applies the wage, fee and display name a save-loaded driver should have.</summary>
+    /// <summary>Re-applies the wage, fee, display name and own-dialogue options a driver should have.</summary>
     internal static void ApplyIdentity(DriverBrain brain)
     {
         EmployeeApi.SetFees(brain.Employee, DriverSettings.SigningFee, DriverSettings.DailyWage);
         EmployeeApi.SetConfigName(brain.Employee, DriverName(brain.Record));
+        DriverDesk.Attach(brain);
         AdoptRoutes(brain);
     }
 
@@ -312,6 +340,9 @@ internal static class DriverRegistry
     /// <summary>Returns every driver to being an ordinary Handler and empties the roster.</summary>
     internal static void Clear()
     {
+        DriverDesk.DetachAll();
+        RoutePicker.Reset();
+
         foreach (var brain in Drivers)
         {
             try
@@ -330,6 +361,9 @@ internal static class DriverRegistry
             ById.Clear();
             ByPointer.Clear();
         }
+
+        _configured = null;
+        _configuredFrame = -1;
 
         VehicleAssignment.Clear();
         GameClock.Reset();
@@ -352,6 +386,8 @@ internal static class DriverRegistry
 
         lock (Gate)
             Index(brain, employee);
+
+        ApplyIdentity(brain);
     }
 
     private static void Index(DriverBrain brain, object? employee)

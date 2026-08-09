@@ -28,6 +28,23 @@ internal static class DriverPatches
 
     internal static IReadOnlyList<string> SkippedPatches => Skipped.ToArray();
 
+    /// <summary>
+    /// Whether a named patch landed, without materialising the list. Read from per-frame availability
+    /// predicates, so it must not allocate.
+    /// </summary>
+    internal static bool IsApplied(string methodName)
+    {
+        // Index-based rather than an enumerator: the list is only written during Apply, but a foreach
+        // that overlapped it would throw where a stale read is harmless.
+        for (var i = 0; i < Applied.Count; i++)
+        {
+            if (Applied[i].EndsWith("." + methodName, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
+
     internal static void Apply(HarmonyLib.Harmony harmony, ModuleLifetime lifetime)
     {
         Applied.Clear();
@@ -36,6 +53,7 @@ internal static class DriverPatches
         var packager = Gx.RequireType(GameTypes.Packager);
         var configuration = Gx.Type(GameTypes.PackagerConfiguration);
         var routeEntry = Gx.Type(GameTypes.RouteEntryUi);
+        var configPanel = Gx.Type(GameTypes.PackagerConfigPanel);
 
         // The one place a skipping prefix is genuinely required: UpdateBehaviour is the per-tick work
         // dispatcher and there is no other way to stop the packaging brain issuing its own movement.
@@ -47,6 +65,9 @@ internal static class DriverPatches
         Patch(harmony, packager, "GetTransitRouteReady", nameof(DriverRoutesAreOurs), PatchKind.Postfix);
         Patch(harmony, configuration, "IsStationValid", nameof(NoStationsForDrivers), PatchKind.Postfix);
         Patch(harmony, routeEntry, "ObjectValid", nameof(ConstrainRouteEndpoints), PatchKind.Postfix);
+        Patch(harmony, routeEntry, "DestinationClicked", nameof(PickDestinationFromList), PatchKind.Prefix);
+        Patch(harmony, routeEntry, "RefreshUI", nameof(ShowDealerDestination), PatchKind.Postfix);
+        Patch(harmony, configPanel, "BindInternal", nameof(DressDriverPanel), PatchKind.Postfix);
 
         lifetime.OnDispose(() =>
         {
@@ -209,6 +230,11 @@ internal static class DriverPatches
         if (brain is null)
             return;
 
+        // The clipboard's selection can outlive the panel it was made on, so confirm this row really is
+        // one of that driver's before overruling the game about it.
+        if (ClipboardApi.RowIndex(brain.Employee, Gx.GetAlive(__instance, "AssignedRoute")) < 0)
+            return;
+
         if (Gx.Get(__instance, "settingSource") is true)
         {
             if (__result && !ClipboardRoutes.IsSourceAllowed(brain, obj, out var refusal))
@@ -231,5 +257,97 @@ internal static class DriverPatches
 
         __result = true;
         reason = string.Empty;
+    }
+
+    /// <summary>
+    /// Sends a driver's drop-off button to the clipboard's own option-list screen, which can name a
+    /// warehouse across town or a dealer — neither of which the worldspace picker can reach. Returning
+    /// true anywhere here means the shipped picker runs exactly as it always did.
+    /// </summary>
+    private static bool PickDestinationFromList(object __instance)
+    {
+        try
+        {
+            return RoutePicker.OnDestinationClicked(__instance);
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Error("The driver drop-off list threw; falling back to the game's own picker.", ex);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Writes the dealer's name onto a row the game left blank. A <c>Dealer</c> is an NPC, not an
+    /// <c>ITransitEntity</c>, so it cannot live in the vanilla route object and the row would otherwise
+    /// read "None" for a drop-off that is really set.
+    /// </summary>
+    private static void ShowDealerDestination(object __instance)
+    {
+        try
+        {
+            RoutePicker.LabelRow(__instance);
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Debug($"Could not label a dealer drop-off ({Gx.Explain(ex)}).");
+        }
+    }
+
+    /// <summary>
+    /// Makes the shipped Packager panel read as a driver's panel: no Stations row, and a Routes heading
+    /// that names the property the driver is allowed to collect from.
+    /// <para>
+    /// The panel is instantiated fresh from its prefab for every selection, so this only ever edits a
+    /// throwaway instance and non-drivers are explicitly restored rather than left to luck.
+    /// </para>
+    /// </summary>
+    private static void DressDriverPanel(object __instance, object configs)
+    {
+        try
+        {
+            var drivers = new List<DriverBrain>();
+            var total = 0;
+
+            foreach (var config in Gx.List(configs))
+            {
+                total++;
+
+                // Enumerating a List<EntityConfiguration> hands back base-typed wrappers, so the
+                // derived member is only reachable after an IL2CPP cast.
+                var packagerConfig = Gx.Cast(config, GameTypes.PackagerConfiguration) ?? config;
+                if (DriverRegistry.TryGet(Gx.GetAlive(packagerConfig, "packager"), out var brain))
+                    drivers.Add(brain);
+            }
+
+            var isDriverPanel = total > 0 && drivers.Count == total;
+
+            if (Gx.GetAlive(Gx.GetAlive(__instance, "StationsUI"), "gameObject") is UnityEngine.GameObject stations)
+                stations.SetActive(!isDriverPanel);
+
+            // The heading is only ever written for a driver. Writing a guess at the vanilla wording back
+            // for a Handler would be the mod editing a panel it has no business editing.
+            if (!isDriverPanel)
+                return;
+
+            var routes = Gx.GetAlive(__instance, "RoutesUI");
+            if (routes is null)
+                return;
+
+            var heading = drivers.Count == 1
+                ? $"Routes - collects at {ClipboardRoutes.HomeName(drivers[0])}"
+                : "Routes - each driver collects at its own property";
+
+            // FieldText is what RouteListFieldUI.Start writes into the label, and Start runs after Bind
+            // on a freshly instantiated panel, so both have to be set or the heading is overwritten.
+            Gx.Set(routes, "FieldText", heading);
+
+            if (Gx.GetAlive(routes, "FieldLabel") is { } label)
+                Gx.Set(label, "text", heading);
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Debug($"Could not dress the driver clipboard panel ({Gx.Explain(ex)}).");
+        }
     }
 }

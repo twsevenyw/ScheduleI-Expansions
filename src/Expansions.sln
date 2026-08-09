@@ -11,6 +11,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Expansions.PoliceOverhaul",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Expansions.SpecialCustomers", "Expansions.SpecialCustomers\Expansions.SpecialCustomers.csproj", "{46554015-F18A-44FB-8FED-919580AB9509}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Expansions.Updater", "Expansions.Updater\Expansions.Updater.csproj", "{FA73221C-445A-429F-AB7C-40BBFA46B2B3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Expansions.Tweaks", "Expansions.Tweaks\Expansions.Tweaks.csproj", "{A3E05A8C-9EA0-438A-A496-BF8ECAD7997A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +40,13 @@ Global
 		{46554015-F18A-44FB-8FED-919580AB9509}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{46554015-F18A-44FB-8FED-919580AB9509}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{46554015-F18A-44FB-8FED-919580AB9509}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FA73221C-445A-429F-AB7C-40BBFA46B2B3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FA73221C-445A-429F-AB7C-40BBFA46B2B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FA73221C-445A-429F-AB7C-40BBFA46B2B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FA73221C-445A-429F-AB7C-40BBFA46B2B3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A3E05A8C-9EA0-438A-A496-BF8ECAD7997A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A3E05A8C-9EA0-438A-A496-BF8ECAD7997A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A3E05A8C-9EA0-438A-A496-BF8ECAD7997A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A3E05A8C-9EA0-438A-A496-BF8ECAD7997A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

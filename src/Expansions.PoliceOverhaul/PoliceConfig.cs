@@ -82,6 +82,24 @@ internal sealed class PoliceConfig
             "Max officers per post",
             "Upper bound for patrol, sentry and checkpoint member counts. The game refuses to dispatch more than 4 whatever this says.");
 
+        PoliceDensity = config.Bind(
+            "police_density",
+            3.0f,
+            "Police density multiplier",
+            "How many police this town has, independent of how badly they want you. 3 is roughly triple the vanilla street presence: it multiplies the officers each post asks for (still capped at the engine's 4) and divides each post's intensity requirement so far more posts run at once. 1 is vanilla. Snapshotted and written back on disable.");
+
+        RespawnOfficersDaily = config.Bind(
+            "respawn_officers_daily",
+            true,
+            "Return dead officers to duty each day",
+            "The map ships a fixed set of officers and nothing creates more, so a violent week permanently empties the police stations. This calls the game's own NPCHealth.Revive() on dead officers at each day rollover instead of waiting out its multi-day timer.");
+
+        EventOfficerCount = config.Bind(
+            "event_officer_count",
+            3,
+            "Officers guaranteed per police event",
+            "Raids and federal events make sure this many live officers are near the scene before they fire, dispatching from the nearest station if the map is empty. An event with no police behind it reads as a bug.");
+
         FederalHeatThreshold = config.Bind(
             "federal_heat_threshold",
             80,
@@ -122,7 +140,85 @@ internal sealed class PoliceConfig
             "outlaw_legal_fee",
             25000,
             "Outlaw legal fee",
-            "Cash cost of buying your way down one outlaw tier. Priced at the Barn, so it is a real mid-game decision.");
+            "Cost of buying your way down one outlaw tier, spent from the Police Improvements menu. Priced at the Barn, so it is a real mid-game decision. Cash first, then your bank balance.");
+
+        OutlawDealerCutBonus = config.Bind(
+            "outlaw_dealer_cut_bonus",
+            0.05f,
+            "Outlaw dealer cut surcharge",
+            "Extra share every recruited dealer takes while you are outlawed, on top of their flat 20%. A hazard premium. Snapshotted and restored when the status clears.");
+
+        OutlawSnitchBonus = config.Bind(
+            "outlaw_snitch_bonus",
+            0.10f,
+            "Outlaw customer snitch bonus",
+            "Added to every unlocked customer's chance of calling the police on you while you are outlawed. Shipped chances already span 0-67%, so this stays inside the existing spread.");
+
+        OutlawBlocksCardVendors = config.Bind(
+            "outlaw_blocks_card_vendors",
+            true,
+            "Card-only vendors refuse outlaws",
+            "Shops that only take card (the realtor and the car dealership) will not serve you while you are outlawed. Cash trade is unaffected — you are an outlaw, not bankrupt.");
+
+        EnablePropertyRaids = config.Bind(
+            "enable_property_raids",
+            true,
+            "Property raids",
+            "While outlawed, the police will come for a property you own. You are warned first and lose nothing if you are there when they arrive.");
+
+        RaidDelayMinutes = config.Bind(
+            "raid_delay_minutes",
+            30,
+            "Raid warning (in-game minutes)",
+            "How long you get between the warning and the raid. Thirty is the game's own logistics quantum, and about half a real minute of running.");
+
+        RaidConfiscationFraction = config.Bind(
+            "raid_confiscation_fraction",
+            0.5f,
+            "Raid confiscation fraction",
+            "Share of the contraband stacks in each container that a raid takes. Never all of it: a total wipe reads as a bug, and a partial loss is what makes you move the rest.");
+
+        RaidCooldownDays = config.Bind(
+            "raid_cooldown_days",
+            3,
+            "Raid cooldown (in-game days)",
+            "Minimum gap between raids, so they stay an event rather than a rent.");
+
+        EnableStakeouts = config.Bind(
+            "enable_stakeouts",
+            true,
+            "Stakeouts",
+            "Federal agents park outside the property you were last seen at instead of chasing you, so being at home stops being safe.");
+
+        EnableJailDay = config.Bind(
+            "enable_jail_day",
+            true,
+            "Lose the day when arrested as an outlaw",
+            "An outlaw arrest holds you until morning and charges a processing fee. The game has no jail, so this reuses the shipped clock skip and your own payroll.");
+
+        JailProcessingFeeScalar = config.Bind(
+            "jail_processing_fee_scalar",
+            1.0f,
+            "Processing fee scalar",
+            "Multiplies the processing fee, which is one day of your total employee wages (minimum $250). Set to 0 to lose the day for free.");
+
+        EnableEquipmentLoss = config.Bind(
+            "enable_equipment_loss",
+            true,
+            "Confiscate tools and equipment",
+            "An outlaw arrest also takes the tools and equipment in your inventory, not just the product. Never touches seeds, soil, furniture or lighting.");
+
+        EnableRelationshipDamage = config.Bind(
+            "enable_relationship_damage",
+            true,
+            "Informants fall out with you",
+            "Whoever called the police loses relationship with you when the arrest lands, and the game tells you who it was.");
+
+        SnitchRelationshipDamage = config.Bind(
+            "snitch_relationship_damage",
+            0.25f,
+            "Informant relationship damage",
+            "How much relationship the caller loses. The shipped scale runs 0 to 5, so a quarter point is noticeable without being a wipe.");
 
         OutlawFineMultiplier = config.Bind(
             "outlaw_fine_multiplier",
@@ -145,8 +241,44 @@ internal sealed class PoliceConfig
         ShowHud = config.Bind(
             "show_heat_hud",
             true,
-            "Announce heat changes",
-            "Notify on every heat-tier change and outlaw transition. Turn off for a silent run; the F7 menu still reports the numbers.");
+            "Announce heat / outlaw / raid / federal events",
+            "Sends phone texts from the Dispatch contact for substantive events. Turn off for a silent run; the F7 menu still reports the numbers. Imminent raid warnings still toast so you can react in time.");
+
+        EnableEventScheduler = config.Bind(
+            "enable_event_scheduler",
+            true,
+            "Randomised event cadence",
+            "Drive federal visits and property raids on a per-save randomised schedule (heat and outlaw still gate whether a roll can fire). Turn off to fall back to the old 'fire as soon as thresholds are met' behaviour. Manual event triggers always work.");
+
+        EventReadyGraceMinutes = config.Bind(
+            "event_ready_grace_minutes",
+            30,
+            "Post-load event grace (in-game minutes)",
+            "No scheduled federal or raid event fires in this window after a save loads, so nothing lands while the world is still settling.");
+
+        FederalIntervalHoursMin = config.Bind(
+            "federal_interval_hours_min",
+            6,
+            "Federal check interval min (hours)",
+            "Shortest gap between scheduled federal eligibility rolls. The actual gap is rolled per save between min and max.");
+
+        FederalIntervalHoursMax = config.Bind(
+            "federal_interval_hours_max",
+            18,
+            "Federal check interval max (hours)",
+            "Longest gap between scheduled federal eligibility rolls.");
+
+        RaidIntervalHoursMin = config.Bind(
+            "raid_interval_hours_min",
+            8,
+            "Raid check interval min (hours)",
+            "Shortest gap between scheduled raid eligibility rolls while you are outlawed.");
+
+        RaidIntervalHoursMax = config.Bind(
+            "raid_interval_hours_max",
+            24,
+            "Raid check interval max (hours)",
+            "Longest gap between scheduled raid eligibility rolls.");
 
         DebugLogging = config.Bind(
             "debug_logging",
@@ -177,6 +309,12 @@ internal sealed class PoliceConfig
 
     internal ConfigValue<int> MaxOfficersPerPost { get; }
 
+    internal ConfigValue<float> PoliceDensity { get; }
+
+    internal ConfigValue<bool> RespawnOfficersDaily { get; }
+
+    internal ConfigValue<int> EventOfficerCount { get; }
+
     internal ConfigValue<int> FederalHeatThreshold { get; }
 
     internal ConfigValue<int> FederalAgentsPerEvent { get; }
@@ -191,6 +329,32 @@ internal sealed class PoliceConfig
 
     internal ConfigValue<int> OutlawLegalFee { get; }
 
+    internal ConfigValue<float> OutlawDealerCutBonus { get; }
+
+    internal ConfigValue<float> OutlawSnitchBonus { get; }
+
+    internal ConfigValue<bool> OutlawBlocksCardVendors { get; }
+
+    internal ConfigValue<bool> EnablePropertyRaids { get; }
+
+    internal ConfigValue<int> RaidDelayMinutes { get; }
+
+    internal ConfigValue<float> RaidConfiscationFraction { get; }
+
+    internal ConfigValue<int> RaidCooldownDays { get; }
+
+    internal ConfigValue<bool> EnableStakeouts { get; }
+
+    internal ConfigValue<bool> EnableJailDay { get; }
+
+    internal ConfigValue<float> JailProcessingFeeScalar { get; }
+
+    internal ConfigValue<bool> EnableEquipmentLoss { get; }
+
+    internal ConfigValue<bool> EnableRelationshipDamage { get; }
+
+    internal ConfigValue<float> SnitchRelationshipDamage { get; }
+
     internal ConfigValue<float> OutlawFineMultiplier { get; }
 
     internal ConfigValue<bool> EnableDebt { get; }
@@ -198,6 +362,18 @@ internal sealed class PoliceConfig
     internal ConfigValue<bool> ConfiscateVehicleCargo { get; }
 
     internal ConfigValue<bool> ShowHud { get; }
+
+    internal ConfigValue<bool> EnableEventScheduler { get; }
+
+    internal ConfigValue<int> EventReadyGraceMinutes { get; }
+
+    internal ConfigValue<int> FederalIntervalHoursMin { get; }
+
+    internal ConfigValue<int> FederalIntervalHoursMax { get; }
+
+    internal ConfigValue<int> RaidIntervalHoursMin { get; }
+
+    internal ConfigValue<int> RaidIntervalHoursMax { get; }
 
     internal ConfigValue<bool> DebugLogging { get; }
 }

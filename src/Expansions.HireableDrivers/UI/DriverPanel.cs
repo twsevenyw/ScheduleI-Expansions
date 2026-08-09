@@ -178,9 +178,22 @@ internal static class DriverPanel
         return $"{drivers} driver(s) · transport path {path} · {persistence} · {EndpointCatalog.Count} endpoint(s)";
     }
 
-    private static string WhereToManage() => HiringDesk.IsAttached
-        ? $"Hire at {HiringDesk.Location}. Edit routes with the management clipboard, same as any employee."
-        : "Driver hiring is not attached to the hiring NPC on this build — use the Expansions menu's fallback action.";
+    private static string WhereToManage()
+    {
+        if (!HiringDesk.IsAttached)
+        {
+            return HiringDesk.LastFailure.Length > 0
+                ? $"Hiring is not on the NPC: {HiringDesk.LastFailure}. Use the Expansions menu's repair path."
+                : "Still looking for the employee-hiring NPC in this scene.";
+        }
+
+        var picker = RoutePicker.IsAvailable(out var reason)
+            ? "the drop-off button lists every destination"
+            : $"the drop-off button falls back to the game's own picker ({reason})";
+
+        return $"Hire at {HiringDesk.Location}. Bed and routes on the management clipboard — {picker}. " +
+               "Vehicle, departure size and \"set off now\" are on the driver's own dialogue.";
+    }
 
     private static List<string> Lines()
     {
@@ -205,6 +218,14 @@ internal static class DriverPanel
         {
             lines.Add(driver.Describe());
             lines.Add($"    home: {ClipboardRoutes.HomeName(driver)} · {driver.StatusNote}");
+            lines.Add(
+                $"    clipboard: {(ClipboardApi.RouteField(driver.Employee) is null ? "NO route field" : ClipboardApi.Routes(driver.Employee).Count + " row(s)")}" +
+                $" · own dialogue: {(DriverDesk.IsAttached(driver.Record.EmployeeId) ? "attached" : "NOT attached")}" +
+                $" · sets off with {DriverDesk.DescribeThreshold(driver.Record.DepartAtUnits)}" +
+                $"{(ClipboardApi.IsBeingConfigured(driver.Employee) ? " · being configured right now" : string.Empty)}");
+
+            foreach (var issue in EmployeeApi.WorkIssues(driver.Employee))
+                lines.Add($"    the game is telling you: {issue}");
 
             for (var i = 0; i < driver.Record.Routes.Count; i++)
             {

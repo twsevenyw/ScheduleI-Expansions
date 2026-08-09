@@ -53,6 +53,30 @@ public sealed class PlayerHeatRecord
     /// <summary>Arrests served since the outlaw status latched; two of them promote Marked to Hunted.</summary>
     public int ArrestsWhileOutlaw;
 
+    /// <summary>Elapsed day a raid last resolved, for the raid cooldown. -1 means never.</summary>
+    public int LastRaidDay = -1;
+
+    /// <summary>Elapsed day the player was last warned a raid was coming. -1 means never.</summary>
+    public int LastRaidWarnedDay = -1;
+
+    /// <summary>Raids that reached the containers and took something.</summary>
+    public int RaidsSuffered;
+
+    /// <summary>Raids called off because the player got home in time. The reward for reading the warning.</summary>
+    public int RaidsAvoided;
+
+    /// <summary>Total spent buying outlaw tiers down, so the menu can say what the habit has cost.</summary>
+    public float LegalFeesPaid;
+
+    /// <summary>
+    /// Lifetime count of outlaw promotions and releases. Monotonic on purpose: the tutorial needs an
+    /// objective that cannot already be satisfied when the player reaches it, and "are you outlawed"
+    /// is a state a returning player may well already be in.
+    /// </summary>
+    public int OutlawPromotions;
+
+    public int OutlawTiersCleared;
+
     internal OutlawTier Outlaw
     {
         get => (OutlawTier)Math.Clamp(OutlawTier, 0, 2);

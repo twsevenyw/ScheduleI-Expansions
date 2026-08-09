@@ -49,6 +49,64 @@ internal static class ClipboardApi
         return (Gx.Get<string>(definition, "ID", string.Empty), Gx.Get<string>(definition, "Name", string.Empty));
     }
 
+    /// <summary>
+    /// Which row of the clipboard's list a given <c>AdvancedTransitRoute</c> is, or -1. Comparing the
+    /// interop wrappers by pointer rather than by reference: the game hands out a fresh managed wrapper
+    /// around the same native object every time it is read.
+    /// </summary>
+    internal static int RowIndex(object? employee, object? route)
+    {
+        if (route is null)
+            return -1;
+
+        var target = Gx.PointerOf(route);
+        if (target == IntPtr.Zero)
+            return -1;
+
+        foreach (var (pointer, index) in RowPointers(employee))
+        {
+            if (pointer == target)
+                return index;
+        }
+
+        return -1;
+    }
+
+    // The worldspace picker asks whether every candidate entity is valid, every frame it is open, and
+    // each of those questions needs the row's index. Materialising the route list per question is the
+    // difference between a free check and a per-frame allocation storm, so it is cached for one frame.
+    private static int _rowsFrame = -1;
+    private static IntPtr _rowsOwner = IntPtr.Zero;
+    private static (IntPtr Pointer, int Index)[] _rows = Array.Empty<(IntPtr, int)>();
+
+    private static (IntPtr Pointer, int Index)[] RowPointers(object? employee)
+    {
+        var owner = Gx.PointerOf(employee);
+        if (owner == IntPtr.Zero)
+            return Array.Empty<(IntPtr, int)>();
+
+        var frame = UnityEngine.Time.frameCount;
+        if (_rowsFrame == frame && _rowsOwner == owner)
+            return _rows;
+
+        var routes = Routes(employee);
+        var rows = new (IntPtr, int)[routes.Count];
+        for (var i = 0; i < routes.Count; i++)
+            rows[i] = (Gx.PointerOf(routes[i]), i);
+
+        _rowsFrame = frame;
+        _rowsOwner = owner;
+        _rows = rows;
+        return rows;
+    }
+
+    /// <summary>
+    /// Pushes the current list to co-op peers after the mod has edited a route in place. The clipboard's
+    /// own edits go through <c>SetList</c>; a single endpoint write needs this instead.
+    /// </summary>
+    internal static bool Replicate(object? employee) =>
+        Gx.TryCall(RouteField(employee), "Replicate", Array.Empty<string>());
+
     internal static object? NewRoute(object? source, object? destination) =>
         Gx.New(GameTypes.AdvancedTransitRoute, source, destination);
 

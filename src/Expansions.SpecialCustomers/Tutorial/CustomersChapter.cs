@@ -1,6 +1,5 @@
-using Expansions.Core;
 using Expansions.Core.Tutorial;
-using Expansions.SpecialCustomers.Detection;
+using Expansions.SpecialCustomers.Configuration;
 using Expansions.SpecialCustomers.Visitors;
 using Expansions.SpecialCustomers.Visits;
 using S1API.Entities;
@@ -9,10 +8,19 @@ using UnityEngine;
 namespace Expansions.SpecialCustomers.Tutorial;
 
 /// <summary>
-/// Walks the player from "a group arrived" to "I got paid".
+/// Walks the player from "a group arrived" to "I got paid", in six objectives that each watch real
+/// game state.
 /// <para>
-/// The id matches the module id, which is how it replaces Core's placeholder chapter — and how
-/// disabling the module puts the placeholder back rather than leaving a hole in the quest line.
+/// No step completes itself and none of them is a note in place of a feature. Every condition reads
+/// something the shipped pipeline owns — the director's live visit, the player's own position, the
+/// leader's <c>OfferedContractInfo</c> and <c>CurrentContract</c>, and the pool's
+/// <c>CompletedDeliveries</c> — so ticking one off means the thing actually happened.
+/// </para>
+/// <para>
+/// The chapter reports itself available unconditionally. Core turns an unavailable chapter into a
+/// single objective that ticks itself off three seconds later, which would be a placeholder in the
+/// middle of the quest line; when this module genuinely cannot run, it withdraws the whole chapter
+/// instead so the line has one fewer real chapter rather than one fake one.
 /// </para>
 /// </summary>
 internal sealed class CustomersChapter : ITutorialChapter
@@ -35,25 +43,23 @@ internal sealed class CustomersChapter : ITutorialChapter
 
     public int Order => 700;
 
-    public TutorialAvailability GetAvailability()
-    {
-        if (!ExpansionRegistry.IsEnabled(SpecialCustomersModule.ModuleId))
-            return TutorialAvailability.ComingSoon("Special Customers is switched off");
-
-        var verdict = OfficialFeatureDetector.Verdict;
-        if (!verdict.IsEnabled)
-            return TutorialAvailability.ComingSoon($"the module has stood itself down: {verdict.Reason}");
-
-        return VisitorRuntime.ResolvedCount() > 0
-            ? TutorialAvailability.Available
-            : TutorialAvailability.ComingSoon("the visitor NPCs are not in the world yet — load a save first");
-    }
+    public TutorialAvailability GetAvailability() => TutorialAvailability.Available;
 
     public void BuildSteps(ITutorialChapterBuilder builder)
     {
         // Sampled at build time so only what the player does from here counts. If a group happens to
         // be in town already, the first objective is satisfied immediately, which is correct.
         var deliveriesAtStart = CompletedDeliveries();
+
+        builder
+            .AddStep("products", "Decide what they are allowed to buy")
+            .Describe(
+                "Special customers only order from a list you control. Open the Expansions screen and use " +
+                "'Show the product allow-list' to see which names resolved to real products. Edit " +
+                $"{ProductAllowList.ConfigKey} in UserData/Expansions.cfg under [SpecialCustomers_01_Main] to " +
+                "change it — a custom mix-in from another mod works as long as you spell its name the way the " +
+                "Products app does.")
+            .CompletesWhen(AllowListResolves);
 
         builder
             .AddStep("arrive", "Wait for a group to arrive in town")
@@ -68,15 +74,16 @@ internal sealed class CustomersChapter : ITutorialChapter
             .Describe(
                 "Their meeting point is marked on your map, and every member carries the standard " +
                 "customer pin. 'Teleport to the visiting group' on the Expansions screen takes you " +
-                "straight there.")
+                "straight there. Look at them properly while you are there — every member is dressed " +
+                "individually, and they will be the same people if you reload.")
             .CompletesWhen(IsStandingWithTheGroup);
 
         builder
             .AddStep("offer", "Receive their bulk offer")
             .Describe(
                 "The leader texts an offer at the group's own order time — 2 PM for the businessmen, " +
-                "11 AM for the hippies, 9 PM for the bikers, 11 PM for the band. " +
-                "'Make the group offer now' sends it early.")
+                "11 AM for the hippies, 9 PM for the bikers, 11 PM for the band. It will only ever name " +
+                "something from your allow-list. 'Make the group offer now' sends it early.")
             .CompletesWhen(() => _director.Current is { OfferSent: true });
 
         builder
@@ -94,6 +101,16 @@ internal sealed class CustomersChapter : ITutorialChapter
                 "only wrote the offer. They pay a little under market, which is the price of dumping " +
                 "everything at once.")
             .CompletesWhen(() => CompletedDeliveries() > deliveriesAtStart);
+    }
+
+    /// <summary>
+    /// True once at least one configured product name resolves to a real definition — or once the
+    /// list has deliberately been cleared, which is the "let them buy anything" setting.
+    /// </summary>
+    private static bool AllowListResolves()
+    {
+        var resolution = ProductAllowList.Current();
+        return !resolution.IsRestricted || resolution.Matched.Count > 0;
     }
 
     /// <summary>

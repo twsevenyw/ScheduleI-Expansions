@@ -1,17 +1,19 @@
 using Expansions.Core.Configuration;
 using Expansions.Core.Diagnostics;
+using Expansions.Core.Events;
 using Expansions.Core.UI;
 using UnityEngine;
 
 namespace Expansions.Core.Tutorial.Chapters;
 
 /// <summary>
-/// The chapters Core ships.
+/// The chapters Core ships, all of them about surfaces that exist right now.
 /// <para>
-/// The first four teach surfaces that exist today. The last three are placeholders for the feature
-/// mods, which are planned but not written: each reports <see cref="TutorialAvailability.ComingSoon"/>
-/// until its mod registers a real chapter under the same id, at which point
-/// <see cref="TutorialRegistry"/> swaps them over and swaps back if the mod is disabled again.
+/// There are no placeholders here and nothing that ticks itself off. A chapter named after a mod the
+/// player has never installed reads as a broken install rather than as content they are missing, and an
+/// objective that completes the instant it appears teaches nothing while making the line look finished.
+/// Each feature mod registers its own chapter when it loads, and drops it when it is switched off, so what
+/// the Tutorial tab lists is exactly what can be played.
 /// </para>
 /// </summary>
 internal static class TutorialChapters
@@ -19,7 +21,9 @@ internal static class TutorialChapters
     public const string MenuId = "expansions.menu";
     public const string ModulesId = "expansions.modules";
     public const string DiagnosticsId = "expansions.diagnostics";
+    public const string EventsId = "expansions.events";
     public const string CreativeModeId = "expansions.creative_mode";
+    public const string GuideId = "expansions.guide";
     public const string DriversId = "hireable_drivers";
     public const string PoliceId = "police_overhaul";
     public const string CustomersId = "special_customers";
@@ -33,29 +37,17 @@ internal static class TutorialChapters
 
         ModuleToggleWatcher.Attach();
 
-        Add(TutorialRegistry.RegisterPlaceholder(new MenuChapter()));
-        Add(TutorialRegistry.RegisterPlaceholder(new ModulesChapter()));
-        Add(TutorialRegistry.RegisterPlaceholder(new DiagnosticsChapter()));
-        // Skipped entirely when Creative Mode isn't installed: a chapter named after a mod the player
-        // has never had reads as a broken install rather than as content they're missing.
-        if (CreativeModeChapter.IsCreativeModeLoaded())
-            Add(TutorialRegistry.RegisterPlaceholder(new CreativeModeChapter()));
+        Add(TutorialRegistry.Register(new MenuChapter()));
+        Add(TutorialRegistry.Register(new ModulesChapter()));
+        Add(TutorialRegistry.Register(new DiagnosticsChapter()));
+        Add(TutorialRegistry.Register(new EventsChapter()));
 
-        Add(TutorialRegistry.RegisterPlaceholder(new FeatureChapter(
-            DriversId,
-            "Hireable Drivers",
-            "Driver employees who move product between your properties, businesses and dealers on routes you set up, using the game's own vehicle AI.",
-            500)));
-        Add(TutorialRegistry.RegisterPlaceholder(new FeatureChapter(
-            PoliceId,
-            "Police Improvements",
-            "Dynamic police intensity, a persistent heat level, federal agents and heavier consequences for getting caught.",
-            600)));
-        Add(TutorialRegistry.RegisterPlaceholder(new FeatureChapter(
-            CustomersId,
-            "Special Customers",
-            "Bikers, hippies and businessmen visiting Hyland Point in groups to buy in bulk, with their own tastes and their own margins.",
-            700)));
+        // Skipped entirely when Creative Mode is not installed, rather than deferred: the other chapters
+        // defer because the thing they teach might come back, and a mod that is not on this machine will not.
+        if (CreativeModeChapter.IsCreativeModeLoaded())
+            Add(TutorialRegistry.Register(new CreativeModeChapter()));
+
+        Add(TutorialRegistry.Register(new GuideChapter()));
     }
 
     internal static void Unregister()
@@ -97,7 +89,7 @@ internal static class TutorialChapters
         public void BuildSteps(ITutorialChapterBuilder builder)
         {
             // Sampled from construction, so only what the player does from here counts. The screen is
-            // open right now - they just pressed Enable Quest on it.
+            // open right now - they just pressed Start on it.
             var menu = new MenuActivityWatcher();
 
             builder
@@ -217,7 +209,61 @@ internal static class TutorialChapters
         }
     }
 
-    /// <summary>Chapter 4: the other mod in the suite.</summary>
+    /// <summary>Chapter 4: the event hotkey, which is the only Expansions surface that is not a screen.</summary>
+    private sealed class EventsChapter : ITutorialChapter
+    {
+        public string Id => EventsId;
+
+        public string Title => "Expansions: Events";
+
+        public string Description =>
+            $"Modules can offer things you trigger on demand. {ExpansionConfig.EventHotkey} raises a short list " +
+            "in the middle of the screen while you play - number keys pick, arrows move, Escape backs out - and " +
+            $"Shift+{ExpansionConfig.EventHotkey} re-fires whatever you ran last without opening anything. Every " +
+            "event is also a row on the Actions tab.";
+
+        public int Order => 350;
+
+        public TutorialAvailability GetAvailability()
+        {
+            if (ExpansionConfig.EventHotkey == KeyCode.None)
+                return TutorialAvailability.ComingSoon($"'event_hotkey' is set to None in {ExpansionConfig.FileName}");
+
+            return EventRegistry.Count > 0
+                ? TutorialAvailability.Available
+                : TutorialAvailability.ComingSoon("no module has registered an event to fire");
+        }
+
+        public void BuildSteps(ITutorialChapterBuilder builder)
+        {
+            var opensBaseline = EventHotkey.ChooserOpens;
+            var firedBaseline = EventRegistry.FiredCount;
+            var repeatsBaseline = EventHotkey.Repeats;
+
+            builder
+                .AddStep("open", $"Press {ExpansionConfig.EventHotkey} while you are playing")
+                .Describe(
+                    "The list only takes the keyboard while it is up, so the key does nothing to your movement " +
+                    "the rest of the time.")
+                .CompletesWhen(() => EventHotkey.ChooserOpens > opensBaseline);
+
+            builder
+                .AddStep("fire", "Fire one of the events")
+                .Describe(
+                    "Press its number, or move with the arrows and press Enter. Core ships a harmless 'ping' " +
+                    "event so the list is never empty.")
+                .CompletesWhen(() => EventRegistry.FiredCount > firedBaseline);
+
+            builder
+                .AddStep("repeat", $"Re-fire it with Shift+{ExpansionConfig.EventHotkey}")
+                .Describe(
+                    "No list, no menu - it just runs the last thing again and shows what happened. That is the " +
+                    "one you will actually use.")
+                .CompletesWhen(() => EventHotkey.Repeats > repeatsBaseline);
+        }
+    }
+
+    /// <summary>Chapter 5: the other mod in the suite. Only registered when it is actually installed.</summary>
     private sealed class CreativeModeChapter : ITutorialChapter
     {
         public string Id => CreativeModeId;
@@ -232,10 +278,13 @@ internal static class TutorialChapters
 
         public int Order => 400;
 
-        public TutorialAvailability GetAvailability() =>
-            IsCreativeModeLoaded()
-                ? TutorialAvailability.Available
-                : TutorialAvailability.ComingSoon("Creative Mode is not installed alongside Expansions");
+        /// <summary>
+        /// Unconditionally available, because the condition is the registration: this chapter only exists when
+        /// Creative Mode is loaded, and MelonLoader does not unload a mod mid-session. Re-checking here would
+        /// be a second answer to a question already settled, and a wrong answer from it — an assembly walk
+        /// that throws once — would block a chapter that is perfectly playable.
+        /// </summary>
+        public TutorialAvailability GetAvailability() => TutorialAvailability.Available;
 
         public void BuildSteps(ITutorialChapterBuilder builder)
         {
@@ -275,44 +324,60 @@ internal static class TutorialChapters
     }
 
     /// <summary>
-    /// A chapter for a feature mod that has not shipped its own yet. It carries the pitch so the line
-    /// still reads as a whole, and reports why there is nothing to do.
+    /// The last chapter Core ships: where everything else lives once the tour is over.
+    /// <para>
+    /// This is the answer to "so where are the mod questlines?" — they are chapters like this one,
+    /// contributed by whichever mods are installed, each played as its own quest in the phone journal. The
+    /// objectives point at the three places a player has to know about afterwards: the chapter list, the
+    /// UserData folder, and the update check.
+    /// </para>
     /// </summary>
-    private sealed class FeatureChapter : ITutorialChapter
+    private sealed class GuideChapter : ITutorialChapter
     {
-        private readonly string _moduleId;
+        public string Id => GuideId;
 
-        internal FeatureChapter(string moduleId, string title, string pitch, int order)
-        {
-            _moduleId = moduleId;
-            Title = title;
-            Description = pitch + " This chapter fills itself in as soon as the mod ships its objectives.";
-            Order = order;
-        }
+        public string Title => "Expansions: Where Everything Is";
 
-        public string Id => _moduleId;
+        public string Description =>
+            "Every installed mod adds its own chapter to this line, and each chapter is a separate quest in " +
+            "your phone's journal - so the tutorial for a mod you install later simply appears. The Tutorial " +
+            "tab lists them all and lets you switch any of them off; the Actions tab has everything else, " +
+            "including the update check.";
 
-        public string Title { get; }
+        public int Order => 450;
 
-        public string Description { get; }
+        public TutorialAvailability GetAvailability() => TutorialAvailability.Available;
 
-        public int Order { get; }
-
-        public TutorialAvailability GetAvailability()
-        {
-            var context = ExpansionRegistry.ContextOf(_moduleId);
-
-            if (context is null)
-                return TutorialAvailability.ComingSoon("not installed yet");
-
-            return context.IsActive
-                ? TutorialAvailability.ComingSoon("installed, but its tutorial is not written yet")
-                : TutorialAvailability.ComingSoon("installed but switched off");
-        }
-
-        /// <summary>Never called while <see cref="GetAvailability"/> reports unavailable.</summary>
         public void BuildSteps(ITutorialChapterBuilder builder)
         {
+            // Baselined at build time, so a player who opened the Tutorial tab or pressed either button
+            // earlier in the session still has to do it again here. See TutorialActivity for why these are
+            // counters and not latching signals.
+            var tabBaseline = TutorialActivity.TutorialTabViews;
+            var filesBaseline = TutorialActivity.UserDataReveals;
+            var updatesBaseline = TutorialActivity.UpdateStatusViews;
+
+            builder
+                .AddStep("tab", "Open the Tutorial tab on the Expansions screen")
+                .Describe(
+                    "One row per chapter, with its state and, when it is not playable yet, the reason. Click a " +
+                    "row to switch that chapter off; the line skips it and moves on.")
+                .CompletesWhen(() => TutorialActivity.TutorialTabViews > tabBaseline);
+
+            builder
+                .AddStep("files", "Reveal the UserData folder from the Actions tab")
+                .Describe(
+                    $"{ExpansionConfig.FileName} for every setting, the probe reports, and the log the updater " +
+                    "writes while the game is closed all live there.")
+                .CompletesWhen(() => TutorialActivity.UserDataReveals > filesBaseline);
+
+            builder
+                .AddStep("updates", "Open 'Update status' on the Actions tab")
+                .Describe(
+                    "The suite keeps itself up to date on its own: it checks in the background and installs what " +
+                    "it finds at the next launch, before the mods load. Nothing is ever deleted, and a mod you " +
+                    "switched off stays off. This is just where you can see that it happened.")
+                .CompletesWhen(() => TutorialActivity.UpdateStatusViews > updatesBaseline);
         }
     }
 

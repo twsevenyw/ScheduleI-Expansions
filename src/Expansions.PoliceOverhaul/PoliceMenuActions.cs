@@ -1,6 +1,5 @@
 using Expansions.Core;
 using Expansions.Core.Actions;
-using Expansions.Core.Diagnostics;
 using Expansions.PoliceOverhaul.Runtime;
 using Expansions.PoliceOverhaul.State;
 
@@ -10,7 +9,15 @@ namespace Expansions.PoliceOverhaul;
 /// Everything the owner can do to this module from the F7 screen.
 /// <para>
 /// The in-game console is unusable on this install, so the menu is the only control surface — which
-/// makes these actions load-bearing rather than a convenience.
+/// makes these actions load-bearing rather than a convenience. Two rules follow from that and are
+/// worth stating: every action returns a sentence describing what it did, and no action ever returns
+/// early in silence. A button that produces no visible response is indistinguishable from a broken
+/// one, and this module has already shipped that bug once.
+/// </para>
+/// <para>
+/// <see cref="ActionRegistry"/> is called directly rather than through reflection. Registering these
+/// via <c>Activator.CreateInstance</c> against a guessed constructor is exactly how all eight of them
+/// silently failed to appear in a previous build.
 /// </para>
 /// </summary>
 internal static class PoliceMenuActions
@@ -30,144 +37,282 @@ internal static class PoliceMenuActions
         HeatWasRead = false;
 
         // Ids carry the module id so Core groups them under "Police Improvements" automatically.
-        Add("police_overhaul.show_heat", "Show heat",
-            "Report heat, tier, outlaw status and what the module is currently doing to the world.",
-            ShowHeat);
+        Add("police_overhaul.show_heat", "Show heat and status",
+            "Heat, tier, outlaw status, what the mod is doing to the world, and whether a raid is inbound.",
+            Readiness.Live, ShowHeat);
+
+        Add("police_overhaul.explain_outlaw", "What is outlaw status costing me?",
+            "Itemises the business side: the dealer surcharge, the customer snitch bonus, the closed vendors and what an arrest would cost you right now.",
+            Readiness.Live, ExplainOutlaw);
 
         Add("police_overhaul.heat_up", "Heat +25",
-            "Raise your heat by 25, for testing the tier ladder without committing 25 crimes.",
-            () => Nudge(+25f));
+            "Raise your heat by 25, for walking up the tier ladder without committing 25 crimes.",
+            Readiness.Live, () => Nudge(+25f));
 
         Add("police_overhaul.heat_max", "Set heat to 100",
             "Jump straight to the Federal band: maximum officers per post, all-hours checkpoints, federal agents eligible.",
-            () => SetHeat(100f));
+            Readiness.Live, () => SetHeat(100f));
 
         Add("police_overhaul.heat_clear", "Clear heat",
             "Drop heat to zero. The world returns to exactly vanilla within one game minute.",
-            () => SetHeat(0f));
+            Readiness.Live, () => SetHeat(0f));
 
         Add("police_overhaul.outlaw_next", "Next outlaw tier",
-            "Force Clean to Marked, or Marked to Hunted, without waiting for the heat threshold.",
-            NextOutlawTier);
+            "Force Clean to MARKED, or MARKED to HUNTED, without waiting for the heat threshold.",
+            Readiness.Escalate, NextOutlawTier);
 
-        Add("police_overhaul.outlaw_clear", "Clear outlaw status",
-            "Drop one outlaw tier and pull heat back under the latch threshold, the same as serving three clean days.",
-            ClearOutlawTier);
+        Add("police_overhaul.outlaw_clear", "Serve out one outlaw tier",
+            "Drop one tier and pull heat back under the latch threshold, the same as serving three clean days. Free, unlike the lawyer.",
+            Readiness.Outlaw, ClearOutlawTier);
 
-        Add("police_overhaul.spawn_federal", "Spawn federal agent",
-            "Dispatch a plain-clothes team to your position now. Reports why if this build cannot spawn them.",
-            SpawnFederal);
+        AddDynamic("police_overhaul.outlaw_pay", LegalFeeLabel,
+            "Buy one outlaw tier down with money instead of time. Cash first, then your bank balance.",
+            Readiness.LegalFee, PayLegalFee);
+
+        Add("police_overhaul.spawn_federal", "Send a federal team",
+            "Dispatch plain-clothes agents now. If you are inside a property you own they stake it out instead of chasing you.",
+            Readiness.Federal, SpawnFederal);
+
+        Add("police_overhaul.raid_trigger", "Put a raid on the clock",
+            "Starts the warning for a raid on one of your properties, so you can watch the whole sequence without waiting for the trigger.",
+            () => Readiness.Raid(immediate: false), TriggerRaid);
+
+        Add("police_overhaul.restore_force", "Put the police back on duty",
+            "Counts every officer in town and revives the dead ones now, instead of waiting for the day rollover. Use this the moment the streets look empty.",
+            Readiness.Live, RestoreForce);
 
         Add("police_overhaul.reset", "Reset all police state",
-            "Wipe every heat record, clear outlaw status, withdraw any agents and put the world back to vanilla.",
-            ResetEverything);
+            "Wipe every heat record, clear outlaw status, call off any raid, withdraw agents and put the world back to vanilla.",
+            Readiness.Live, ResetEverything);
 
         BindToRegistry(lifetime);
     }
 
-    internal static void Invoke(string id)
-    {
-        foreach (var entry in Entries)
-        {
-            if (string.Equals(entry.Id, id, StringComparison.Ordinal))
-            {
-                entry.Invoke();
-                return;
-            }
-        }
-    }
-
     // ── Actions ───────────────────────────────────────────────────────────────────────────────
 
-    private static void ShowHeat()
+    private static ActionResult ShowHeat()
     {
         HeatWasRead = true;
 
         if (PoliceRuntime.Heat is not { } heat || PoliceRuntime.Config is not { } config)
+            return NotWired();
+
+        var record = heat.LocalRecord;
+        var (min, max) = HeatModel.OfficerBand(heat.PeakTier, config.IntensityScalar.Value, config.MaxOfficersPerPost.Value, config.PoliceDensity.Value);
+
+        var headline = $"Heat {record.Heat:0} — {HeatModel.TierName(record.Tier)}";
+        var lines = new List<string>
         {
-            Report("Police Improvements", "Not wired into a loaded game yet.");
-            return;
+            $"Outlaw {OutlawState.Describe(record.Outlaw)}, clean-day streak {record.CleanDayStreak}/{config.OutlawClearDays.Value}.",
+            $"Law intensity {heat.CurrentIntensity} against a vanilla baseline of {heat.BaselineIntensity}; {min}-{max} officers per post.",
+            $"The police have taken ${record.PoliceTakeTotal:N0} off you in total.",
+        };
+
+        if (PoliceRuntime.Raids is { } raids)
+        {
+            lines.Add(raids.IsPending
+                ? $"A raid on {raids.PendingProperty} lands in {GameClock.Describe(raids.MinutesUntilRaid)} — be there and you lose nothing."
+                : $"No raid inbound. {record.RaidsSuffered} suffered, {record.RaidsAvoided} avoided.");
+        }
+
+        if (PoliceRuntime.Federal is { } federal)
+        {
+            lines.Add(federal.IsActive
+                ? federal.IsStakeout
+                    ? $"Agents are staking out {federal.StakeoutProperty} for another {federal.HoursRemaining}h."
+                    : $"A federal team is hunting you for another {federal.HoursRemaining}h."
+                : FederalAgents.Status.CanSpawn
+                    ? "No federal team out. They are available on this build."
+                    : $"No federal team out, and this build cannot spawn one: {FederalAgents.Status.Reason}.");
+        }
+
+        var body = string.Join(" ", lines);
+        Toast(headline, body);
+        return ActionResult.Ok($"{headline}. {body}");
+    }
+
+    /// <summary>
+    /// The itemised bill for being outlawed. This exists because every effect it lists is a number
+    /// change the player would otherwise only feel as "things seem worse", and a consequence nobody
+    /// can point at is a consequence that reads as imaginary.
+    /// </summary>
+    private static ActionResult ExplainOutlaw()
+    {
+        if (PoliceRuntime.Config is not { } config || PoliceRuntime.Outlaw is not { } outlaw ||
+            PoliceRuntime.Consequences is not { } consequences || PoliceRuntime.Heat is not { } heat)
+        {
+            return NotWired();
         }
 
         var record = heat.LocalRecord;
-        var (min, max) = HeatModel.OfficerBand(heat.PeakTier, config.IntensityScalar.Value, config.MaxOfficersPerPost.Value);
+        var economy = outlaw.Economy;
 
-        Report(
-            $"Heat {record.Heat:0} — {HeatModel.TierName(record.Tier)}",
-            $"Outlaw: {OutlawState.Describe(record.Outlaw)}. Law intensity {heat.CurrentIntensity} " +
-            $"(vanilla baseline {heat.BaselineIntensity}). {min}-{max} officers per post.");
+        if (record.Outlaw == OutlawTier.Clean)
+        {
+            var preview =
+                $"You are CLEAN, so none of this is being charged. If you were outlawed: dealers would take an extra " +
+                $"{config.OutlawDealerCutBonus.Value:P0}, every customer would be {config.OutlawSnitchBonus.Value:P0} more likely to " +
+                $"call the police, card-only vendors would refuse you, fines would be x{config.OutlawFineMultiplier.Value:0.0}, and an " +
+                $"arrest would cost you the rest of the day plus ${consequences.Custody.ProcessingFeeDue():N0} in processing.";
 
-        PoliceLog.Msg(
-            $"Heat {record.Heat:0.#} ({HeatModel.TierName(record.Tier)}) · outlaw {OutlawState.Describe(record.Outlaw)} · " +
-            $"clean-day streak {record.CleanDayStreak} · police take ${record.PoliceTakeTotal:0} · " +
-            $"intensity {heat.CurrentIntensity} over baseline {heat.BaselineIntensity} · " +
-            $"officers per post {min}-{max} · federal agents {(FederalAgents.Status.CanSpawn ? "viable" : "unavailable: " + FederalAgents.Status.Reason)}.");
+            Toast("Outlaw: CLEAN", preview);
+            return ActionResult.Ok(preview);
+        }
+
+        var bill =
+            $"{economy.DealersAffected} dealer(s) are taking an extra {config.OutlawDealerCutBonus.Value:P0}. " +
+            $"{economy.CustomersAffected} customer(s) are {config.OutlawSnitchBonus.Value:P0} more likely to call the police. " +
+            $"{(config.OutlawBlocksCardVendors.Value ? "Card-only vendors are refusing you." : "Card-only vendors are still serving you (setting off).")} " +
+            $"Fines are x{config.OutlawFineMultiplier.Value:0.0} on top of the heat multiplier. " +
+            $"An arrest right now costs the rest of the day plus ${consequences.Custody.ProcessingFeeDue():N0} in processing, " +
+            $"and takes your tools. Buying the tier down costs ${config.OutlawLegalFee.Value:N0}; serving it out takes " +
+            $"{config.OutlawClearDays.Value - record.CleanDayStreak} more clean day(s).";
+
+        Toast($"Outlaw: {OutlawState.Describe(record.Outlaw)}", bill);
+        return ActionResult.Ok(bill);
     }
 
-    private static void Nudge(float delta)
+    private static ActionResult Nudge(float delta)
     {
         if (PoliceRuntime.Heat is not { } heat)
-            return;
+            return NotWired();
 
         var record = heat.LocalRecord;
+        var before = record.Heat;
         heat.SetHeat(record, record.Heat + delta);
-        Report($"Heat {record.Heat:0}", HeatModel.TierName(record.Tier) + " — the world catches up within a game minute.");
+
+        if (Math.Abs(record.Heat - before) < 0.01f)
+        {
+            return ActionResult.NoChange(
+                $"Heat is already pinned at {record.Heat:0} ({HeatModel.TierName(record.Tier)}); it cannot go higher.");
+        }
+
+        var message = $"Heat {before:0} -> {record.Heat:0} ({HeatModel.TierName(record.Tier)}). The world catches up within a game minute.";
+        Toast($"Heat {record.Heat:0}", message);
+        return ActionResult.Ok(message);
     }
 
-    private static void SetHeat(float value)
+    private static ActionResult SetHeat(float value)
     {
         if (PoliceRuntime.Heat is not { } heat)
-            return;
+            return NotWired();
 
         var record = heat.LocalRecord;
+        var before = record.Heat;
         heat.SetHeat(record, value);
-        Report($"Heat set to {record.Heat:0}", HeatModel.TierName(record.Tier));
+
+        if (Math.Abs(record.Heat - before) < 0.01f)
+            return ActionResult.NoChange($"Heat was already {record.Heat:0} ({HeatModel.TierName(record.Tier)}).");
+
+        var message = $"Heat set to {record.Heat:0} ({HeatModel.TierName(record.Tier)}).";
+        Toast(message, "The law scheduler is re-evaluated on the next game minute.");
+        return ActionResult.Ok(message);
     }
 
-    private static void NextOutlawTier()
+    private static ActionResult NextOutlawTier()
     {
         if (PoliceRuntime.Heat is not { } heat || PoliceRuntime.Outlaw is not { } outlaw)
-            return;
+            return NotWired();
 
         var record = heat.LocalRecord;
         var next = record.Outlaw == OutlawTier.Clean ? OutlawTier.Marked : OutlawTier.Hunted;
         outlaw.Promote(record, next);
         outlaw.Sync();
 
-        Report($"Outlaw: {OutlawState.Describe(next)}",
-            "Searches will find something, pursuits will not let go, and fines are doubled.");
+        var message = $"You are now {OutlawState.Describe(next)}. Searches will find something, pursuits will not let go, " +
+                      "fines are doubled, dealers charge more and card-only vendors have closed to you.";
+
+        Toast($"Outlaw: {OutlawState.Describe(next)}", message);
+        return ActionResult.Ok(message);
     }
 
-    private static void ClearOutlawTier()
+    private static ActionResult ClearOutlawTier()
     {
         if (PoliceRuntime.Heat is not { } heat || PoliceRuntime.Outlaw is not { } outlaw)
-            return;
+            return NotWired();
 
         var record = heat.LocalRecord;
+        if (record.Outlaw == OutlawTier.Clean)
+            return ActionResult.NoChange("Your record is already clean.");
+
+        var previous = record.Outlaw;
         outlaw.Demote(record);
         outlaw.Sync();
 
-        Report($"Outlaw: {OutlawState.Describe(record.Outlaw)}", $"Heat pulled back to {record.Heat:0}.");
+        var message = $"{OutlawState.Describe(previous)} down to {OutlawState.Describe(record.Outlaw)}, " +
+                      $"and heat pulled back to {record.Heat:0} so it does not immediately re-latch.";
+
+        Toast($"Outlaw: {OutlawState.Describe(record.Outlaw)}", message);
+        return ActionResult.Ok(message);
     }
 
-    private static void SpawnFederal()
+    private static ActionResult PayLegalFee()
+    {
+        if (PoliceRuntime.Heat is not { } heat || PoliceRuntime.Outlaw is not { } outlaw)
+            return NotWired();
+
+        return outlaw.PayLegalFee(heat.LocalRecord, out var message)
+            ? ActionResult.Ok(message)
+            : ActionResult.Failed(message);
+    }
+
+    private static string LegalFeeLabel()
+    {
+        // Null before the module wires into a scene, which is also when this label is first built.
+        // Showing "$0" then would be a lie about the price rather than an absence of one.
+        var fee = PoliceRuntime.Config?.OutlawLegalFee.Value;
+        return fee is null ? "Pay the legal fee" : $"Pay the legal fee (${fee.Value:N0})";
+    }
+
+    private static ActionResult SpawnFederal()
     {
         if (PoliceRuntime.Federal is not { } federal)
-            return;
+            return NotWired();
 
-        federal.ForceBegin(out var message);
-        Report("Federal agents", message);
-        PoliceLog.Msg(message);
+        var started = federal.ForceBegin(out var message);
+        Toast("Federal agents", message);
+        return started ? ActionResult.Ok(message) : ActionResult.Failed(message);
     }
 
-    private static void ResetEverything()
+    private static ActionResult TriggerRaid()
+    {
+        if (PoliceRuntime.Raids is not { } raids)
+            return NotWired();
+
+        var started = raids.Force(immediate: false, out var message);
+        return started ? ActionResult.Ok(message) : ActionResult.Failed(message);
+    }
+
+    /// <summary>
+    /// The manual half of the daily restore, because "there are no cops" is a thing the owner notices
+    /// mid-session and should not have to sleep through a night to test a fix for. Reports the census
+    /// either way, so pressing it on a healthy map is still an answer rather than nothing happening.
+    /// </summary>
+    private static ActionResult RestoreForce()
+    {
+        var before = PoliceForce.Count();
+        var revived = PoliceForce.ReturnToDuty();
+        var after = PoliceForce.Count();
+
+        return ActionResult.Ok(
+            revived > 0
+                ? $"{revived} officer(s) back on duty. The force is now {after.OnDuty} on duty, {after.Pooled} in " +
+                  $"reserve across {after.Stations} station(s), {after.Dead} still down."
+                : before.Total == 0
+                    ? "There are no officer objects in this scene at all, so there was nothing to revive. Load a save and try again."
+                    : $"Nobody needed reviving: {before.Summary}.");
+    }
+
+    private static ActionResult ResetEverything()
     {
         if (PoliceRuntime.Heat is not { } heat)
-            return;
+            return NotWired();
 
+        PoliceRuntime.Raids?.Cancel("the owner reset police state");
         PoliceRuntime.Federal?.Abort();
         PoliceRuntime.Consequences?.ClearAllCharges();
 
+        var wiped = 0;
         foreach (var record in heat.Records)
         {
             record.Heat = 0f;
@@ -180,6 +325,12 @@ internal static class PoliceMenuActions
             record.DealHeatToday = 0f;
             record.ArrestDays.Clear();
             record.LastFederalEventDay = -1;
+            record.LastRaidDay = -1;
+            record.LastRaidWarnedDay = -1;
+            record.RaidsSuffered = 0;
+            record.RaidsAvoided = 0;
+            record.LegalFeesPaid = 0f;
+            wiped++;
         }
 
         // Same order as module teardown: the schedule restore ends in Evaluate(), so it goes last.
@@ -188,8 +339,9 @@ internal static class PoliceMenuActions
         PoliceRuntime.Heat?.Restore();
         PoliceRuntime.Schedule?.Restore();
 
-        Report("Police state reset", "Every record cleared and the world put back to vanilla.");
-        PoliceLog.Msg("All police state reset by the menu action.");
+        var message = $"{wiped} player record(s) cleared, dealer cuts and snitch chances restored, and the world put back to vanilla.";
+        Toast("Police state reset", message);
+        return ActionResult.Ok(message);
     }
 
     // ── Registry binding ──────────────────────────────────────────────────────────────────────
@@ -206,14 +358,30 @@ internal static class PoliceMenuActions
 
             try
             {
-                lifetime.Add(ActionRegistry.Register(new ExpansionAction(
-                    id: entry.Id,
-                    label: entry.Label,
-                    description: entry.Description,
-                    invoke: entry.Invoke,
-                    isAvailable: Availability,
-                    order: i)));
+                ExpansionAction action;
 
+                if (entry.DynamicLabel is { } dynamicLabel)
+                {
+                    action = ExpansionAction.WithDynamicLabel(
+                        id: entry.Id,
+                        label: dynamicLabel,
+                        description: entry.Description,
+                        invoke: entry.Invoke,
+                        isAvailable: entry.Availability,
+                        order: i);
+                }
+                else
+                {
+                    action = new ExpansionAction(
+                        id: entry.Id,
+                        label: entry.Label ?? entry.Id,
+                        description: entry.Description,
+                        isAvailable: entry.Availability,
+                        invoke: entry.Invoke,
+                        order: i);
+                }
+
+                lifetime.Add(ActionRegistry.Register(action));
                 bound++;
             }
             catch (Exception ex)
@@ -226,40 +394,58 @@ internal static class PoliceMenuActions
         PoliceLog.Msg($"Registered {bound}/{Entries.Count} police menu action(s) with Core.");
     }
 
-    private static ActionAvailability Availability() =>
-        PoliceRuntime.IsLive
-            ? ActionAvailability.Ready
-            : ActionAvailability.Unavailable("needs a loaded save with the module running");
+    private static ActionResult NotWired() => ActionResult.Failed(
+        "Police Improvements is not wired into a loaded game, so there is no police state to change. " +
+        "Load a save; if you are a client in co-op, the host owns this.");
 
-    private static void Add(string id, string label, string description, Action invoke)
+    private static void Add(string id, string label, string description, Func<ActionAvailability> availability, Func<ActionResult> invoke)
     {
-        Entries.Add(new Entry(id, label, description, invoke));
+        Entries.Add(new Entry(id, label, null, description, availability, invoke));
         PoliceLog.Detail($"Menu action available: {label}");
     }
 
-    /// <summary>Toast plus log, because the console does not work on this install.</summary>
-    private static void Report(string title, string body)
+    private static void AddDynamic(string id, Func<string> label, string description, Func<ActionAvailability> availability, Func<ActionResult> invoke)
     {
-        GameBridge.Notify(title, body, 8f);
-        PoliceLog.Msg($"{title} — {body}");
+        Entries.Add(new Entry(id, null, label, description, availability, invoke));
+        PoliceLog.Detail($"Menu action available: {label()}");
     }
+
+    /// <summary>
+    /// An in-world toast on top of the menu's own output line. The two audiences differ: the output
+    /// pane is for the owner reading the screen, the toast is for the player who fired this from the
+    /// event hotkey and never opened it.
+    /// </summary>
+    private static void Toast(string title, string body) => GameBridge.Notify(title, body, 8f);
 
     internal sealed class Entry
     {
-        internal Entry(string id, string label, string description, Action invoke)
+        internal Entry(
+            string id,
+            string? label,
+            Func<string>? dynamicLabel,
+            string description,
+            Func<ActionAvailability> availability,
+            Func<ActionResult> invoke)
         {
             Id = id;
             Label = label;
+            DynamicLabel = dynamicLabel;
             Description = description;
+            Availability = availability;
             Invoke = invoke;
         }
 
         internal string Id { get; }
 
-        internal string Label { get; }
+        /// <summary>Null when the label depends on state; see <see cref="DynamicLabel"/>.</summary>
+        internal string? Label { get; }
+
+        internal Func<string>? DynamicLabel { get; }
 
         internal string Description { get; }
 
-        internal Action Invoke { get; }
+        internal Func<ActionAvailability> Availability { get; }
+
+        internal Func<ActionResult> Invoke { get; }
     }
 }

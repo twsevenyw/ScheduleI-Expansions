@@ -51,6 +51,11 @@ internal static class PolicePatches
 
         Patch(harmony, GameTypes.BodySearchBehaviour, "DoesPlayerContainItemsOfInterest", 0, postfix: nameof(BodySearchPostfix));
         Patch(harmony, GameTypes.CheckpointBehaviour, "DoesVehicleContainIllicitItems", 0, postfix: nameof(VehicleSearchPostfix));
+        // The hand-written body of the observers RPC, so the caller is recorded on the host as well
+        // as on every client rather than only where the writer happened to run.
+        Patch(harmony, GameTypes.CallPoliceBehaviour, "RpcLogic___FinalizeCall_*", 0, postfix: nameof(PoliceCalledPostfix));
+
+        Patch(harmony, GameTypes.ShopInterface, "Open", 0, prefix: nameof(ShopOpenPrefix));
 
         Patch(harmony, GameTypes.ArrestNoticeScreen, "Open", 0, postfix: nameof(NoticeOpenPostfix));
         Patch(harmony, GameTypes.ArrestNoticeScreen, "OnClose", 0, postfix: nameof(NoticeClosePostfix));
@@ -66,12 +71,19 @@ internal static class PolicePatches
 
     // ── Heat inputs ───────────────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// The one per-minute hook the whole module runs on. Everything time-driven hangs off it in a
+    /// fixed order — heat first, because the raid and stakeout checks read the outlaw status it has
+    /// just refreshed.
+    /// </summary>
     private static void LawMinutePassPostfix(object __instance)
     {
         if (!PoliceRuntime.IsLive || !HostGate.IsAuthority)
             return;
 
         Guard("minute tick", () => PoliceRuntime.Heat!.MinutePass(__instance));
+        Guard("raid countdown", () => PoliceRuntime.Raids?.MinutePass());
+        Guard("stakeout upkeep", () => PoliceRuntime.Federal?.MinutePass());
     }
 
     private static void AddCrimePostfix(object __instance, object[] __args)
@@ -116,15 +128,72 @@ internal static class PolicePatches
 
     /// <summary>
     /// Deliberately a postfix rather than a skipping prefix: the original also clears the pursuit
-    /// level and resets the since-arrested counter, both of which we want to keep. All we add is
-    /// dropping our own copy of the charge sheet, which the game has just discarded.
+    /// level and resets the since-arrested counter, both of which we want to keep.
+    /// <para>
+    /// This is where custody lands, because it is the first moment the game agrees the arrest is
+    /// finished — running the clock skip any earlier fights the arrest screen's own transition.
+    /// </para>
     /// </summary>
     private static void PlayerFreedPostfix(object __instance)
     {
         if (!PoliceRuntime.IsLive)
             return;
 
-        Guard("release", () => PoliceRuntime.Consequences!.ClearCharges(Members.ReadPath(__instance, "Player")));
+        Guard("release", () =>
+        {
+            var player = Members.ReadPath(__instance, "Player");
+
+            // Custody moves the world clock, so only the authoritative peer runs it, and only for the
+            // player sitting at this machine. A client watching a co-op partner get booked must not
+            // skip everyone's day.
+            var isLocal = player is not null && GameBridge.IsLocal(player);
+            if (HostGate.IsAuthority && isLocal)
+                PoliceRuntime.Consequences!.Release(player);
+            else
+                PoliceRuntime.Consequences!.ClearCharges(player);
+        });
+    }
+
+    /// <summary>Records who dialled, so the arrest can cost the player that relationship.</summary>
+    private static void PoliceCalledPostfix(object __instance)
+    {
+        if (!PoliceRuntime.IsLive || !HostGate.IsAuthority)
+            return;
+
+        Guard("a police call", () => PoliceRuntime.Consequences!.Informants.Record(__instance));
+    }
+
+    /// <summary>
+    /// Shuts card-only vendors to an outlaw.
+    /// <para>
+    /// A skipping prefix, which is the one place in this module where cancelling the original is the
+    /// right call: there is no "refuse" return value to postfix, and letting the shop open and then
+    /// closing it would flash the whole interface. The refusal always says which shop and why, so it
+    /// can never be mistaken for the menu failing to open.
+    /// </para>
+    /// </summary>
+    private static bool ShopOpenPrefix(object __instance)
+    {
+        if (!PoliceRuntime.IsLive || PoliceRuntime.Outlaw is not { } outlaw)
+            return true;
+
+        try
+        {
+            if (!outlaw.Economy.ShouldRefuseShop(__instance))
+                return true;
+
+            var reason = outlaw.Economy.RefusalFor(__instance);
+            // Toast: this is click-time UI feedback; a phone text would land after they already walked off.
+            PoliceMessages.Toast("They will not serve you", reason, 8f);
+            PoliceLog.Msg($"Refused a card-only shop to an outlawed player: {reason}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            // Never leave a shop unopenable because our check threw.
+            PoliceLog.Error("Police Improvements threw while checking a shop; letting it open.", ex);
+            return true;
+        }
     }
 
     // ── Outlaw rule changes ───────────────────────────────────────────────────────────────────
@@ -220,7 +289,8 @@ internal static class PolicePatches
         var (min, _) = HeatModel.OfficerBand(
             PoliceRuntime.Heat!.PeakTier,
             Math.Max(0f, config.IntensityScalar.Value),
-            config.MaxOfficersPerPost.Value);
+            config.MaxOfficersPerPost.Value,
+            config.PoliceDensity.Value);
 
         __args[0] = Math.Min(HeatModel.HardOfficerCap, Math.Max(requested, min));
     }
@@ -268,8 +338,11 @@ internal static class PolicePatches
 
     private static void ConfiscatePostfix(object __instance)
     {
-        if (PoliceRuntime.IsLive && HostGate.IsAuthority)
-            Guard("vehicle cargo", () => PoliceRuntime.Consequences!.ConfiscateVehicleCargo(__instance));
+        if (!PoliceRuntime.IsLive || !HostGate.IsAuthority)
+            return;
+
+        Guard("vehicle cargo", () => PoliceRuntime.Consequences!.ConfiscateVehicleCargo(__instance));
+        Guard("equipment seizure", () => PoliceRuntime.Consequences!.ConfiscateEquipment());
     }
 
     /// <summary>

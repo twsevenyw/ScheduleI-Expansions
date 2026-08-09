@@ -2,9 +2,11 @@ using Expansions.Core.Actions;
 using Expansions.Core.Configuration;
 using Expansions.Core.Diagnostics;
 using Expansions.Core.Diagnostics.Probes;
+using Expansions.Core.Events;
 using Expansions.Core.Logging;
 using Expansions.Core.Tutorial;
 using Expansions.Core.UI;
+using Expansions.Core.Updates;
 using UnityEngine;
 
 namespace Expansions.Core;
@@ -64,11 +66,32 @@ public static class ExpansionHost
 
         try
         {
+            CoreEvents.RegisterAll();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Core's triggerable events could not be registered; everything else still works.", ex);
+        }
+
+        try
+        {
             CoreActions.RegisterAll();
         }
         catch (Exception ex)
         {
             Log.Error("Core's menu actions could not be registered; everything else still works.", ex);
+        }
+
+        // Reported, not driven. Updating is the Expansions.Updater plugin's job and it has already
+        // finished by the time any mod initialises - plugins load before mods, which is the only window
+        // in which a mod DLL can be replaced. All Core does is read what the plugin wrote.
+        try
+        {
+            Log.Msg($"Updates: {UpdateReport.Current.StatusLine}");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("The updater's status could not be read; everything else still works.", ex);
         }
 
         Log.Msg(
@@ -128,12 +151,23 @@ public static class ExpansionHost
 
         try
         {
+            EventHotkey.Shutdown();
+            CoreEvents.Unregister();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("The event hotkey did not shut down cleanly.", ex);
+        }
+
+        try
+        {
             CoreActions.Unregister();
         }
         catch (Exception ex)
         {
             Log.Error("Core's menu actions did not unregister cleanly.", ex);
         }
+
     }
 
     public static void Update(object owner)
@@ -146,6 +180,11 @@ public static class ExpansionHost
             ExpansionMenu.Toggle();
 
         PumpMenu(static menu => menu.OnUpdate(), "OnUpdate");
+
+        // After the menu, so a hotkey press that just opened the Expansions screen is seen as
+        // "the screen owns the keyboard now" rather than as a request to open the event chooser.
+        EventHotkey.Tick();
+
         TutorialDirector.Tick();
         Fanout(static module => module.OnUpdate(), "OnUpdate");
     }
@@ -198,6 +237,16 @@ public static class ExpansionHost
         }
 
         PumpMenu(menu => menu.OnSceneChanged(buildIndex, sceneName), "OnSceneChanged");
+
+        // After the menu, which is what clears the shared font/sprite caches the chooser also uses.
+        try
+        {
+            EventHotkey.OnSceneChanged();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("The event chooser's scene-change handler threw; it rebuilds on next use.", ex);
+        }
 
         try
         {

@@ -22,17 +22,17 @@ namespace Expansions.PoliceOverhaul.Runtime;
 /// not, and the reason is reported to the probe and the menu instead of thrown.
 /// </para>
 /// <para>
-/// Known limitation: a clone inherits the donor's NPC id, because that id lives on a shared
-/// <c>BasicInfo</c> asset and rewriting it would rename every officer in the game. So while an agent
-/// is alive, an id lookup for that officer can return the agent instead. Nothing in the save is
-/// affected — <c>ShouldSave</c> is forced false for agents and they are pulled out of both registries
-/// on despawn — and the worst case is a cosmetic mix-up for the six in-game hours an event lasts.
+/// Clones used to keep the donor officer's <c>NPCData</c> reference, so <c>GetNPC(donorId)</c> and any
+/// messaging through the agent attributed events to that civilian/officer (playtest: LeRoy). After
+/// instantiate we deep-copy <c>NPCData</c>, stamp a unique id/name/GUID, and never send texts from
+/// agents — Dispatch is the only messaging contact.
 /// </para>
 /// </summary>
 internal static class FederalAgents
 {
     private const string PrefabName = "PoliceNPC";
     private const string AgentNamePrefix = "ExpansionsFederalAgent_";
+    private const string AgentIdPrefix = "expansions_fed_";
 
     /// <summary>
     /// Tagged by native pointer, not by a marker component. Registering a type with
@@ -43,6 +43,9 @@ internal static class FederalAgents
 
     private static readonly List<PendingSpawn> Pending = new();
     private static readonly List<object> Live = new();
+
+    /// <summary>Where each posted agent is supposed to be standing. Empty for a pursuit team.</summary>
+    private static readonly Dictionary<IntPtr, Vector3> Posts = new();
 
     private static int _nextProvisionalObjectId = 30000;
 
@@ -94,8 +97,13 @@ internal static class FederalAgents
     /// <summary>
     /// Requests agents. Returns how many were queued, which is zero whenever the pillar is not viable
     /// — the caller treats that as "no federal event happened", never as an error.
+    /// <para>
+    /// <paramref name="postPosition"/> is what separates a chase from a stakeout. With a post, the
+    /// agents never start a pursuit: they walk to the spot and stay there, and because an outlawed
+    /// player is always eligible to be investigated and searched, walking past them is the event.
+    /// </para>
     /// </summary>
-    internal static int Spawn(int count, Vector3 position, string targetPlayerCode)
+    internal static int Spawn(int count, Vector3 position, string targetPlayerCode, Vector3? postPosition = null)
     {
         if (!HostGate.IsAuthority)
             return 0;
@@ -109,18 +117,47 @@ internal static class FederalAgents
         var queued = 0;
         for (var i = 0; i < count; i++)
         {
-            var officer = Create(position + (Vector3.right * (i * 1.2f)));
+            var offset = Vector3.right * (i * 1.2f);
+            var officer = Create(position + offset);
             if (officer is null)
                 continue;
 
-            Pending.Add(new PendingSpawn(officer, targetPlayerCode));
+            Pending.Add(new PendingSpawn(officer, targetPlayerCode, postPosition is { } post ? post + offset : null));
             queued++;
         }
 
         if (queued > 0)
-            PoliceLog.Msg($"Queued {queued} federal agent(s) via the {Status.Strategy} path.");
+        {
+            PoliceLog.Msg($"Queued {queued} federal agent(s) via the {Status.Strategy} path" +
+                          (postPosition is null ? " to pursue." : " to hold a position."));
+        }
 
         return queued;
+    }
+
+    /// <summary>
+    /// Keeps posted agents on their post. Called from the minute tick, because an NPC that finishes a
+    /// walk simply stands there and the game's idle behaviours will eventually wander it off.
+    /// </summary>
+    internal static void HoldPosts()
+    {
+        if (Posts.Count == 0)
+            return;
+
+        foreach (var (pointer, post) in Posts)
+        {
+            var officer = FindLive(pointer);
+            if (officer is null)
+                continue;
+
+            var here = Components.TransformOf(officer)?.position;
+            if (here is null || (here.Value - post).sqrMagnitude < 9f)
+                continue;
+
+            var movement = Members.ReadPath(officer, "Movement");
+            if (movement is not null)
+                Members.Invoke(movement, "SetDestination", post);
+        }
     }
 
     /// <summary>
@@ -173,9 +210,21 @@ internal static class FederalAgents
 
         Live.Clear();
         Tagged.Clear();
+        Posts.Clear();
 
         if (removed > 0)
             PoliceLog.Msg($"Withdrew {removed} federal agent(s).");
+    }
+
+    private static object? FindLive(IntPtr pointer)
+    {
+        foreach (var officer in Live)
+        {
+            if (Components.PointerOf(officer) == pointer && GameReflection.IsPresent(officer))
+                return officer;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -187,6 +236,7 @@ internal static class FederalAgents
         Pending.Clear();
         Live.Clear();
         Tagged.Clear();
+        Posts.Clear();
         Status = Viability.Unknown;
     }
 
@@ -210,11 +260,19 @@ internal static class FederalAgents
                 return null;
 
             // Cloning while inactive keeps the donor's Awake from running twice on the copy before
-            // its network identity has been rebuilt.
+            // its network identity has been rebuilt. The finally is not decoration: a throw between
+            // the two calls would leave a real officer switched off for the rest of the session,
+            // which is one more permanently missing policeman.
             var wasActive = donorObject.activeSelf;
             donorObject.SetActive(false);
-            clone = Object.Instantiate(donorObject, position, Quaternion.identity);
-            donorObject.SetActive(wasActive);
+            try
+            {
+                clone = Object.Instantiate(donorObject, position, Quaternion.identity);
+            }
+            finally
+            {
+                donorObject.SetActive(wasActive);
+            }
         }
 
         if (clone is not GameObject gameObject)
@@ -223,7 +281,7 @@ internal static class FederalAgents
         gameObject.name = AgentNamePrefix + Guid.NewGuid().ToString("N")[..8];
 
         var officerType = GameReflection.FindType(GameTypes.PoliceOfficer);
-        var officer = officerType is null ? null : GetComponent(gameObject, officerType);
+        var officer = officerType is null ? null : Components.Get(gameObject, officerType);
         if (officer is null)
         {
             Object.Destroy(gameObject);
@@ -233,7 +291,88 @@ internal static class FederalAgents
         if (officer is Il2CppObjectBase native)
             Tagged.Add(native.Pointer);
 
+        // Must run while inactive and before Activate: Awake/registry lookup keys off ID, and a shared
+        // NPCData reference would rename the donor (or make GetNPC return this clone as that person).
+        if (!Reidentify(officer))
+        {
+            PoliceLog.Warn("Federal agent clone could not be re-identified; abandoning it rather than leaking a donor id.");
+            if (officer is Il2CppObjectBase tagged)
+                Tagged.Remove(tagged.Pointer);
+            Object.Destroy(gameObject);
+            return null;
+        }
+
         return officer;
+    }
+
+    /// <summary>
+    /// Gives the agent its own <c>NPCData</c>, id, display name and GUID so nothing attributes the
+    /// clone to a civilian or to the donor officer.
+    /// </summary>
+    private static bool Reidentify(object officer)
+    {
+        var npcData = Members.ReadPath(officer, "NPCData");
+        if (npcData is null)
+            return false;
+
+        // Never mutate npcData in place: the clone may still share the donor's runtime NPCData, and
+        // writing ID there is exactly how a federal spawn renamed a civilian in playtest.
+        var copy = Members.InvokeFor(npcData, "GetDeepCopy");
+        if (copy is null || ReferenceEquals(copy, npcData))
+            return false;
+
+        var basic = Members.ReadPath(copy, "BasicInfo");
+        if (basic is null)
+            return false;
+
+        var token = Guid.NewGuid().ToString("N")[..8];
+        var id = AgentIdPrefix + token;
+
+        if (!Members.TryWrite(basic, "ID", id))
+            return false;
+
+        Members.TryWrite(basic, "FirstName", "Federal");
+        Members.TryWrite(basic, "HasLastName", true);
+        Members.TryWrite(basic, "LastName", "Agent");
+
+        if (!Members.Invoke(officer, "ApplyNPCData", copy))
+            return false;
+
+        Members.TryWrite(officer, "BakedGUID", Guid.NewGuid().ToString("D"));
+        TrySetNewGuid(officer);
+
+        // Clones must never open a message thread under any name — Dispatch owns all texts.
+        Members.TryWrite(officer, "MSGConversation", null);
+
+        PoliceLog.Detail($"Federal agent re-identified as '{id}'.");
+        return true;
+    }
+
+    private static void TrySetNewGuid(object officer)
+    {
+        try
+        {
+            var guidType = GameReflection.FindType("Il2CppSystem.Guid");
+            if (guidType is null)
+                return;
+
+            object? boxed = null;
+            foreach (var method in guidType.GetMethods(BindingFlags.Public | BindingFlags.Static))
+            {
+                if (method.Name != "Parse" || method.GetParameters().Length != 1)
+                    continue;
+
+                boxed = method.Invoke(null, new object[] { Guid.NewGuid().ToString("D") });
+                break;
+            }
+
+            if (boxed is not null)
+                Members.Invoke(officer, "SetGUID", boxed);
+        }
+        catch (Exception ex)
+        {
+            PoliceLog.Detail($"SetGUID on a federal agent failed: {PoliceLog.Describe(ex)}");
+        }
     }
 
     private static void Finalise(PendingSpawn pending)
@@ -258,11 +397,25 @@ internal static class FederalAgents
 
         Members.Invoke(officer, "Activate");
 
-        if (pending.TargetPlayerCode.Length > 0)
+        if (pending.PostPosition is { } post)
+        {
+            Posts[Components.PointerOf(officer)] = post;
+
+            var movement = Members.ReadPath(officer, "Movement");
+            if (movement is not null)
+                Members.Invoke(movement, "SetDestination", post);
+        }
+        else if (pending.TargetPlayerCode.Length > 0)
+        {
+            // includeColleagues: false — a federal agent dragging the local PD into every call is
+            // exactly the "why is the whole town chasing me" complaint this pillar has to avoid.
             Members.Invoke(officer, "BeginFootPursuit_Networked", pending.TargetPlayerCode, false);
+        }
 
         Live.Add(officer);
-        PoliceLog.Msg($"Federal agent active and tracking '{pending.TargetPlayerCode}'.");
+        PoliceLog.Msg(pending.PostPosition is null
+            ? $"Federal agent active and tracking '{pending.TargetPlayerCode}'."
+            : "Federal agent active and holding a position.");
 
         try
         {
@@ -359,7 +512,10 @@ internal static class FederalAgents
         try
         {
             if (officer is Il2CppObjectBase native)
+            {
                 Tagged.Remove(native.Pointer);
+                Posts.Remove(native.Pointer);
+            }
 
             Members.Invoke(officer, "Deactivate");
 
@@ -464,32 +620,10 @@ internal static class FederalAgents
         return null;
     }
 
-    private static object? GetComponent(GameObject gameObject, Type componentType)
-    {
-        try
-        {
-            var component = gameObject.GetComponent(Il2CppInterop.Runtime.Il2CppType.From(componentType));
-            if (!GameReflection.IsPresent(component))
-                return null;
-
-            // GetComponent hands back a wrapper typed as Component; rebuilding it through the
-            // interop type's IntPtr constructor is what makes the derived members reflectable.
-            return Activator.CreateInstance(componentType, component!.Pointer);
-        }
-        catch (Exception ex)
-        {
-            PoliceLog.Detail($"GetComponent<{componentType.Name}> failed: {PoliceLog.Describe(ex)}");
-            return null;
-        }
-    }
-
     private static object? GetComponentByName(object officer, string typeName)
     {
         var type = GameReflection.FindType(typeName);
-        if (type is null || Members.ReadPath(officer, "gameObject") is not GameObject gameObject)
-            return null;
-
-        return GetComponent(gameObject, type);
+        return type is null ? null : Components.Get(Components.GameObjectOf(officer), type);
     }
 
     /// <summary>
@@ -528,7 +662,10 @@ internal static class FederalAgents
             Reason = reason;
         }
 
-        internal static Viability Unknown { get; } = new(false, SpawnStrategy.None, "not surveyed yet");
+        internal static Viability Unknown { get; } = new(
+            false,
+            SpawnStrategy.None,
+            "this build has not been surveyed yet - that happens on the first gameplay scene");
 
         internal bool CanSpawn { get; }
 
@@ -540,15 +677,19 @@ internal static class FederalAgents
 
     private sealed class PendingSpawn
     {
-        internal PendingSpawn(object officer, string targetPlayerCode)
+        internal PendingSpawn(object officer, string targetPlayerCode, Vector3? postPosition)
         {
             Officer = officer;
             TargetPlayerCode = targetPlayerCode;
+            PostPosition = postPosition;
         }
 
         internal object Officer { get; }
 
         internal string TargetPlayerCode { get; }
+
+        /// <summary>Set for a stakeout; null for a pursuit team.</summary>
+        internal Vector3? PostPosition { get; }
 
         internal int Frames { get; set; }
     }

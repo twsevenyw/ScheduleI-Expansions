@@ -47,6 +47,12 @@ internal sealed class Visit
     /// <summary>Bounded so a leader the game will never accept an offer from is not retried hourly.</summary>
     internal int OfferAttempts { get; set; }
 
+    /// <summary>
+    /// Seeds every member's appearance. Fixed for the whole visit and written to the save, so the
+    /// group is the same six faces across a reload and a different six next time they come.
+    /// </summary>
+    internal int AppearanceSeed { get; private set; }
+
     internal long DepartureStamp => GameClock.Stamp(DepartureDay, DepartureTime);
 
     internal long OrderStamp => GameClock.Stamp(ArrivalDay, OrderTime);
@@ -85,13 +91,15 @@ internal sealed class Visit
         int leaderSlot,
         int arrivalDay,
         int arrivalTime,
-        int departureTime)
+        int departureTime,
+        int appearanceSeed)
     {
         var visit = new Visit(archetype, region, locationGuid, locationName, standPoint, memberSlots, leaderSlot)
         {
             ArrivalDay = arrivalDay,
             ArrivalTime = arrivalTime,
             DepartureTime = departureTime,
+            AppearanceSeed = NonZero(appearanceSeed, arrivalDay),
         };
 
         // A departure time later in the day than the arrival is the same day; anything earlier —
@@ -131,8 +139,16 @@ internal sealed class Visit
             DepartureTime = data.DepartureTime,
             OfferSent = data.OfferSent,
             OfferAttempts = data.OfferAttempts,
+            AppearanceSeed = NonZero(data.AppearanceSeed, data.ArrivalDay),
         };
     }
+
+    /// <summary>
+    /// A save written before appearance randomisation carries no seed. Deriving one from the arrival
+    /// day keeps that group stable for the rest of its stay rather than re-rolling every reload.
+    /// </summary>
+    private static int NonZero(int seed, int arrivalDay) =>
+        seed != 0 ? seed : unchecked(((arrivalDay * -1640531527) ^ 0x5f37) | 1);
 
     internal ActiveVisitData ToSave() => new()
     {
@@ -147,6 +163,7 @@ internal sealed class Visit
         DepartureTime = DepartureTime,
         OfferSent = OfferSent,
         OfferAttempts = OfferAttempts,
+        AppearanceSeed = AppearanceSeed,
     };
 
     private static DeliveryLocation? ResolveLocation(string? guid)

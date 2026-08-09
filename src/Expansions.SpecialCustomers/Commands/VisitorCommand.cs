@@ -1,7 +1,9 @@
 using Expansions.Core;
 using Expansions.SpecialCustomers.Archetypes;
+using Expansions.SpecialCustomers.Configuration;
 using Expansions.SpecialCustomers.Detection;
 using Expansions.SpecialCustomers.Visitors;
+using Expansions.SpecialCustomers.Visits;
 using S1API.Console;
 using S1API.Entities;
 using UnityEngine;
@@ -32,7 +34,7 @@ public sealed class VisitorCommand : BaseConsoleCommand
         "Reports on the Special Customers visitor pool and the group currently in town, and moves you to them.";
 
     public override string ExampleUsage =>
-        "scvisitor  |  scvisitor tp  |  scvisitor group  |  scvisitor visit bikers  |  scvisitor offer  |  scvisitor detect";
+        "scvisitor  |  scvisitor tp  |  scvisitor group  |  scvisitor visit bikers  |  scvisitor offer  |  scvisitor products  |  scvisitor posts";
 
     /// <summary>Arrives without the command word; S1API strips it before dispatch.</summary>
     public override void ExecuteCommand(List<string> args)
@@ -67,6 +69,14 @@ public sealed class VisitorCommand : BaseConsoleCommand
 
             case "park":
                 Park();
+                return;
+
+            case "posts":
+                Posts();
+                return;
+
+            case "products":
+                Products();
                 return;
 
             case "group":
@@ -174,23 +184,77 @@ public sealed class VisitorCommand : BaseConsoleCommand
 
     private void Park()
     {
-        var slot = VisitorSlot.Primary;
-
         if (!HostGate.Evaluate(out var authority))
         {
             Fail($"Only the host may move an NPC ({authority}). Ask the host to run this.");
             return;
         }
 
-        var npc = VisitorRuntime.Resolve(slot);
-        if (npc is null)
+        var busy = SpecialCustomersModule.Director?.Current?.MemberSlots ?? (IReadOnlyList<int>)Array.Empty<int>();
+        var parked = 0;
+
+        foreach (var slot in VisitorSlot.All)
         {
-            Fail($"{slot.Id} is not in the world, so there is nothing to park. Run 'expprobe sc'.");
+            if (busy.Contains(slot.Index) || VisitorRuntime.Resolve(slot) is null)
+                continue;
+
+            Congregation.Park(slot);
+            parked++;
+        }
+
+        if (parked == 0)
+        {
+            Fail("No idle visitor is in the world, so there is nothing to park. Run 'expprobe sc'.");
             return;
         }
 
-        npc.Movement.Warp(slot.SpawnPosition);
-        Say($"Warped {slot.FullName} back to {Describe.Of(slot.SpawnPosition)}.");
+        Say($"Put {parked} idle visitor(s) back on the post at {Describe.Of(VisitorSlot.Primary.SpawnPosition)} and pinned their schedules.");
+    }
+
+    private void Posts()
+    {
+        foreach (var slot in VisitorSlot.All)
+        {
+            var status = VisitorRuntime.StatusOf(slot);
+            if (!status.WrapperResolved)
+            {
+                Say($"  {slot.Index:00} {slot.FullName,-20} missing — {status.Failure}");
+                continue;
+            }
+
+            var post = slot.SpawnPosition;
+            var horizontal = new Vector2(status.Position.x - post.x, status.Position.z - post.z).magnitude;
+            var state = PostWatch.StateOf(slot);
+
+            Say($"  {slot.Index:00} {slot.FullName,-20} {Describe.Metres(horizontal)} from post, " +
+                $"{(status.Position.y - post.y):+0.#;-0.#} m vertical, pinned={Describe.YesNo(state.Pinned)}, " +
+                $"re-parked {state.Corrections}x");
+        }
+
+        Say($"{PostWatch.PinnedCount} of {VisitorSlot.Count} visitor schedules are pinned; " +
+            $"{PostWatch.TotalCorrections} correction(s) this session.");
+    }
+
+    private void Products()
+    {
+        var resolution = ProductAllowList.Current(forceRefresh: true);
+
+        Say($"{ProductAllowList.ConfigKey} = {(resolution.ConfiguredText.Length > 0 ? resolution.ConfiguredText : "(empty)")}");
+
+        if (!resolution.IsRestricted)
+        {
+            Say("The list is empty, so groups may order anything you have listed for sale.");
+            return;
+        }
+
+        foreach (var match in resolution.Matched)
+            Say($"  OK   {match.RequestedName} -> {match.Product.Name} (matched on {match.MatchedOn})");
+
+        foreach (var miss in resolution.Unmatched)
+            Say($"  MISS {miss} — no product on this save has that name or id.");
+
+        if (resolution.Matched.Count == 0)
+            Fail(resolution.BlockingReason + ".");
     }
 
     private void Visit(string archetypeId)
@@ -259,7 +323,9 @@ public sealed class VisitorCommand : BaseConsoleCommand
     {
         Say($"{CommandWord}              pool status plus whichever group is in town");
         Say($"{CommandWord} tp           teleport to the group, or to the scout when nobody is visiting");
-        Say($"{CommandWord} park         host only: warp the scout back to his post");
+        Say($"{CommandWord} park         host only: put every idle visitor back on their post");
+        Say($"{CommandWord} posts        how far each visitor has drifted, and whether they are pinned");
+        Say($"{CommandWord} products     the product allow-list and what each name resolved to");
         Say($"{CommandWord} group        just the group state");
         Say($"{CommandWord} visit [id]   host only: start a visit now ({string.Join(", ", ArchetypeCatalog.All.Select(a => a.Id))})");
         Say($"{CommandWord} offer        host only: send the group's bulk offer now");

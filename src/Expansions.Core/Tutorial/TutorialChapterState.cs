@@ -14,4 +14,11 @@ public enum TutorialChapterState
 
     /// <summary>Switched off, so the director steps over it without recording anything.</summary>
     Skipped,
+
+    /// <summary>
+    /// On, but the thing it teaches is not reachable yet — the mod is off, the module has stood
+    /// itself down, or the world is not in the right state. The line plays on past it and comes back
+    /// when the chapter says it is ready; it is never ticked off on the player's behalf.
+    /// </summary>
+    Unavailable,
 }

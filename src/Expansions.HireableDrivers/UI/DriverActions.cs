@@ -7,17 +7,16 @@ using Expansions.HireableDrivers.Runtime;
 namespace Expansions.HireableDrivers.UI;
 
 /// <summary>
-/// The secondary driver surface.
+/// What is left of the mod's own surface once management moved onto the game.
 /// <para>
-/// Hiring happens at the employee-hiring NPC and routes are edited on the management clipboard, the
-/// same as every other employee. What is left here is the handful of things the in-world UI cannot
-/// express: a destination on the far side of town that you cannot point at, a dealer (which is not an
-/// <c>ITransitEntity</c> at all), the departure threshold (which has no vanilla field), and the
-/// roster-wide verbs.
+/// Drivers are hired on the employee fixer's dialogue, housed and routed on the management clipboard,
+/// and told about vehicles and departure size in conversation. None of that is here, and none of it is
+/// duplicated here — two ways to set the same thing is how a mod stops feeling like part of the game.
 /// </para>
 /// <para>
-/// Everything that has a clipboard equivalent writes through to the vanilla
-/// <c>PackagerConfiguration.Routes</c>, so the two surfaces can never disagree.
+/// What is here is diagnostics, plus a small set of repair paths that stay hidden while the native
+/// surface they replace is working. Each one is offered only with the concrete reason the native path
+/// is unavailable, never as a generic alternative.
 /// </para>
 /// </summary>
 internal static class DriverActions
@@ -31,18 +30,12 @@ internal static class DriverActions
         var actions = new[]
         {
             Diagnostics(),
+            Status(),
             HireFallback(),
             SelectDriverPicker(),
             RouteSlotPicker(),
-            SourcePicker(),
-            DestinationPicker(),
-            ThresholdPicker(),
-            VehiclePicker(),
-            QuickRoute(),
-            RunNow(),
-            ClearRoutes(),
-            Status(),
-            FirePicker(),
+            DestinationFallback(),
+            ForgetOrphan(),
         };
 
         lifetime.Add(ActionRegistry.RegisterAll(actions));
@@ -52,19 +45,38 @@ internal static class DriverActions
         DriverLog.Debug($"Registered {Registered} of {actions.Length} menu action(s).");
     }
 
-    // ── Actions ─────────────────────────────────────────────────────────────────────────────────
+    /// <summary><c>panel_hotkey = None</c> turns the diagnostic panel's key off; say so rather than "None".</summary>
+    private static string Hotkey(string withKey, string withoutKey) =>
+        DriverSettings.PanelHotkey == UnityEngine.KeyCode.None
+            ? withoutKey
+            : string.Format(withKey, DriverSettings.PanelHotkey);
+
+    // ── Diagnostics ─────────────────────────────────────────────────────────────────────────────
 
     private static ExpansionAction Diagnostics() => new(
         id: Prefix + "panel",
         label: "Open the drivers diagnostic panel",
-        description: $"Read-only: who is hired, what each one is doing and why. Also opens with {DriverSettings.PanelHotkey} in-game. Hiring and routes live on the clipboard.",
+        description:
+            "Read-only: who is hired, what each one is doing and why they are not doing something else. " +
+            Hotkey("Also opens with {0} in-game. ", "The hotkey is switched off. ") +
+            "Hiring, beds and routes all live on the game's own screens.",
         isAvailable: () => ActionAvailability.Ready,
         invoke: () =>
         {
             DriverPanel.Open();
-            return ActionResult.Ok($"Diagnostics open. Press {DriverSettings.PanelHotkey} or Escape to close.");
+            return ActionResult.Ok("Diagnostics open. " + Hotkey("Press {0} or Escape to close.", "Press Escape to close."));
         },
         order: 0);
+
+    private static ExpansionAction Status() => new(
+        id: Prefix + "status",
+        label: "Show the driver roster",
+        description: "Who is hired, what they are doing, which transport path is in use, and whether any of it is persisting.",
+        isAvailable: () => ActionAvailability.Ready,
+        invoke: Describe,
+        order: 10);
+
+    // ── Repair paths ────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
     /// Only offered when the dialogue hook did not take. Hiring belongs at the hiring NPC, and an
@@ -72,14 +84,22 @@ internal static class DriverActions
     /// </summary>
     private static ExpansionAction HireFallback() => new(
         id: Prefix + "hire",
-        label: "Hire a driver (fallback)",
-        description: "Only needed if the mod could not add \"Hire a driver\" to the employee-hiring NPC on this build.",
+        label: "Hire a driver (repair path)",
+        description:
+            "Only appears when the mod could not put \"Hire a driver\" on the employee-hiring NPC. " +
+            "The exact reason is on the diagnostic panel and in the `drivers.hiring_desk` probe.",
         isAvailable: () =>
         {
             if (HiringDesk.IsAttached)
                 return ActionAvailability.Unavailable($"hire drivers at {HiringDesk.Location}, with the rest of your staff");
 
-            return HostOnly();
+            if (!HostGate.Evaluate(out var authority))
+                return ActionAvailability.Unavailable($"drivers are host-managed and this peer is a {authority}");
+
+            if (HiringDesk.LastFailure.Length == 0)
+                return ActionAvailability.Unavailable("still looking for the employee-hiring NPC in this scene");
+
+            return ActionAvailability.Ready;
         },
         choices: () => DriverHiring.Candidates()
             .Select(property => new ActionChoice(
@@ -102,13 +122,13 @@ internal static class DriverActions
             DriverSelection.Select(brain?.Record.EmployeeId ?? string.Empty);
             return ActionResult.Ok(message);
         },
-        order: 10);
+        order: 20);
 
     private static ExpansionAction SelectDriverPicker() => new(
         id: Prefix + "select",
-        label: "Choose which driver these actions apply to",
-        description: "Only needed for the actions below; the clipboard always edits whoever you pointed it at.",
-        isAvailable: NeedsDriver,
+        label: "Choose which driver the repair paths apply to",
+        description: "Only needed while the clipboard's own drop-off list is unavailable.",
+        isAvailable: NeedsFallbackPicker,
         choices: DriverChoices,
         invokeChoice: choice =>
         {
@@ -118,13 +138,13 @@ internal static class DriverActions
                 ? ActionResult.Failed("That driver is no longer on the roster.")
                 : ActionResult.Ok($"Configuring {driver.Name}. {driver.StatusNote}");
         },
-        order: 20);
+        order: 30);
 
     private static ExpansionAction RouteSlotPicker() => new(
         id: Prefix + "route_slot",
-        label: "Choose which route row to edit",
-        description: "The same five rows the clipboard shows, run top to bottom, first one with work wins.",
-        isAvailable: NeedsDriver,
+        label: "Choose which route row the repair paths edit",
+        description: "The same rows the clipboard shows, run top to bottom, first one with work wins.",
+        isAvailable: NeedsFallbackPicker,
         choices: () =>
         {
             var driver = DriverSelection.Driver;
@@ -148,35 +168,19 @@ internal static class DriverActions
             DriverSelection.RouteSlot = slot;
             return ActionResult.Ok($"Editing route {slot + 1}.");
         },
-        order: 30);
-
-    private static ExpansionAction SourcePicker() => new(
-        id: Prefix + "route_source",
-        label: "Set the route's pickup",
-        description: "Only storage at the property the driver was hired to — that constraint is enforced on the data, not just here.",
-        isAvailable: NeedsRoute,
-        choices: () =>
-        {
-            var driver = DriverSelection.Driver;
-            if (driver is null)
-                return Array.Empty<ActionChoice>();
-
-            return EndpointCatalog.Sources
-                .Where(endpoint => ClipboardRoutes.IsSourceAllowed(driver, EndpointRef.For(endpoint)))
-                .Select(endpoint => new ActionChoice(
-                    endpoint.Key,
-                    endpoint.Label,
-                    $"{endpoint.PropertyLabel} · {TransitApi.Available(endpoint.Transit).Sum(a => a.Quantity)} held"))
-                .ToArray();
-        },
-        invokeChoice: choice => SetEndpoint(choice, isSource: true),
         order: 40);
 
-    private static ExpansionAction DestinationPicker() => new(
+    /// <summary>
+    /// The drop-off list, duplicated here only for the case where the clipboard's own list screen could
+    /// not be reached. It writes to the same place the clipboard does.
+    /// </summary>
+    private static ExpansionAction DestinationFallback() => new(
         id: Prefix + "route_destination",
-        label: "Set the route's drop-off",
-        description: "Anywhere you own, or a recruited dealer. This is the surface for destinations you cannot walk up to and click on the clipboard.",
-        isAvailable: NeedsRoute,
+        label: "Set a route's drop-off (repair path)",
+        description:
+            "Only appears when the clipboard's drop-off button could not be given its list of destinations. " +
+            "The exact reason is on the diagnostic panel and in the `drivers.native_surfaces` probe.",
+        isAvailable: NeedsFallbackPicker,
         choices: () => EndpointCatalog.Destinations
             .Select(endpoint => new ActionChoice(
                 endpoint.Kind + ":" + endpoint.Key,
@@ -185,220 +189,47 @@ internal static class DriverActions
                     ? $"dealer · holds {DealerApi.HeldItems(endpoint.Dealer)}/{DriverSettings.DealerTopUpCap}"
                     : endpoint.PropertyLabel))
             .ToArray(),
-        invokeChoice: choice => SetEndpoint(choice, isSource: false),
+        invokeChoice: SetDestination,
         order: 50);
 
-    private static ExpansionAction ThresholdPicker() => new(
-        id: Prefix + "route_threshold",
-        label: "Set the departure threshold",
-        description: "How many items must be aboard before the vehicle leaves. No vanilla field carries this, so it lives here.",
-        isAvailable: NeedsRoute,
-        choices: () => new[]
+    /// <summary>
+    /// A record whose employee is not in the save can never be fired through the game, because there is
+    /// nobody to talk to. This is the only way to clear one.
+    /// </summary>
+    private static ExpansionAction ForgetOrphan() => new(
+        id: Prefix + "forget",
+        label: "Forget an orphaned driver record",
+        description: "For a driver the save no longer contains. Living drivers are fired by talking to them, like any employee.",
+        isAvailable: () =>
         {
-            new ActionChoice("0", "Automatic", $"{DriverSettings.DepartThresholdPercent}% of the trunk"),
-            new ActionChoice("5", "5 items", "leaves almost immediately"),
-            new ActionChoice("10", "10 items", string.Empty),
-            new ActionChoice("20", "20 items", string.Empty),
-            new ActionChoice("40", "40 items", string.Empty),
-            new ActionChoice("80", "80 items", "a full Veeper"),
+            var orphans = DriverRegistry.Drivers.Count(d => d.Employee is null);
+            return orphans > 0
+                ? ActionAvailability.Ready
+                : ActionAvailability.Unavailable("every driver record still has its employee; fire a driver by talking to them");
         },
-        invokeChoice: choice =>
-        {
-            var route = DriverSelection.Route;
-            if (route is null)
-                return ActionResult.Failed("No route row selected.");
-
-            if (!int.TryParse(choice.Id, out var units))
-                return ActionResult.Failed("That is not a threshold.");
-
-            route.DepartAtUnits = units;
-            return ActionResult.Ok($"Route {DriverSelection.RouteSlot + 1} departs at {(units == 0 ? "half a load" : units + " items")}.");
-        },
-        order: 60);
-
-    private static ExpansionAction VehiclePicker() => new(
-        id: Prefix + "vehicle",
-        label: "Assign a vehicle",
-        description: "The cargo rides in the trunk, so trunk size is the driver's capacity. Vehicles without a working AI still work — they relay instead of driving.",
-        isAvailable: NeedsDriver,
-        choices: () =>
-        {
-            var choices = new List<ActionChoice>
-            {
-                new("none", "No vehicle", "the driver will refuse to work until it has one"),
-            };
-
-            foreach (var vehicle in VehicleAssignment.Candidates())
-            {
-                var drivable = VehicleApi.CanSelfDrive(vehicle, out _) ? "drives itself" : "relay only";
-                choices.Add(new ActionChoice(
-                    VehicleApi.Guid(vehicle),
-                    VehicleApi.Name(vehicle),
-                    $"{VehicleApi.SlotCount(vehicle)} trunk slots · {drivable} · {VehicleApi.Code(vehicle)}"));
-            }
-
-            return choices;
-        },
-        invokeChoice: choice =>
-        {
-            var driver = DriverSelection.Driver;
-            if (driver is null)
-                return ActionResult.Failed("No drivers hired.");
-
-            if (string.Equals(choice.Id, "none", StringComparison.Ordinal))
-            {
-                VehicleAssignment.Release(driver.Record.VehicleGuid, driver.Record.EmployeeId);
-                driver.Record.VehicleGuid = string.Empty;
-                return ActionResult.Ok($"{driver.Name} has no vehicle and will not work until you give them one.");
-            }
-
-            driver.Record.VehicleGuid = choice.Id;
-            driver.Record.SpawnedVehicle = false;
-            driver.RequestStart();
-            return ActionResult.Ok($"{driver.Name} will drive the {choice.Label}.");
-        },
-        order: 70);
-
-    private static ExpansionAction QuickRoute() => new(
-        id: Prefix + "quick_route",
-        label: "Assign a route automatically",
-        description: "Fills route 1 from the fullest store at the driver's own property and sends it somewhere sensible, then writes it onto the clipboard.",
-        isAvailable: HostOnlyWithDriver,
-        invoke: BuildQuickRoute,
-        order: 80);
-
-    private static ExpansionAction RunNow() => new(
-        id: Prefix + "run_now",
-        label: "Start a run now",
-        description: "Drops the retry cooldown on every driver so they re-plan on the next tick instead of waiting out a threshold.",
-        isAvailable: HostOnlyWithDriver,
-        invoke: () =>
-        {
-            var drivers = DriverRegistry.Drivers;
-            foreach (var driver in drivers)
-                driver.RequestStart();
-
-            return ActionResult.Ok($"{drivers.Count} driver(s) will re-plan on the next tick.");
-        },
-        order: 90);
-
-    private static ExpansionAction ClearRoutes() => new(
-        id: Prefix + "clear_routes",
-        label: "Clear every route",
-        description: "Blanks all route rows on every driver, on the clipboard too. Anything already in a trunk is delivered first.",
-        isAvailable: NeedsDriver,
-        invoke: () =>
-        {
-            var cleared = 0;
-
-            foreach (var driver in DriverRegistry.Drivers)
-            {
-                for (var i = 0; i < driver.Record.Routes.Count; i++)
-                {
-                    if (!driver.Record.Routes[i].IsComplete)
-                        continue;
-
-                    driver.Record.Routes[i] = new Persistence.DriverRoute();
-                    cleared++;
-                }
-
-                ClipboardRoutes.Push(driver);
-            }
-
-            return cleared == 0
-                ? ActionResult.NoChange("There were no routes to clear.")
-                : ActionResult.Ok($"Cleared {cleared} route(s).");
-        },
-        order: 100);
-
-    private static ExpansionAction Status() => new(
-        id: Prefix + "status",
-        label: "Show the driver roster",
-        description: "Who is hired, what they are doing, which transport path is in use, and whether any of it is persisting.",
-        isAvailable: () => ActionAvailability.Ready,
-        invoke: Describe,
-        order: 110);
-
-    private static ExpansionAction FirePicker() => new(
-        id: Prefix + "fire",
-        label: "Fire a driver",
-        description: "Ends the contract through the vanilla path. Anything in the trunk stays in the trunk — it is your van.",
-        isAvailable: HostOnlyWithDriver,
-        choices: DriverChoices,
+        choices: () => DriverRegistry.Drivers
+            .Where(driver => driver.Employee is null)
+            .Select(driver => new ActionChoice(
+                driver.Record.EmployeeId,
+                driver.Name,
+                $"hired at {driver.Record.HomePropertyCode}, {driver.Record.CompletedTrips} trip(s), no employee in this save"))
+            .ToArray(),
         invokeChoice: choice =>
         {
             var driver = DriverRegistry.Find(choice.Id);
             if (driver is null)
-                return ActionResult.Failed("That driver is no longer on the roster.");
+                return ActionResult.Failed("That record is already gone.");
 
-            var message = DriverHiring.Fire(driver);
-            DriverPanel.Say(message);
-            return ActionResult.Ok(message);
+            if (driver.Employee is not null)
+                return ActionResult.Failed($"{driver.Name} is in the world — talk to them and pick Fire.");
+
+            var name = driver.Name;
+            DriverRegistry.Unregister(choice.Id);
+            return ActionResult.Ok($"Forgot the record for {name}.");
         },
-        order: 120);
+        order: 60);
 
     // ── Bodies shared with the panel ────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Builds a plausible route with no input: the fullest store at the driver's own property (the only
-    /// place it is allowed to collect from) and a destination that is neither the same entity nor the
-    /// same property when there is a choice, so the result is a real haul rather than a no-op.
-    /// </summary>
-    internal static ActionResult BuildQuickRoute()
-    {
-        var driver = DriverRegistry.Drivers.FirstOrDefault(d => !d.Record.Routes.Any(r => r.IsComplete))
-                     ?? DriverSelection.Driver;
-
-        if (driver is null)
-            return ActionResult.Failed("No drivers hired.");
-
-        EndpointCatalog.Refresh();
-
-        var source = EndpointCatalog.Sources
-            .Where(endpoint => ClipboardRoutes.IsSourceAllowed(driver, EndpointRef.For(endpoint)))
-            .Select(endpoint => (Endpoint: endpoint, Stock: TransitApi.Available(endpoint.Transit).Sum(a => a.Quantity)))
-            .Where(pair => pair.Stock > 0)
-            .OrderByDescending(pair => pair.Stock)
-            .Select(pair => pair.Endpoint)
-            .FirstOrDefault();
-
-        if (source is null)
-        {
-            return ActionResult.Failed(
-                $"Nothing at {ClipboardRoutes.HomeName(driver)} has anything in it to move, and a driver may only " +
-                "collect from the property it was hired at. Put some product on a shelf there first.");
-        }
-
-        var destination =
-            EndpointCatalog.Destinations.FirstOrDefault(e =>
-                e.Kind == EndpointKind.Storage &&
-                !string.Equals(e.Key, source.Key, StringComparison.OrdinalIgnoreCase) &&
-                !ReferenceEquals(e.OwningProperty, source.OwningProperty)) ??
-            EndpointCatalog.Destinations.FirstOrDefault(e => e.Kind == EndpointKind.Dealer) ??
-            EndpointCatalog.Destinations.FirstOrDefault(e =>
-                !string.Equals(e.Key, source.Key, StringComparison.OrdinalIgnoreCase));
-
-        if (destination is null)
-            return ActionResult.Failed("There is nowhere to deliver to yet.");
-
-        DriverStore.EnsureRouteSlots(driver.Record);
-        DriverSelection.Select(driver.Record.EmployeeId);
-        DriverSelection.RouteSlot = 0;
-
-        driver.Record.Routes[0] = new Persistence.DriverRoute
-        {
-            Source = EndpointRef.For(source),
-            Destination = EndpointRef.For(destination),
-            Enabled = true,
-        };
-
-        ClipboardRoutes.Push(driver);
-        driver.RequestStart();
-
-        var message = $"{driver.Name}: {source.Label} → {destination.Label}, anything, departing at half a load.";
-        DriverPanel.Say(message);
-        return ActionResult.Ok(message);
-    }
 
     internal static ActionResult Describe()
     {
@@ -438,7 +269,7 @@ internal static class DriverActions
             $"{driver.State} · {driver.StatusNote}"))
         .ToArray();
 
-    private static ActionResult SetEndpoint(ActionChoice choice, bool isSource)
+    private static ActionResult SetDestination(ActionChoice choice)
     {
         var driver = DriverSelection.Driver;
         var route = DriverSelection.Route;
@@ -458,57 +289,41 @@ internal static class DriverActions
             key = key[(separator + 1)..];
         }
 
-        var endpoint = (isSource ? EndpointCatalog.Sources : EndpointCatalog.Destinations)
+        var endpoint = EndpointCatalog.Destinations
             .FirstOrDefault(e => e.Kind == kind && string.Equals(e.Key, key, StringComparison.OrdinalIgnoreCase));
 
         if (endpoint is null)
             return ActionResult.Failed($"'{choice.Label}' is no longer there. Try again — the list has been rebuilt.");
 
-        var reference = EndpointRef.For(endpoint);
-
-        if (isSource)
-        {
-            if (!ClipboardRoutes.IsSourceAllowed(driver, reference))
-                return ActionResult.Failed($"{driver.Name} may only collect from {ClipboardRoutes.HomeName(driver)}.");
-
-            route.Source = reference;
-        }
-        else
-        {
-            route.Destination = reference;
-        }
-
+        route.Destination = EndpointRef.For(endpoint);
         ClipboardRoutes.Push(driver);
         driver.RequestStart();
 
         var slot = DriverSelection.RouteSlot + 1;
         return ActionResult.Ok(route.IsComplete
             ? $"Route {slot}: {route.Describe()}"
-            : $"Route {slot} {(isSource ? "collects from" : "delivers to")} {endpoint.Label}; set the other end next.");
+            : $"Route {slot} delivers to {endpoint.Label}; set its pickup on the clipboard next.");
     }
 
-    private static ActionAvailability HostOnly() =>
-        HostGate.Evaluate(out var authority)
-            ? ActionAvailability.Ready
-            : ActionAvailability.Unavailable($"drivers are host-managed and this peer is a {authority}");
-
-    private static ActionAvailability NeedsDriver() =>
-        DriverRegistry.Count > 0 ? ActionAvailability.Ready : ActionAvailability.Unavailable("no drivers hired yet");
-
-    private static ActionAvailability NeedsRoute()
+    /// <summary>
+    /// The repair pickers only exist while the clipboard's own drop-off list cannot be opened, and they
+    /// say exactly why they have appeared.
+    /// </summary>
+    private static ActionAvailability NeedsFallbackPicker()
     {
-        var needsDriver = NeedsDriver();
-        if (!needsDriver.IsAvailable)
-            return needsDriver;
+        if (!HostGate.Evaluate(out var authority))
+            return ActionAvailability.Unavailable($"drivers are host-managed and this peer is a {authority}");
 
-        return EndpointCatalog.Count > 0
-            ? ActionAvailability.Ready
-            : ActionAvailability.Unavailable("nothing on your properties can hold items yet");
+        if (RoutePicker.IsAvailable(out var reason))
+            return ActionAvailability.Unavailable("the clipboard's own drop-off list is working; use that");
+
+        if (DriverRegistry.Count == 0)
+            return ActionAvailability.Unavailable("no drivers hired yet");
+
+        LastPickerFailure = reason;
+        return ActionAvailability.Ready;
     }
 
-    private static ActionAvailability HostOnlyWithDriver()
-    {
-        var host = HostOnly();
-        return host.IsAvailable ? NeedsDriver() : host;
-    }
+    /// <summary>Why the repair pickers are showing, for the diagnostics panel and the probe.</summary>
+    internal static string LastPickerFailure { get; private set; } = string.Empty;
 }

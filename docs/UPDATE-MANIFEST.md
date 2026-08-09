@@ -2,8 +2,9 @@
 
 `update-manifest.json` is a release asset published alongside the distributable
 zip on every Schedule I Expansions release. It is the contract between the
-publishing side (`scripts/publish.ps1`) and the auto-updater inside
-`Expansions.Core`.
+publishing side (`scripts/publish.ps1`) and the updater, which is the
+`Expansions.Updater` MelonLoader plugin. How the client half works is
+[AUTO-UPDATE.md](AUTO-UPDATE.md).
 
 Machine-readable schema: [`docs/update-manifest.schema.json`](update-manifest.schema.json)
 (JSON Schema draft 2020-12).
@@ -99,16 +100,18 @@ per IP. Prefer the `releases/latest/download/` URL.
 | `name` | string | Display name. |
 | `version` | string | SemVer. |
 | `fileName` | string | Bare file name, no directory separators. |
-| `installDir` | string | `"Mods"` or `"UserLibs"`. |
+| `installDir` | string | `"Mods"`, `"Plugins"` or `"UserLibs"`. |
 | `sizeBytes` | integer | |
 | `sha256` | string | |
 
-Current ids — these match the module ids used in `Expansions.cfg`, except
-`expansions_core`, which is a library and has no module entry:
+Ids are derived from the assembly name when the release is packaged. Anything
+installed to `Mods` is a module and takes the module id used in
+`Expansions.cfg`; anything else is prefixed, because it has no module entry:
 
 | `id` | File | `installDir` |
 |---|---|---|
 | `expansions_core` | `Expansions.Core.dll` | `UserLibs` |
+| `expansions_updater` | `Expansions.Updater.dll` | `Plugins` |
 | `hireable_drivers` | `Expansions.HireableDrivers.dll` | `Mods` |
 | `police_overhaul` | `Expansions.PoliceOverhaul.dll` | `Mods` |
 | `special_customers` | `Expansions.SpecialCustomers.dll` | `Mods` |
@@ -116,8 +119,13 @@ Current ids — these match the module ids used in `Expansions.cfg`, except
 Note `police_overhaul` displays as "Police Improvements". Key off `id`, never
 off `name`.
 
-Do not hardcode this table. Iterate `mods[]` — a fifth mod can appear without a
-`schemaVersion` bump.
+Do not hardcode this table. Iterate `mods[]` — a new mod appears here with no
+`schemaVersion` bump and no change to the publisher, because the publisher
+discovers projects rather than listing them.
+
+`installDir` is also what tells a client whether the destination is already
+loaded. `UserLibs` and `Plugins` are loaded before the updater runs; `Mods` and
+the game root are not. See AUTO-UPDATE.md.
 
 ### `bundledDependencies[]`
 
@@ -135,39 +143,55 @@ always `""` (the game root). These are informational; overwriting them is safe.
 
 ---
 
-## Suggested client flow
+## Client flow
+
+This is what `Expansions.Updater` does. A third-party client should do the same.
 
 1. GET the `releases/latest/download/update-manifest.json` URL, following
-   redirects.
-2. Parse. If `schemaVersion != 1`, stop and tell the player to update manually.
-3. Compare `version` against the running suite version. SemVer compare, not
-   string compare — `1.10.0` is newer than `1.9.0`.
-4. If newer, show `changelog` and `releaseNotesUrl` and ask before downloading.
-5. Download `package.url`. Verify SHA-256 against `package.sha256`. **Abort on
-   mismatch** — do not extract.
-6. Extract to a temp directory. For each `mods[]` entry, verify the extracted
-   file's SHA-256 against its manifest entry.
-7. Stage the copies. Mod DLLs are locked while the game is running, so write
-   them on next launch (a `.pending` staging folder that `Expansions.Core`
-   drains during startup, before MelonLoader loads mods) or ask the player to
-   restart.
+   redirects, with a timeout. A 404 means no release is published; that is a
+   normal quiet state and must never be shown as an error.
+2. Parse. If `schemaVersion != 1`, stop. Ignore unknown *fields*.
+3. Compare per file, not per suite: resolve each `mods[]` entry against the
+   local install and compare `version` with the version stamped into the file on
+   disk. SemVer compare, not string compare — `1.10.0` is newer than `1.9.0`.
+   Build metadata (`+abc123`) is stripped, not compared.
+4. Download `package.url`. Verify SHA-256 against `package.sha256` **before
+   opening the archive**. Abort on mismatch.
+5. Extract only the declared files, verifying each one's size and SHA-256.
+   Anything in the zip that the manifest does not declare has no hash to check
+   it against and is not extracted.
+6. Do not install now. Leave the verified payload staged and install it at the
+   *start* of the next launch, from a MelonLoader plugin — plugins load before
+   mods, so that is the one moment a mod DLL is still an ordinary file.
+7. Re-verify every staged file's SHA-256 immediately before writing it, and
+   abort the whole update if any one fails.
 8. For `bundledDependencies[]` with `overwriteExisting: false`, install only if
    the destination file does not exist.
 
-Two things worth designing around, both already established in `CONTEXT.md`:
+Four things worth designing around, all established in `CONTEXT.md`:
 
 - **Never delete a mod DLL to "clean up".** Removing a DLL orphans that mod's
   NPC folders inside the player's saves. Replace in place; the rule for users is
   disable, don't delete.
-- The three mods may be present as `*.dll.disabled`. An updater that only looks
-  for `*.dll` will silently re-enable a mod the player turned off. Check for
-  both and preserve the suffix.
+- Any mod may be present as `*.dll.disabled`. An updater that only looks for
+  `*.dll` will silently re-enable a mod the player turned off. Check for both and
+  write to whichever exists.
+- Apply atomically. Keep the previous file until the new one is written and
+  verified, and undo every completed write if one fails.
+- `UserLibs` and `Plugins` files are already mapped by the time a plugin runs.
+  They can be moved aside but not overwritten, and the replacement only takes
+  effect next launch — so swap those on one launch and the mods on the next,
+  never both at once, or the session runs new mods against an old shared
+  library.
 
 ---
 
 ## Example
 
-Real output from `scripts/publish.ps1 -Version 1.2.2 -DryRun`:
+Real output from an earlier `scripts/publish.ps1 -DryRun`. The shape is current;
+the contents are not — `mods[]` now also carries `expansions_updater`
+(`Plugins/Expansions.Updater.dll`), and every entry a discovered project
+contributes. Run a dry run for today's version of this file.
 
 ```json
 {
@@ -289,6 +313,7 @@ Mods/Expansions.HireableDrivers.dll
 Mods/Expansions.PoliceOverhaul.dll
 Mods/Expansions.SpecialCustomers.dll
 Mods/S1API.Il2Cpp.MelonLoader.dll
+Plugins/Expansions.Updater.dll
 Plugins/S1APILoader.MelonLoader.dll
 UserLibs/Expansions.Core.dll
 ```

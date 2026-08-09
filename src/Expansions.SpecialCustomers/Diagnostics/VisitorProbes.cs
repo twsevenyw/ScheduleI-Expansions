@@ -51,9 +51,21 @@ internal static class VisitorProbes
 
         yield return new DelegateProbe(
             "sc.archetypes",
-            "Can an archetype look actually be built and applied to a live visitor?",
+            "Does every archetype build distinct, in-catalogue looks that fit the avatar's slot budget?",
             Area,
             Archetypes);
+
+        yield return new DelegateProbe(
+            "sc.products",
+            "Which configured product names resolved to real definitions, and what will a group order?",
+            Area,
+            Products);
+
+        yield return new DelegateProbe(
+            "sc.post_watch",
+            "Are parked visitors staying on their posts, and is anything walking them off?",
+            Area,
+            PostWatchdog);
 
         yield return new DelegateProbe(
             "sc.group_state",
@@ -187,7 +199,7 @@ internal static class VisitorProbes
         {
             result.Fail(
                 $"`{status.Id}` has no live S1API wrapper — {status.Failure}. " +
-                "Nothing else in this milestone can be true while that is the case. Check `sc.visitor_prefab` first.");
+                "Nothing else about this visitor can be true while that is the case. Check `sc.visitor_prefab` first.");
             return;
         }
 
@@ -275,9 +287,9 @@ internal static class VisitorProbes
         if (hasTexture && settingsTexture)
         {
             result.Ok(
-                $"The impostor baked. Walk 60 m away and look back: you should see a flat billboard of a person, not a blank " +
-                "white card. This is the single most load-bearing thing in the milestone — a runtime-built avatar carries no " +
-                "impostor of its own, and vanilla swaps to the billboard past ~50 m regardless.");
+                "The impostor baked. Walk 60 m away and look back: you should see a flat billboard of a person, not a blank " +
+                "white card. A runtime-built avatar carries no impostor of its own and vanilla swaps to the billboard past " +
+                "~50 m regardless, so this is what stands between a visitor and a white card at range.");
             return;
         }
 
@@ -317,11 +329,11 @@ internal static class VisitorProbes
         var accessories = CountLayers(settings, "AccessorySettings");
 
         result.Table(
-            new[] { "Slot family", "Layers in use", "Hard cap" },
+            new[] { "Slot family", "Layers in use", "Cap" },
             new List<IReadOnlyList<string>>
             {
                 new[] { "Face", Count(face), "6" },
-                new[] { "Body", Count(body), "8" },
+                new[] { "Body", Count(body), "6" },
                 new[] { "Accessories", Count(accessories), "9" },
             });
 
@@ -338,46 +350,111 @@ internal static class VisitorProbes
 
         result.Ok(
             $"{face} face / {body} body / {accessories} accessory layers are live. Re-run this after a save→reload: the counts " +
-            "must be identical. If they ever grow, `NPCAppearance.Build()` appends rather than replaces, and the later " +
-            "re-dressing milestone has to clone AvatarSettings wholesale instead of calling Build() again.");
+            "must be identical. Growing counts would mean `NPCAppearance.Build()` appends rather than replaces — which is " +
+            "why dressing clones the whole `AvatarSettings` asset and applies it wholesale instead of calling Build() again.");
     }
 
     /// <summary>
-    /// The re-dressing question, answered without dressing anybody: can a look be constructed, does
-    /// it fit inside the game's slot budget, and is the avatar reachable to apply it to?
+    /// The appearance question, answered without dressing anybody: does every wardrobe draw only
+    /// from the harvested asset catalogue, do the looks it produces fit the avatar's slot budget,
+    /// are the members of one group actually different people, and is a live avatar reachable to
+    /// apply a look to?
     /// </summary>
     private static void Archetypes(ProbeContext context, ProbeResult result)
     {
+        const int SampleSeed = 0x5EED;
+
         var rows = new List<IReadOnlyList<string>>();
         var overflowed = 0;
+        var invented = new List<string>();
 
         foreach (var archetype in ArchetypeCatalog.All)
         {
-            var look = archetype.BuildLook(0);
-            var dropped = look.Trim();
-            overflowed += dropped;
+            foreach (var path in archetype.Wardrobe.AllPaths().Distinct(StringComparer.Ordinal))
+            {
+                if (!AvatarAssets.Contains(path))
+                    invented.Add($"{archetype.ShortName}: {path}");
+            }
+
+            var faces = 0;
+            var bodies = 0;
+            var accessories = 0;
+            var signatures = new HashSet<string>(StringComparer.Ordinal);
+
+            // Sampled across the whole pool, not one member: the question is whether eight slots
+            // produce eight different people, and whether the worst of the eight still fits.
+            foreach (var slot in VisitorSlot.All)
+            {
+                var look = archetype.BuildLook(slot.Index, SampleSeed);
+                overflowed += look.Trim();
+
+                faces = Math.Max(faces, look.FaceLayers.Count);
+                bodies = Math.Max(bodies, look.BodyLayers.Count);
+                accessories = Math.Max(accessories, look.AccessoryLayers.Count);
+                signatures.Add(look.Signature());
+            }
 
             rows.Add(new[]
             {
                 archetype.ShortName,
                 archetype.IsEnabled ? "on" : "off",
-                $"{look.FaceLayers.Count}/6",
-                $"{look.BodyLayers.Count}/8",
-                $"{look.AccessoryLayers.Count}/9",
+                $"{faces}/6",
+                $"{bodies}/6",
+                $"{accessories}/9",
+                $"{signatures.Count}/{VisitorSlot.Count}",
                 string.Join(", ", archetype.EffectiveDrugs()),
                 archetype.Standards.ToString(),
                 archetype.PriceMultiplier.ToString("0.00"),
                 $"{archetype.QuantityMin}-{archetype.QuantityMax}",
-                dropped > 0 ? $"**{dropped} dropped**" : "-",
             });
         }
 
         result.Table(
-            new[] { "Archetype", "Enabled", "Face", "Body", "Acc", "Drugs", "Standards", "Rate", "Quantity", "Overflow" },
+            new[]
+            {
+                "Archetype", "Enabled", "Face", "Body", "Acc", "Distinct looks",
+                "Drugs", "Standards", "Rate", "Quantity",
+            },
             rows);
 
-        result.Fact("Cached looks this session", VisitorDresser.CachedLookCount.ToString());
+        result.Line(
+            "\"Distinct looks\" samples all eight pool slots against one fixed visit seed. Fewer than eight " +
+            "means two members of that group would arrive as the same person.");
+
+        result.Fact("Catalogue size", $"{AvatarAssets.All.Count} harvested paths");
+        result.Fact("Wardrobe paths outside the catalogue", invented.Count == 0 ? "none" : $"**{invented.Count}**");
+        result.Fact(
+            "Held props",
+            string.Join("; ", ArchetypeCatalog.All.Select(archetype =>
+                $"{archetype.ShortName}: " + string.Join(", ", archetype.Wardrobe.Props
+                    .Select(prop => prop.Length == 0 ? "(none)" : prop[(prop.LastIndexOf('/') + 1)..])
+                    .Distinct()))));
+        result.Line(
+            "Props are equippables rather than avatar layers, so they are not in the harvested catalogue; the paths " +
+            "come from S1API's own `Equippables.Misc` constants. A path the game cannot resolve logs \"Couldn't find " +
+            "equippable at path\" and leaves the hand empty, which is cosmetic.");
+        result.Fact("Cached looks for the current visit", VisitorDresser.CachedLookCount.ToString());
         result.Fact("Slots dressed at least once", VisitorDresser.DressedSlots.Count.ToString());
+
+        var live = VisitorDresser.CurrentSignatures;
+        if (live.Count > 0)
+        {
+            result.Fact(
+                "Live look fingerprints",
+                string.Join(", ", live.OrderBy(pair => pair.Key).Select(pair => $"{pair.Key:00}={pair.Value}")));
+        }
+
+        if (invented.Count > 0)
+        {
+            result.Heading("Paths not in the harvested catalogue");
+            result.Code(invented);
+            result.Fail(
+                $"{invented.Count} wardrobe entr(ies) name a path that was never seen on a shipped character. " +
+                "A path the game cannot resolve is not an error at runtime, it is a silently missing garment, " +
+                "so the group would arrive half-dressed with nothing in the log. Fix them against " +
+                "research/AVATAR-ASSET-CATALOGUE.md.");
+            return;
+        }
 
         var settingsType = GameReflection.FindType(GameTypes.AvatarSettings);
         var layerType = GameReflection.FindType(GameTypes.LayerSetting);
@@ -415,15 +492,255 @@ internal static class VisitorProbes
         if (overflowed > 0)
         {
             result.Fail(
-                $"{overflowed} layer(s) across the four recipes exceed the game's slot budget and are being dropped. " +
-                "Trim a recipe rather than letting the game choose what to lose.");
+                $"{overflowed} layer(s) across the sampled looks exceed the game's slot budget and are being dropped. " +
+                "Narrow a wardrobe rather than letting the avatar choose what to lose.");
             return;
         }
 
         result.Ok(
-            "All four recipes fit the slot budget, the avatar settings types resolve, and a live visitor has readable " +
-            "settings to clone from. Force a visit from the Expansions screen and look at them: bikers should read as " +
-            "charcoal vests and combat boots, businessmen as navy blazers, hippies as saturated V-necks, the band as black.");
+            "Every wardrobe path is in the harvested catalogue, all four archetypes produce eight distinct looks that " +
+            "fit the slot budget, the avatar settings types resolve, and a live visitor has readable settings to clone " +
+            "from. Force a visit and look at the group: they should read as one crew — combat boots and vests, navy " +
+            "blazers, sandals and saturated colours, black-on-black — with no two members the same person. Save, " +
+            "reload, and look again: the same faces must come back.");
+    }
+
+    /// <summary>
+    /// What the groups are allowed to buy, why each configured name did or did not resolve, and what
+    /// the next contract would actually name.
+    /// </summary>
+    private static void Products(ProbeContext context, ProbeResult result)
+    {
+        var resolution = ProductAllowList.Current(forceRefresh: true);
+
+        result.Fact("Config key", $"`{ProductAllowList.ConfigKey}` under [SpecialCustomers_01_Main]");
+        result.Fact("Configured value", resolution.ConfiguredText.Length > 0 ? resolution.ConfiguredText : "(empty)");
+        result.Fact("Product definitions visible", resolution.KnownProductCount.ToString());
+
+        if (!resolution.IsRestricted)
+        {
+            result.Inconclusive(
+                "The allow-list is empty, so groups may order anything you have listed for sale. That is a valid " +
+                $"setting, not a fault — put comma-separated product names in {ProductAllowList.ConfigKey} to " +
+                "restrict them.");
+            return;
+        }
+
+        if (resolution.Matched.Count > 0)
+        {
+            result.Table(
+                new[] { "Configured name", "Resolved to", "Id", "Matched on", "Discovered", "Market value" },
+                resolution.Matched.Select(match => (IReadOnlyList<string>)new[]
+                {
+                    match.RequestedName,
+                    Safe(() => match.Product.Name),
+                    Safe(() => match.Product.ID),
+                    match.MatchedOn,
+                    Describe.YesNo(match.IsAvailableToPlayer),
+                    Safe(() => match.Product.MarketValue.ToString("0")),
+                }).ToList());
+        }
+
+        if (resolution.Unmatched.Count > 0)
+        {
+            result.Heading("Names that matched nothing");
+            result.Code(resolution.Unmatched);
+            result.Line(
+                "Each of these is skipped rather than guessed at. Matching is case-insensitive and, on the last " +
+                "pass, ignores spaces and punctuation, so the usual cause is a different name entirely — or a " +
+                "modded product whose own mod had not registered it yet when this ran.");
+        }
+
+        if (resolution.Matched.Count == 0)
+        {
+            result.Fail(
+                "No group can place a bulk order: " + resolution.BlockingReason + ".");
+            return;
+        }
+
+        var orderable = resolution.AvailableProducts.Count > 0
+            ? resolution.AvailableProducts
+            : resolution.Products;
+
+        result.Fact(
+            "A contract right now would draw from",
+            string.Join(", ", orderable.Select(product => Safe(() => product.Name))) +
+            (resolution.AvailableProducts.Count > 0
+                ? string.Empty
+                : " (none discovered yet, so the whole allow-list is in play)"));
+
+        foreach (var archetype in ArchetypeCatalog.All)
+        {
+            var wanted = archetype.EffectiveDrugs();
+            var hits = orderable.Where(product => Prefers(product, wanted)).Select(product => Safe(() => product.Name)).ToArray();
+
+            result.Bullet(hits.Length > 0
+                ? $"{archetype.ShortName} prefer {string.Join(" / ", wanted)} and would ask for {string.Join(" and ", hits)}."
+                : $"{archetype.ShortName} prefer {string.Join(" / ", wanted)}, none of which is on the list, so they " +
+                  "take the most valuable thing on it instead.");
+        }
+
+        result.Ok(
+            $"{resolution.Matched.Count} of {resolution.Requested.Count} configured name(s) resolved. Nothing outside " +
+            "this list can ever be requested; per-archetype taste only chooses within it.");
+    }
+
+    private static bool Prefers(S1API.Products.ProductDefinition product, IReadOnlyList<S1API.Products.DrugType> wanted)
+    {
+        try
+        {
+            foreach (var drug in wanted)
+            {
+                if (product.PrimaryDrugType == drug || product.DrugTypeValues.Contains(drug))
+                    return true;
+            }
+        }
+        catch
+        {
+            // A definition that cannot be read is one no archetype can prefer.
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether parked visitors are staying put. This is the probe for the reported case of the
+    /// advance scout turning up in the wrong district.
+    /// </summary>
+    private static void PostWatchdog(ProbeContext context, ProbeResult result)
+    {
+        result.Fact("Schedule pinning", CustomerSettings.PinVisitorSchedules ? "on" : "**off** (pin_visitor_schedules)");
+        result.Fact("Re-park watchdog", CustomerSettings.PostWatchdogEnabled
+            ? PostWatch.IsArmed ? "on and watching" : "on, but not armed until the pool has settled after a load"
+            : "**off** (post_watchdog)");
+        result.Fact("Drift tolerance", $"{CustomerSettings.PostDriftRadius:0.#} m horizontal, {CustomerSettings.PostDriftDepth:0.#} m vertical");
+        result.Fact("Visitors pinned this session", $"{PostWatch.PinnedCount} of {VisitorSlot.Count}");
+        result.Fact("Corrections this session", PostWatch.TotalCorrections.ToString());
+        result.Fact("Authority", HostGate.Evaluate(out var authority) ? authority : $"not authoritative ({authority})");
+
+        var rows = new List<IReadOnlyList<string>>();
+        var offPost = 0;
+        var unresolved = 0;
+
+        foreach (var slot in VisitorSlot.All)
+        {
+            var state = PostWatch.StateOf(slot);
+            var npc = VisitorRuntime.Resolve(slot);
+
+            if (npc is null)
+            {
+                unresolved++;
+                rows.Add(new[] { slot.Index.ToString("00"), slot.FullName, "**not in the world**", "-", "-", "-", "-" });
+                continue;
+            }
+
+            var post = slot.SpawnPosition;
+            var here = ReadPosition(npc);
+            var horizontal = new Vector2(here.x - post.x, here.z - post.z).magnitude;
+            var vertical = here.y - post.y;
+
+            if (horizontal > CustomerSettings.PostDriftRadius || Math.Abs(vertical) > CustomerSettings.PostDriftDepth)
+                offPost++;
+
+            rows.Add(new[]
+            {
+                slot.Index.ToString("00"),
+                slot.FullName,
+                Describe.Of(here),
+                Describe.Metres(horizontal),
+                $"{vertical:+0.#;-0.#} m",
+                Describe.YesNo(state.Pinned),
+                ScheduleState(npc),
+            });
+        }
+
+        result.Table(
+            new[] { "Slot", "Name", "Position", "Horizontal drift", "Vertical", "Pinned", "Schedule" },
+            rows);
+
+        result.Line(
+            "Drift is measured against the configured post, not against where the game last saved them. A visitor " +
+            "taking part in a live visit is deliberately somewhere else and is exempt from the watchdog.");
+
+        var corrections = VisitorSlot.All
+            .Select(slot => (Slot: slot, State: PostWatch.StateOf(slot)))
+            .Where(entry => entry.State.Corrections > 0)
+            .ToArray();
+
+        if (corrections.Length > 0)
+        {
+            result.Heading("Corrections");
+            result.Code(corrections.Select(entry =>
+                $"{entry.Slot.FullName}: {entry.State.Corrections}x, last because he was {entry.State.LastReason}"));
+        }
+
+        if (unresolved == VisitorSlot.Count)
+        {
+            result.Inconclusive("No visitor is in the world, so there is nothing to keep on a post. See `sc.visitor_runtime`.");
+            return;
+        }
+
+        if (!CustomerSettings.PinVisitorSchedules)
+        {
+            result.Fail(
+                "Schedule pinning is switched off, so every parked visitor is following the generic civilian " +
+                "routine and will walk off his post. Set pin_visitor_schedules = true in UserData/Expansions.cfg " +
+                "under [SpecialCustomers_01_Main].");
+            return;
+        }
+
+        if (offPost > 0)
+        {
+            result.Fail(
+                $"{offPost} parked visitor(s) are currently outside their tolerance. The watchdog re-parks them " +
+                "within a quarter of a second, so seeing this in a report means either the watchdog is off, this " +
+                "peer is not the host, or something is moving them faster than it can put them back.");
+            return;
+        }
+
+        result.Ok(
+            "Every parked visitor is on his post with the schedule disabled and curfew handling off. This is the " +
+            "check for the scout turning up in another district: run it again after a full in-game day and a " +
+            "curfew, and the corrections count should still be zero.");
+    }
+
+    private static string ScheduleState(S1API.Entities.NPC npc)
+    {
+        try
+        {
+            var active = npc.Schedule.GetActiveActionName();
+            return npc.Schedule.IsEnabled
+                ? $"**enabled** ({(string.IsNullOrEmpty(active) ? "idle" : active)})"
+                : "disabled";
+        }
+        catch (Exception ex)
+        {
+            return $"unreadable ({Describe.Of(ex)})";
+        }
+    }
+
+    private static Vector3 ReadPosition(S1API.Entities.NPC npc)
+    {
+        try
+        {
+            return npc.Position;
+        }
+        catch
+        {
+            return Vector3.zero;
+        }
+    }
+
+    private static string Safe(Func<string> read)
+    {
+        try
+        {
+            return read() ?? "-";
+        }
+        catch
+        {
+            return "unreadable";
+        }
     }
 
     private static void GroupState(ProbeContext context, ProbeResult result, VisitDirector director)
@@ -484,7 +801,8 @@ internal static class VisitorProbes
         {
             result.Fail(
                 $"Only {VisitorDialogue.AttachedCount} of {rows.Count} member(s) have a group dialogue entry. The rest will " +
-                "greet you and offer nothing, which is the interaction dead end this milestone exists to remove.");
+                "greet you and offer nothing, which is a dead end: there is no way to reach the bulk order or a walk-up " +
+                "deal from a conversation with no choices in it.");
             return;
         }
 

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Expansions.Updater.Tests</RootNamespace>
+    <AssemblyName>Expansions.Updater.Tests</AssemblyName>
+    <ExpansionsGameApi>false</ExpansionsGameApi>
+    <!-- The SDK only warns about an end-of-life TFM for executables, and this has to be net6.0
+         because that is the runtime the code under test runs on. -->
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+
+    <!-- Deliberately not a member of Expansions.sln. The solution builds what ships; this builds what
+         proves it. Run it by pointing "dotnet run" at this project directory. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Linked, not referenced. Engine/ is written against the BCL and nothing else precisely so the
+         swap, the rollback, the .disabled rule and the two-pass split can be exercised against a
+         throwaway directory with no game, no MelonLoader and no network in the picture. -->
+    <Compile Include="..\Expansions.Updater\Engine\*.cs" LinkBase="Engine" />
+  </ItemGroup>
+</Project>

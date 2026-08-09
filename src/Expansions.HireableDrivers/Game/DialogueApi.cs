@@ -45,6 +45,32 @@ internal static class DialogueApi
         }
     }
 
+    /// <summary>
+    /// The <c>DialogueController</c> on an NPC's own GameObject.
+    /// <para>
+    /// This is the component the shipped <c>Employee</c> adds "Fire" and "Why aren't you working?" to,
+    /// through the same <c>AddDialogueChoice</c> call the mod uses — so a driver's own options sit in
+    /// the game's list, in the game's order, with the game's input handling.
+    /// </para>
+    /// </summary>
+    internal static object? ControllerOn(object? npc)
+    {
+        var type = Gx.Type(GameTypes.DialogueController);
+        if (type is null || npc is not Component component || !Gx.Alive(component))
+            return null;
+
+        try
+        {
+            var found = component.GetComponentInChildren(Il2CppType.From(type), true);
+            return Gx.Alive(found) ? found : null;
+        }
+        catch (Exception ex)
+        {
+            DriverLog.Debug($"Could not reach a DialogueController on an NPC ({Gx.Explain(ex)}).");
+            return null;
+        }
+    }
+
     /// <summary>The hiring NPC's name, for the "hire them over there" line the mod tells the player.</summary>
     internal static string ControllerName(object? controller)
     {

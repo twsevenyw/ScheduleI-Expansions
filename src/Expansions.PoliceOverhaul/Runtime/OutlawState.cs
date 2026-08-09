@@ -1,5 +1,6 @@
 using Expansions.Core.Diagnostics;
 using Expansions.PoliceOverhaul.State;
+using S1API.Money;
 
 namespace Expansions.PoliceOverhaul.Runtime;
 
@@ -28,7 +29,11 @@ internal sealed class OutlawState
     {
         _config = config;
         _lookup = lookup;
+        Economy = new OutlawEconomy(config);
     }
+
+    /// <summary>The business-side half of the status: dealer cuts, snitch chances, card vendors.</summary>
+    internal OutlawEconomy Economy { get; }
 
     /// <summary>True when any player is outlawed — the cheap gate the patch bodies test first.</summary>
     internal bool AnyoneOutlawed { get; private set; }
@@ -53,6 +58,7 @@ internal sealed class OutlawState
         {
             record.Outlaw = OutlawTier.Marked;
             record.ArrestsWhileOutlaw = 0;
+            record.OutlawPromotions++;
             return true;
         }
 
@@ -60,6 +66,7 @@ internal sealed class OutlawState
         {
             record.Outlaw = OutlawTier.Hunted;
             record.ArrestsWhileOutlaw = 0;
+            record.OutlawPromotions++;
             return true;
         }
 
@@ -78,18 +85,28 @@ internal sealed class OutlawState
     /// </summary>
     internal void Demote(PlayerHeatRecord record)
     {
+        if (record.Outlaw == OutlawTier.Clean)
+            return;
+
         record.Outlaw = record.Outlaw == OutlawTier.Hunted ? OutlawTier.Marked : OutlawTier.Clean;
         record.CleanDayStreak = 0;
         record.ArrestsWhileOutlaw = 0;
         record.FederalEncounters = 0;
+        record.OutlawTiersCleared++;
         record.Heat = Math.Min(record.Heat, _config.OutlawHeatThreshold.Value - 1);
     }
 
     internal void Promote(PlayerHeatRecord record, OutlawTier tier)
     {
+        if (tier == record.Outlaw)
+            return;
+
         record.Outlaw = tier;
         record.ArrestsWhileOutlaw = 0;
         record.CleanDayStreak = 0;
+
+        if (tier != OutlawTier.Clean)
+            record.OutlawPromotions++;
     }
 
     /// <summary>
@@ -124,11 +141,68 @@ internal sealed class OutlawState
         }
 
         AnyoneOutlawed = anyone;
+        Economy.Sync(anyone);
+    }
+
+    /// <summary>
+    /// The "buy your way out" lane. Cash first, then the bank, because refusing a rich player over
+    /// where the money is sitting would be an accounting rule pretending to be a design one.
+    /// Returns false with a reason the caller shows verbatim.
+    /// </summary>
+    internal bool PayLegalFee(PlayerHeatRecord record, out string message)
+    {
+        if (!_config.EnableOutlaw.Value)
+        {
+            message = "Outlaw status is switched off in this module's settings (enable_outlaw), so there is nothing to buy down.";
+            return false;
+        }
+
+        if (record.Outlaw == OutlawTier.Clean)
+        {
+            message = "Your record is already clean. There is nothing for a lawyer to do.";
+            return false;
+        }
+
+        var fee = Math.Max(0, _config.OutlawLegalFee.Value);
+        var cash = Wallet.Cash();
+        var bank = Wallet.Online();
+
+        if (cash + bank < fee)
+        {
+            message = $"A lawyer wants ${fee:N0} and you have ${cash + bank:N0} between your pockets and the bank. " +
+                      "Come back with the money, or serve the clean days.";
+            return false;
+        }
+
+        var fromCash = Math.Min(cash, fee);
+        if (fromCash > 0f)
+            Money.ChangeCashBalance(-fromCash, true, true);
+
+        var fromBank = fee - fromCash;
+        if (fromBank > 0.5f)
+            Money.CreateOnlineTransaction("Legal fees", -fromBank, 1f, "Representation");
+
+        var previous = record.Outlaw;
+        Demote(record);
+        record.LegalFeesPaid += fee;
+        Sync();
+
+        message = $"${fee:N0} to a lawyer: {Describe(previous)} down to {Describe(record.Outlaw)}. " +
+                  (fromBank > 0.5f ? $"${fromCash:N0} in cash and ${fromBank:N0} off your bank balance." : "Paid in cash.");
+
+        PoliceLog.Msg($"Legal fee paid: ${fee} ({Describe(previous)} -> {Describe(record.Outlaw)}).");
+
+        if (_config.ShowHud.Value)
+            PoliceMessages.LegalFeePaid(message);
+
+        return true;
     }
 
     /// <summary>Removes every label this module applied. Safe from a half-initialised state.</summary>
     internal void Revert()
     {
+        Economy.Revert();
+
         if (_labelled.Count == 0)
         {
             AnyoneOutlawed = false;

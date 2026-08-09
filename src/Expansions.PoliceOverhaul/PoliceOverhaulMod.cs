@@ -1,7 +1,7 @@
 using Expansions.Core;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(Expansions.PoliceOverhaul.PoliceOverhaulMod), "Police Improvements", "0.2.0", "Evan")]
+[assembly: MelonInfo(typeof(Expansions.PoliceOverhaul.PoliceOverhaulMod), "Police Improvements", "0.3.0", "Evan")]
 [assembly: MelonGame("TVGS", "Schedule I")]
 [assembly: MelonColor(255, 240, 110, 90)]
 [assembly: MelonPlatformDomain(MelonPlatformDomainAttribute.CompatibleDomains.IL2CPP)]

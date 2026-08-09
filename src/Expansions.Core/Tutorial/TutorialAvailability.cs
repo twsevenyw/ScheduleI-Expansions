@@ -1,12 +1,24 @@
 namespace Expansions.Core.Tutorial;
 
 /// <summary>
-/// Whether the feature a chapter teaches actually exists on this install.
+/// Whether the thing a chapter teaches is reachable right now.
 /// <para>
-/// The three feature mods are planned before they are written, so their chapters ship as metadata
-/// long before there is anything to do in them. A chapter that reports <see cref="ComingSoon"/> still
-/// appears in the quest line — the director turns it into one self-completing objective carrying the
-/// reason, rather than an objective the player can never tick off.
+/// A chapter that reports <see cref="ComingSoon"/> is <em>deferred</em>, not stubbed: it contributes
+/// no quest and no journal objectives, the line plays on past it, and the director comes back to it
+/// as soon as it reports itself ready. It is never ticked off on the player's behalf, so a chapter
+/// whose module is switched off mid-line is still there to play when it is switched back on.
+/// </para>
+/// <para>
+/// Answer it however the world actually is, including transiently. It is asked repeatedly rather than once,
+/// so a false during a save load or before a module has wired itself in costs nothing: the chapter is
+/// stepped over and picked up on a later tick, with no restart and no tutorial reset. There is no need to
+/// hedge, to answer <see cref="Available"/> defensively, or to withdraw the chapter over a condition that
+/// will clear on its own — withdraw only when the chapter has no business being in the line at all, such as
+/// a mod that is not installed on this machine.
+/// </para>
+/// <para>
+/// The reason is shown verbatim on the Tutorial tab, so write it as the answer to "why can't I do
+/// this yet" — "Special Customers is switched off", not "unavailable".
 /// </para>
 /// </summary>
 public readonly struct TutorialAvailability

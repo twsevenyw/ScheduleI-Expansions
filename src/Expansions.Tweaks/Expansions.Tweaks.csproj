@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Expansions.Tweaks</RootNamespace>
+    <AssemblyName>Expansions.Tweaks</AssemblyName>
+    <Version>0.1.0</Version>
+    <Description>Small quality-of-life tuning: faster mixing, a configurable weekly ATM deposit limit, and faster shop deliveries.</Description>
+    <ExpansionsDeployDir>$(GameDir)\Mods</ExpansionsDeployDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Private=false: Core ships once, to UserLibs. A copy next to the mod would shadow it. -->
+    <ProjectReference Include="..\Expansions.Core\Expansions.Core.csproj" Private="false" />
+  </ItemGroup>
+</Project>

@@ -1,8 +1,6 @@
-using Expansions.Core.Tutorial;
 using Expansions.HireableDrivers.Config;
 using Expansions.HireableDrivers.Game;
 using Expansions.HireableDrivers.Persistence;
-using Expansions.HireableDrivers.Tutorial;
 
 namespace Expansions.HireableDrivers.Runtime;
 
@@ -125,8 +123,6 @@ internal static class DriverHiring
 
         message = $"Hired {record.DisplayName} as a driver at {WorldApi.PropertyName(property)} for ${fee:N0}. {bedNote}";
         DriverLog.Msg(message);
-
-        TutorialSignals.Raise(DriversChapter.ChapterId, DriversChapter.StepHire);
         return true;
     }
 

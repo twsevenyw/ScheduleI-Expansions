@@ -27,6 +27,9 @@ internal sealed class VisitDirector
     /// </summary>
     private const int MaxOfferAttempts = 3;
 
+    /// <summary>Every slot, used to hold the watchdog off entirely while a reveal is in flight.</summary>
+    private static readonly int[] AllSlotIndices = VisitorSlot.All.Select(slot => slot.Index).ToArray();
+
     private readonly ArrivalStagger _stagger = new();
     private readonly object _gate = new();
 
@@ -71,19 +74,42 @@ internal sealed class VisitDirector
         _attached = true;
 
         // Enabling mid-session must not wait for the next load: if a save is already up, adopt it.
+        // PoolSettled has already fired in that case and will not fire again, so the watchdog has to
+        // be armed here or it would sit idle for the rest of the session.
         if (SpecialCustomerState.Current is not null)
+        {
             Guard("adopting the loaded save", () => Restore(SpecialCustomerState.Snapshot()));
+
+            if (VisitorRuntime.PoolReady)
+                PostWatch.Arm();
+        }
 
         return () => Guard("shutting down", Shutdown);
     }
 
-    /// <summary>The only per-frame work in the module, and only while a reveal is in flight.</summary>
+    /// <summary>
+    /// The per-frame work: the arrival reveal while one is in flight, and the parked-visitor
+    /// watchdog, which is a distance compare per idle slot a few times a second.
+    /// </summary>
     internal void Pump()
     {
         if (!_attached)
             return;
 
         _stagger.Pump();
+
+        // Anyone in the current group is excluded: they were deliberately placed in a ring around
+        // the meeting point, and the leader is allowed to walk to a handover.
+        PostWatch.Pump(_stagger.IsActive ? AllSlotIndices : BusySlots());
+    }
+
+    private IReadOnlyList<int> BusySlots()
+    {
+        Visit? visit;
+        lock (_gate)
+            visit = _visit;
+
+        return visit is null ? Array.Empty<int>() : visit.MemberSlots;
     }
 
     /// <summary>
@@ -420,17 +446,31 @@ internal sealed class VisitDirector
 
     private void OnPoolSettled()
     {
+        // Before anything else, and for every slot rather than only the idle ones: a save reloaded
+        // mid-visit skips the parking pass entirely, and an unpinned visitor is one the generic
+        // civilian schedule will walk into the next district.
+        foreach (var slot in VisitorSlot.All)
+        {
+            if (!PostWatch.Pin(slot, out var pinFailure))
+                VisitorLog.Instance.Debug($"Could not pin slot {slot.Index:00} to its post ({pinFailure}).");
+        }
+
         var pending = _pendingRestore;
         _pendingRestore = null;
 
         if (pending is not null)
         {
             Restore(pending);
-            return;
+        }
+        else
+        {
+            ParkIdlePool();
+            Tick();
         }
 
-        ParkIdlePool();
-        Tick();
+        // Only now is the visit either rebuilt or definitively absent, so the watchdog can tell an
+        // idle visitor apart from one standing exactly where the group put him.
+        PostWatch.Arm();
     }
 
     /// <summary>
@@ -451,6 +491,12 @@ internal sealed class VisitDirector
 
         foreach (var slot in VisitorSlot.All)
         {
+            // Every visitor is taken out of the generic civilian routine, scout included. That is
+            // the actual fix for a parked visitor turning up in the wrong district: nothing else was
+            // stopping the default schedule walking him there.
+            if (!PostWatch.Pin(slot, out var pinFailure))
+                VisitorLog.Instance.Debug($"Could not pin slot {slot.Index:00} to its post ({pinFailure}).");
+
             if (slot.IsResidentScout)
             {
                 ArrivalStagger.SetVisible(slot, true, out _);
@@ -662,6 +708,10 @@ internal sealed class VisitDirector
             return false;
         }
 
+        // Incremented per visit and persisted, so a second visit on the same in-game day still
+        // brings visibly different people, and a reload rebuilds exactly the ones already in town.
+        _state.VisitSerial++;
+
         var visit = Visit.Begin(
             archetype,
             region.Value,
@@ -672,7 +722,8 @@ internal sealed class VisitDirector
             members[0],
             GameClock.ElapsedDays,
             CustomerSettings.ArrivalTime,
-            CustomerSettings.DepartureTime);
+            CustomerSettings.DepartureTime,
+            AppearanceSeed(archetype, GameClock.ElapsedDays, _state.VisitSerial));
 
         lock (_gate)
             _visit = visit;
@@ -705,12 +756,13 @@ internal sealed class VisitDirector
 
     private void Dress(Visit visit)
     {
-        var memberIndex = 0;
         var budget = EstimateBudget(visit.Archetype);
 
         foreach (var slot in visit.Members)
         {
-            if (!VisitorDresser.Apply(slot, visit.Archetype, memberIndex, out var dressFailure))
+            // Seeded on the pool slot and the visit, not on the member's position in the group, so a
+            // group of four and a group of six put the same face on the same slot.
+            if (!VisitorDresser.Apply(slot, visit.Archetype, visit.AppearanceSeed, out var dressFailure))
             {
                 VisitorLog.Instance.Warn(
                     $"{slot.FullName} could not be dressed as {visit.Archetype.ShortName} ({dressFailure}); they join in civilian clothes.");
@@ -722,8 +774,6 @@ internal sealed class VisitDirector
                     $"{slot.FullName} could not be tuned as a {visit.Archetype.ShortName} customer ({tuneFailure}); " +
                     "they will be in the group but may not buy.");
             }
-
-            memberIndex++;
         }
     }
 
@@ -861,6 +911,17 @@ internal sealed class VisitDirector
     private static float EstimateBudget(Archetype archetype) =>
         archetype.QuantityMax * 200f * archetype.PriceMultiplier;
 
+    /// <summary>
+    /// The number every member's appearance is derived from. Deterministic in its inputs so two
+    /// co-op peers compute the same one, and never zero, because zero means "no seed recorded".
+    /// </summary>
+    private static int AppearanceSeed(Archetype archetype, int day, int serial)
+    {
+        var rng = new LookRandom(archetype.Id + ":appearance", day, serial);
+        var seed = rng.Next(int.MaxValue);
+        return seed == 0 ? 1 : seed;
+    }
+
     private static string SafeGuid(DeliveryLocation location)
     {
         try
@@ -897,6 +958,7 @@ internal sealed class VisitDirector
             current.State.SchemaVersion = VisitStateData.CurrentSchemaVersion;
             current.State.NextVisitDay = _state.NextVisitDay;
             current.State.LastArchetypeId = _state.LastArchetypeId;
+            current.State.VisitSerial = _state.VisitSerial;
             current.State.SelfDisabledByDetection = _state.SelfDisabledByDetection;
             current.State.SelfDisableReason = _state.SelfDisableReason;
             current.State.Active = visit?.ToSave();

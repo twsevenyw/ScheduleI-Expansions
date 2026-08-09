@@ -46,6 +46,11 @@ internal static class CustomerSettings
 
     private static ConfigValue<bool>? _announceArrivals;
 
+    private static ConfigValue<bool>? _pinSchedules;
+    private static ConfigValue<bool>? _postWatchdog;
+    private static ConfigValue<float>? _postDriftRadius;
+    private static ConfigValue<float>? _postDriftDepth;
+
     /// <summary>Days between visits, low end. Clamped so a hand-edited file cannot produce a loop.</summary>
     internal static int IntervalDaysMin => Clamp(_intervalMin?.Value ?? 2, 1, 60);
 
@@ -76,6 +81,17 @@ internal static class CustomerSettings
     internal static bool AllowWalkUpSales => _allowWalkUpSales?.Value ?? true;
 
     internal static bool AnnounceArrivals => _announceArrivals?.Value ?? true;
+
+    /// <summary>Stops a parked visitor following the generic civilian schedule off his post.</summary>
+    internal static bool PinVisitorSchedules => _pinSchedules?.Value ?? true;
+
+    internal static bool PostWatchdogEnabled => _postWatchdog?.Value ?? true;
+
+    /// <summary>Metres of horizontal drift from a parked visitor's post before he is warped back.</summary>
+    internal static float PostDriftRadius => Clamp(_postDriftRadius?.Value ?? 8f, 1f, 200f);
+
+    /// <summary>Metres above or below the post that counts as having fallen through the world.</summary>
+    internal static float PostDriftDepth => Clamp(_postDriftDepth?.Value ?? 3f, 0.5f, 100f);
 
     internal static string DetectionMode => (_detectionMode?.Value ?? "auto").Trim().ToLowerInvariant();
 
@@ -187,6 +203,19 @@ internal static class CustomerSettings
 
         _announceArrivals = config.Bind("announce_arrivals", true, "Announce arrivals",
             "Sends the group leader's phone message and drops a map marker when a group arrives.");
+
+        _pinSchedules = config.Bind("pin_visitor_schedules", true, "Pin visitors to their post",
+            "Clears and disables the generic NPC schedule on every visitor, and takes them out of curfew " +
+            "handling. Without it they follow the default civilian routine and walk off across town.");
+        _postWatchdog = config.Bind("post_watchdog", true, "Re-park drifting visitors",
+            "Checks parked visitors against their post a few times a second and warps back anyone who has " +
+            "wandered or sunk through the ground. Never touches a visitor who is part of a live visit.");
+        _postDriftRadius = config.Bind("post_drift_radius_m", 8f, "Post drift radius (m)",
+            "How far a parked visitor may be from his post before the watchdog puts him back.");
+        _postDriftDepth = config.Bind("post_drift_depth_m", 3f, "Post drift depth (m)",
+            "How far above or below his post a parked visitor may be before the watchdog puts him back.");
+
+        ProductAllowList.Bind(config);
     }
 
     private static int Clamp(int value, int min, int max) => value < min ? min : value > max ? max : value;

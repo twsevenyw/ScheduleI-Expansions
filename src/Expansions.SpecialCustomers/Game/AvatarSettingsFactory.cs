@@ -55,6 +55,11 @@ internal static class AvatarSettingsFactory
         Write(settings, "HairPath", look.HairPath, problems);
         Write(settings, "HairColor", look.HairColor, problems);
 
+        // Small per-member variation in the parts of the face that are numbers rather than layers.
+        Write(settings, "EyebrowScale", look.EyebrowScale, problems);
+        Write(settings, "EyebrowThickness", look.EyebrowThickness, problems);
+        Write(settings, "PupilDilation", look.PupilDilation, problems);
+
         // Eyelids follow skin or the face reads as a mask at close range.
         Write(settings, "LeftEyeLidColor", (Color)look.SkinColor, problems);
         Write(settings, "RightEyeLidColor", (Color)look.SkinColor, problems);

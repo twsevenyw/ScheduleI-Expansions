@@ -18,17 +18,32 @@ internal sealed class FederalEvents
 {
     private readonly PoliceConfig _config;
     private readonly HeatDirector _heat;
+    private readonly EventScheduler _scheduler;
 
     private int _endsAtHour = -1;
     private string _targetKey = string.Empty;
 
-    internal FederalEvents(PoliceConfig config, HeatDirector heat)
+    internal FederalEvents(PoliceConfig config, HeatDirector heat, EventScheduler scheduler)
     {
         _config = config;
         _heat = heat;
+        _scheduler = scheduler;
     }
 
     internal bool IsActive => _endsAtHour >= 0;
+
+    /// <summary>True while the current event is a stakeout rather than a pursuit.</summary>
+    internal bool IsStakeout { get; private set; }
+
+    /// <summary>The property being watched, or empty. Shown in the menu and the probe.</summary>
+    internal string StakeoutProperty { get; private set; } = string.Empty;
+
+    /// <summary>Per-minute upkeep: posted agents drift, so they are walked back to their post.</summary>
+    internal void MinutePass()
+    {
+        if (IsStakeout)
+            FederalAgents.HoldPosts();
+    }
 
     /// <summary>In-game hours remaining, or 0 when nothing is happening. Shown in the menu and the probe.</summary>
     internal int HoursRemaining => _endsAtHour < 0 ? 0 : Math.Max(0, _endsAtHour - ElapsedHours());
@@ -46,6 +61,19 @@ internal sealed class FederalEvents
                 End("the assignment expired");
 
             return;
+        }
+
+        // Scheduler owns cadence when enabled; without it, keep the old threshold-immediate path for
+        // owners who turn the randomisation off. Manual EventRegistry triggers never come through here.
+        if (_config.EnableEventScheduler.Value)
+        {
+            if (!_scheduler.DueFederal(out var detail))
+            {
+                PoliceLog.Detail($"Federal scheduler: {detail}");
+                return;
+            }
+
+            PoliceLog.Detail($"Federal scheduler: {detail}");
         }
 
         foreach (var player in GameBridge.Players())
@@ -66,10 +94,16 @@ internal sealed class FederalEvents
     /// <summary>Manual start, for the menu action. Returns false with a reason the caller can show.</summary>
     internal bool ForceBegin(out string message)
     {
+        if (!_config.EnableFederalAgents.Value)
+        {
+            message = "Federal agents are switched off in this module's settings (enable_federal_agents).";
+            return false;
+        }
+
         var player = GameBridge.LocalPlayer();
         if (player is null)
         {
-            message = "No local player yet — load a save first.";
+            message = "There is no local player yet — load a save first.";
             return false;
         }
 
@@ -80,11 +114,18 @@ internal sealed class FederalEvents
         }
 
         var spawned = Begin(player, _heat.RecordFor(player), "requested from the menu");
-        message = spawned > 0
-            ? $"{spawned} federal agent(s) dispatched to your position."
-            : $"Could not dispatch: {FederalAgents.Status.Reason}.";
+        if (spawned > 0)
+        {
+            _scheduler.NoteManualFederal();
+            message = IsStakeout
+                ? $"{spawned} federal agent(s) are setting up outside {StakeoutProperty}."
+                : $"{spawned} federal agent(s) dispatched to your position.";
 
-        return spawned > 0;
+            return true;
+        }
+
+        message = $"Could not dispatch: {FederalAgents.Status.Reason}.";
+        return false;
     }
 
     internal void End(string reason)
@@ -104,18 +145,24 @@ internal sealed class FederalEvents
         PoliceLog.Msg($"Federal event over ({reason}).");
 
         if (_config.ShowHud.Value)
-            GameBridge.Notify("They pulled out", "The plain-clothes team has left the area. For now.", 7f);
+            PoliceMessages.FederalEnded(reason);
 
-        _endsAtHour = -1;
-        _targetKey = string.Empty;
+        Clear();
     }
 
     /// <summary>Teardown: agents go, but no encounter is recorded — the module quitting is not an event.</summary>
     internal void Abort()
     {
         FederalAgents.DespawnAll();
+        Clear();
+    }
+
+    private void Clear()
+    {
         _endsAtHour = -1;
         _targetKey = string.Empty;
+        IsStakeout = false;
+        StakeoutProperty = string.Empty;
     }
 
     private string TriggerFor(PlayerHeatRecord record)
@@ -138,11 +185,27 @@ internal sealed class FederalEvents
         return string.Empty;
     }
 
+    /// <summary>
+    /// Starts an event, choosing between a pursuit and a stakeout.
+    /// <para>
+    /// A stakeout is picked whenever the player is holed up in a property they own, because a pursuit
+    /// against someone standing indoors resolves as officers milling about at the door and reads as
+    /// broken AI. Posting them outside is the same fiction, legible, and costs nothing to run.
+    /// </para>
+    /// </summary>
     private int Begin(object player, PlayerHeatRecord record, string trigger)
     {
-        var origin = SpawnOrigin(player);
         var code = Members.Read(player, "PlayerCode", string.Empty);
-        var spawned = FederalAgents.Spawn(_config.FederalAgentsPerEvent.Value, origin, code);
+        var stakeoutAt = StakeoutTarget(player, out var propertyName);
+        var origin = stakeoutAt ?? SpawnOrigin(player);
+
+        // The clone strategy builds an agent by copying a live officer, so an empty map produces an
+        // event with nothing in it. Put the town's own force back on its feet first — that is both
+        // the donor and the local police the agents are supposed to be arriving alongside.
+        if (!PoliceForce.EnsureAnyLive(origin))
+            PoliceLog.Warn("No live officer to work from; the federal team may not be able to spawn.");
+
+        var spawned = FederalAgents.Spawn(_config.FederalAgentsPerEvent.Value, origin, code, stakeoutAt);
 
         if (spawned == 0)
         {
@@ -155,14 +218,52 @@ internal sealed class FederalEvents
 
         _endsAtHour = ElapsedHours() + Math.Max(1, _config.FederalEventHours.Value);
         _targetKey = record.PlayerKey;
+        IsStakeout = stakeoutAt is not null;
+        StakeoutProperty = propertyName;
         record.MinutesAtFederalHeat = 0;
 
-        PoliceLog.Msg($"Federal event started: {trigger}. {spawned} agent(s) for {_config.FederalEventHours.Value} in-game hour(s).");
+        PoliceLog.Msg(
+            $"Federal event started ({(IsStakeout ? "stakeout on " + propertyName : "pursuit")}): {trigger}. " +
+            $"{spawned} agent(s) for {_config.FederalEventHours.Value} in-game hour(s).");
 
         if (_config.ShowHud.Value)
-            GameBridge.Notify("Not local police", "Two people who are not from around here just started asking about you.", 8f);
+        {
+            PoliceMessages.FederalBegan(
+                IsStakeout,
+                propertyName,
+                trigger,
+                spawned,
+                _config.FederalEventHours.Value);
+        }
 
         return spawned;
+    }
+
+    /// <summary>
+    /// Where to post a stakeout, or null to run a pursuit instead. Only ever a property the player
+    /// owns and is currently inside.
+    /// </summary>
+    private Vector3? StakeoutTarget(object player, out string propertyName)
+    {
+        propertyName = string.Empty;
+
+        if (!_config.EnableStakeouts.Value)
+            return null;
+
+        var position = Components.TransformOf(player)?.position;
+        if (position is null)
+            return null;
+
+        foreach (var property in Estate.Owned())
+        {
+            if (!Estate.Contains(property, position.Value))
+                continue;
+
+            propertyName = Estate.NameOf(property);
+            return Estate.SpawnPointOf(property);
+        }
+
+        return null;
     }
 
     /// <summary>

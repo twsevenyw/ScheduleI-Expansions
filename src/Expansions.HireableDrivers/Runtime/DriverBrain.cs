@@ -153,7 +153,7 @@ internal sealed class DriverBrain
                 ? "No vehicle assigned."
                 : "The assigned vehicle no longer exists.";
 
-            Issue("Your driver has no vehicle.", "Assign one in the Drivers panel.", 5);
+            Issue("Your driver has no vehicle.", "Park one at the property, then talk to them and pick \"Take the …\".", 5);
             Cooldown(now, 60);
             return;
         }
@@ -184,7 +184,7 @@ internal sealed class DriverBrain
         if (!VehicleAssignment.TryClaim(Record.VehicleGuid, Record.EmployeeId))
         {
             StatusNote = $"Waiting for the {VehicleApi.Name(vehicle)}.";
-            Issue("Your driver is waiting for a vehicle.", "Assign a second vehicle, or give it its own.", 2);
+            Issue("Your driver is waiting for a vehicle.", "Another driver has it. Park a second one and hand it over.", 2);
             Cooldown(now, 15);
             return;
         }
@@ -200,6 +200,10 @@ internal sealed class DriverBrain
         _sourceLot = LotFor(source);
         _destinationLot = LotFor(destination);
         _homeLot = HomeLot();
+
+        // Whatever stopped them last time is no longer true, and the game cannot clear it itself while
+        // the trip suppresses its dispatcher.
+        EmployeeApi.ClearWorkIssues(_employee);
 
         EmployeeApi.TakeOverMovement(_employee);
         _leg.Begin(_employee, vehicle, _sourceLot, source.VehicleAnchor, _path, now);
@@ -267,7 +271,7 @@ internal sealed class DriverBrain
 
         if (_source is null || _destination is null || !_source.IsUsable || !_destination.IsUsable)
         {
-            Recover(now, "A route endpoint was removed.", "Re-point that route in the Drivers panel.");
+            Recover(now, "A route endpoint was removed.", "Point the management clipboard at your driver and re-set that route.");
             return;
         }
 
@@ -365,7 +369,7 @@ internal sealed class DriverBrain
         var route = CurrentRoute;
         if (route is null)
         {
-            Recover(now, "That route row was cleared mid-trip.", "Assign it again in the Drivers panel.");
+            Recover(now, "That route row was cleared mid-trip.", "Set it again on the management clipboard.");
             return;
         }
 
@@ -639,11 +643,19 @@ internal sealed class DriverBrain
             ? Record.Routes[_routeIndex]
             : null;
 
+    /// <summary>
+    /// How full the van has to be before it leaves: the row's own override if a pre-clipboard save set
+    /// one, otherwise whatever the player told this driver in conversation, otherwise a share of the
+    /// trunk from config.
+    /// </summary>
     private int DepartThreshold(object? storage)
     {
         var route = CurrentRoute;
         if (route is { DepartAtUnits: > 0 })
             return route.DepartAtUnits;
+
+        if (Record.DepartAtUnits > 0)
+            return Record.DepartAtUnits;
 
         var capacity = TransitApi.UnitCapacity(storage, route?.ItemId ?? string.Empty);
         var derived = Mathf.RoundToInt(capacity * (DriverSettings.DepartThresholdPercent / 100f));

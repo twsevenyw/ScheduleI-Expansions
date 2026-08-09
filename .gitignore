@@ -42,3 +42,9 @@ _backup/
 
 # Built distributable archives (regenerable from a Release build of both solutions)
 dist/
+
+# Publishing credentials. scripts/publish.ps1 reads a GitHub token from here if
+# Git Credential Manager has nothing; it must never leave the machine.
+.secrets/
+*.token
+github-token.txt

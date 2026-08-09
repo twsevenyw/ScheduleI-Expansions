@@ -3,6 +3,7 @@ using Expansions.Core.Configuration;
 using Expansions.Core.Diagnostics;
 using Expansions.Core.Tutorial;
 using Expansions.PoliceOverhaul.Diagnostics;
+using Expansions.PoliceOverhaul.Events;
 using Expansions.PoliceOverhaul.Patches;
 using Expansions.PoliceOverhaul.Runtime;
 using Expansions.PoliceOverhaul.State;
@@ -33,6 +34,8 @@ public sealed class PoliceOverhaulModule : ExpansionModule
     private HeatDirector? _heat;
     private ConsequenceService? _consequences;
     private FederalEvents? _federal;
+    private RaidDirector? _raids;
+    private EventScheduler? _scheduler;
 
     private bool _wired;
 
@@ -41,9 +44,11 @@ public sealed class PoliceOverhaulModule : ExpansionModule
     public override string DisplayName => "Police Improvements";
 
     public override string Description =>
-        "Dynamic police intensity, federal agents, outlaw status, and heavier consequences when caught.";
+        "Persistent heat drives the game's own patrol scheduler. Push it far enough and you get outlaw " +
+        "status, federal agents, stakeouts, raids on your properties, and an arrest that costs you the " +
+        "day, your kit and your bank balance.";
 
-    public override string Version => "0.2.0";
+    public override string Version => "0.3.0";
 
     // The id predates the "Police Improvements" name, so the default id-derived category would
     // read PoliceOverhaul_01_Main and not match how the mod presents itself anywhere else.
@@ -78,6 +83,8 @@ public sealed class PoliceOverhaulModule : ExpansionModule
 
         Try("registering menu actions", () => PoliceMenuActions.Register(Lifetime));
 
+        Try("registering triggerable events", () => PoliceEvents.Register(Lifetime));
+
         // Re-enabling mid-session has to work without waiting for another scene load, which would
         // otherwise leave the module inert until the player went back to the menu and in again.
         if (string.Equals(GameReflection.ActiveSceneName(), "Main", StringComparison.Ordinal))
@@ -94,7 +101,11 @@ public sealed class PoliceOverhaulModule : ExpansionModule
     {
     }
 
-    public override void OnUpdate() => FederalAgents.Pump();
+    public override void OnUpdate()
+    {
+        FederalAgents.Pump();
+        Deferred.Pump();
+    }
 
     public override void OnSceneLoaded(int buildIndex, string sceneName)
     {
@@ -107,13 +118,24 @@ public sealed class PoliceOverhaulModule : ExpansionModule
         if (!string.Equals(sceneName, "Main", StringComparison.Ordinal))
             return;
 
-        // The world is gone, so there is nothing to restore into — attempting it would write into
-        // destroyed objects. Drop the references and let the next scene re-snapshot from vanilla.
+        // Scene objects are gone, so restoring into them would be writing to destroyed natives. Drop
+        // those references and let the next scene re-snapshot from vanilla.
         FederalAgents.Forget();
+        PoliceForce.Forget();
+        Deferred.Clear();
+        Estate.Forget();
+        _raids?.Forget();
+        _scheduler?.Forget();
         _schedule?.Forget();
         _detection?.Forget();
         _heat?.Forget();
         _consequences?.ClearAllCharges();
+
+        // The outlaw economy is the exception: dealer and customer data are assets, not scene objects,
+        // so they outlive the scene and a raised number left behind would follow the player into their
+        // next save. Restoring is null-guarded per target, so a collected asset is skipped rather than
+        // written into.
+        _outlaw?.Economy.Revert();
     }
 
     /// <summary>
@@ -145,12 +167,21 @@ public sealed class PoliceOverhaulModule : ExpansionModule
             _outlaw = new OutlawState(_config, key => _heat?.Find(key));
             _heat = new HeatDirector(_config, _schedule, _detection, _outlaw);
             _consequences = new ConsequenceService(_config, _heat, _outlaw);
-            _federal = new FederalEvents(_config, _heat);
+            _scheduler = new EventScheduler(_config);
+            _federal = new FederalEvents(_config, _heat, _scheduler);
+            _raids = new RaidDirector(_config, _heat, _outlaw, _scheduler);
 
-            PoliceRuntime.Attach(_config, _levers, _schedule, _detection, _outlaw, _heat, _consequences, _federal);
+            PoliceRuntime.Attach(_config, _levers, _schedule, _detection, _outlaw, _heat, _consequences, _federal, _raids, _scheduler);
 
             if (PoliceSaveState.Live is { } state)
+            {
                 _heat.Adopt(state);
+                _scheduler.Arm(state);
+            }
+            else
+            {
+                _scheduler.Arm(null);
+            }
 
             PoliceSaveState.Loaded += OnSaveLoaded;
             FederalAgents.AgentActivated += OnAgentActivated;
@@ -175,7 +206,9 @@ public sealed class PoliceOverhaulModule : ExpansionModule
                 $"Police Improvements active. Intensity scalar {_config.IntensityScalar.Value:0.00}, " +
                 $"pillars: intensity {On(_config.EnableIntensity.Value)}, schedule {On(_config.EnableScheduleTuning.Value)}, " +
                 $"consequences {On(_config.EnableConsequences.Value)}, outlaw {On(_config.EnableOutlaw.Value)}, " +
-                $"federal {On(_config.EnableFederalAgents.Value)}.");
+                $"federal {On(_config.EnableFederalAgents.Value)}, stakeouts {On(_config.EnableStakeouts.Value)}, " +
+                $"raids {On(_config.EnablePropertyRaids.Value)}, jail day {On(_config.EnableJailDay.Value)}, " +
+                $"equipment loss {On(_config.EnableEquipmentLoss.Value)}, informant fallout {On(_config.EnableRelationshipDamage.Value)}.");
         }
         catch (Exception ex)
         {
@@ -201,6 +234,8 @@ public sealed class PoliceOverhaulModule : ExpansionModule
         Detach(ref TimeManager.OnHourPass, OnHourPass);
         Detach(ref TimeManager.OnSleepEnd, OnSleepEnd);
 
+        SafeStep("dropping deferred work", Deferred.Clear);
+        SafeStep("calling off any raid", () => _raids?.Cancel("the module was switched off"));
         SafeStep("withdrawing federal agents", () => _federal?.Abort());
         SafeStep("clearing outlaw effects", () => _outlaw?.Revert());
         SafeStep("restoring detection settings", () => _detection?.Restore());
@@ -209,7 +244,9 @@ public sealed class PoliceOverhaulModule : ExpansionModule
 
         PoliceRuntime.Detach();
 
+        _raids = null;
         _federal = null;
+        _scheduler = null;
         _consequences = null;
         _heat = null;
         _outlaw = null;
@@ -219,11 +256,19 @@ public sealed class PoliceOverhaulModule : ExpansionModule
         _wired = false;
     }
 
-    private void OnSaveLoaded(PoliceSaveState state) => _heat?.Adopt(state);
+    private void OnSaveLoaded(PoliceSaveState state)
+    {
+        _heat?.Adopt(state);
+        _scheduler?.Arm(state);
+    }
 
     private void OnDayPass() => Try("the day rollover", () => _heat?.DayPass());
 
-    private void OnHourPass() => Try("the hourly federal check", () => _federal?.HourPass());
+    private void OnHourPass()
+    {
+        Try("the hourly federal check", () => _federal?.HourPass());
+        Try("the hourly raid check", () => _raids?.HourPass());
+    }
 
     private static void OnAgentActivated() => TutorialSignals.Raise(PoliceChapter.AgentSignal);
 

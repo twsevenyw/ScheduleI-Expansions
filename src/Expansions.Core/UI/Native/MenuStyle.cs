@@ -48,6 +48,12 @@ internal static class MenuStyle
     /// <summary>"Done" states: a completed tutorial chapter. Reads as the card green, lightened to text weight.</summary>
     public static readonly Color TextGood = Rgb(0x6F, 0xC7, 0x72);
 
+    /// <summary>
+    /// Blocked-but-not-broken: a tutorial chapter waiting on something. Amber rather than red, because the
+    /// player has nothing to fix — the line simply has not got there yet.
+    /// </summary>
+    public static readonly Color TextWarn = Rgb(0xD8, 0xB0, 0x5E);
+
     /// <summary>Scrollbar track, one step off the sunken fill so the gutter reads as a channel.</summary>
     public static readonly Color ScrollTrack = Rgb(0x22, 0x24, 0x26);
 
@@ -221,7 +227,14 @@ internal static class MenuStyle
     /// <summary>Used when the canvas scale is not readable yet, e.g. the frame the screen is built.</summary>
     public const float FallbackScreenHeight = 1080f;
 
-    // Tutorial page: one row per chapter over a toolbar carrying the whole-line controls.
+    // Tutorial page: an explanation of the quest line and where it stands, then the whole-line controls,
+    // then one row per chapter.
+    public const float TutorialIntroHeight = 58f;
+    public const float TutorialIntroGap = 8f;
+    public const float TutorialIntroSize = 11f;
+    public const float TutorialProgressHeight = 34f;
+    public const float TutorialProgressGap = 8f;
+    public const float TutorialProgressSize = 12f;
     public const float TutorialRowHeight = 66f;
     public const float TutorialRowGap = 6f;
     public const float TutorialRowPadX = 12f;

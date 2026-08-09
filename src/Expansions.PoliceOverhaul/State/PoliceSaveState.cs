@@ -34,6 +34,31 @@ public sealed class PoliceSaveState : Saveable
 
     internal List<PlayerHeatRecord> Players => _data.Players ??= new List<PlayerHeatRecord>();
 
+    /// <summary>Per-save PRNG seed for the event scheduler. 0 means "not initialised yet".</summary>
+    internal int EventSeed
+    {
+        get => _data.EventSeed;
+        set => _data.EventSeed = value;
+    }
+
+    internal int EventRolls
+    {
+        get => _data.EventRolls;
+        set => _data.EventRolls = value;
+    }
+
+    internal int NextFederalCheckMinute
+    {
+        get => _data.NextFederalCheckMinute;
+        set => _data.NextFederalCheckMinute = value;
+    }
+
+    internal int NextRaidCheckMinute
+    {
+        get => _data.NextRaidCheckMinute;
+        set => _data.NextRaidCheckMinute = value;
+    }
+
     internal PlayerHeatRecord GetOrCreate(string key, string displayName)
     {
         foreach (var record in Players)
@@ -86,8 +111,24 @@ public sealed class PoliceSaveState : Saveable
     /// </summary>
     public sealed class PoliceSaveData
     {
-        public int Version = 1;
+        /// <summary>
+        /// 3 added the event-scheduler seed and next-fire minutes. Purely additive: older files load
+        /// with those fields at their defaults, and a newer file opened by an older build ignores them.
+        /// </summary>
+        public int Version = 3;
 
         public List<PlayerHeatRecord>? Players = new();
+
+        /// <summary>Deterministic event-scheduler seed for this save. 0 = not rolled yet.</summary>
+        public int EventSeed;
+
+        /// <summary>How many scheduler rolls have been consumed, so reloads continue the sequence.</summary>
+        public int EventRolls;
+
+        /// <summary>Absolute in-game minute of the next federal eligibility check. -1 = none queued.</summary>
+        public int NextFederalCheckMinute = -1;
+
+        /// <summary>Absolute in-game minute of the next raid eligibility check. -1 = none queued.</summary>
+        public int NextRaidCheckMinute = -1;
     }
 }

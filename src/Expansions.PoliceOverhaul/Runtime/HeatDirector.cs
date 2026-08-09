@@ -42,8 +42,17 @@ internal sealed class HeatDirector
 
     internal int BaselineIntensity => _baselineIntensity;
 
+    /// <summary>
+    /// Nights slept through with heat still on the clock afterwards, and tier rises since the module
+    /// wired up. Both are counters rather than flags because the tutorial needs objectives that a
+    /// returning player cannot already be standing on top of.
+    /// </summary>
+    internal int NightsSleptWithHeat { get; private set; }
+
+    internal int TierRaises { get; private set; }
+
     /// <summary>True once the player has slept through a night and still had heat on the other side.</summary>
-    internal bool SleptWithHeatRemaining { get; private set; }
+    internal bool SleptWithHeatRemaining => NightsSleptWithHeat > 0;
 
     internal IReadOnlyCollection<PlayerHeatRecord> Records => _records.Values;
 
@@ -176,8 +185,10 @@ internal sealed class HeatDirector
 
         DrainAndCount();
 
-        if (_config.EnableOutlaw.Value)
-            _outlaw.Sync();
+        // Unconditional on purpose. Sync already answers "is anyone outlawed" as false when the pillar
+        // is switched off, so calling it every minute is what makes turning the setting off mid-session
+        // actually take the labels back off and put the dealer cuts back.
+        _outlaw.Sync();
 
         if (!_config.EnableIntensity.Value || lawController is null)
             return;
@@ -203,16 +214,23 @@ internal sealed class HeatDirector
         var tier = PeakTier;
 
         if (_config.EnableScheduleTuning.Value)
-            _schedule.Apply(tier, scalar, _config.MaxOfficersPerPost.Value);
+            _schedule.Apply(tier, scalar, _config.MaxOfficersPerPost.Value, _config.PoliceDensity.Value);
 
         _detection.Apply(tier, scalar, FederalAgents.IsAgent);
 
         AnnounceTierIfChanged();
     }
 
-    /// <summary>Clean-day streak, the daily deal-heat allowance, and outlaw promotion or release.</summary>
+    /// <summary>
+    /// Clean-day streak, the daily deal-heat allowance, outlaw promotion or release — and the officer
+    /// population, which is put back on its feet before anything else so that a day starting with an
+    /// empty police station does not stay that way.
+    /// </summary>
     internal void DayPass()
     {
+        if (_config.RespawnOfficersDaily.Value)
+            PoliceForce.ReturnToDuty();
+
         foreach (var record in _records.Values)
         {
             record.CleanDayStreak = record.DirtyToday ? 0 : record.CleanDayStreak + 1;
@@ -239,7 +257,7 @@ internal sealed class HeatDirector
             // Sampled before decay: the objective is "you slept and heat was still there afterwards",
             // which is the exact behaviour the vanilla wanted level does not have.
             if (record.Heat > 0.5f)
-                SleptWithHeatRemaining = true;
+                NightsSleptWithHeat++;
 
             var decay = HeatModel.SleepDecay(
                 _config.HeatDecayPerDay.Value,
@@ -370,13 +388,21 @@ internal sealed class HeatDirector
         var previous = _lastAnnouncedTier;
         _lastAnnouncedTier = tier;
 
+        var rising = tier > previous;
+        if (rising && previous != (HeatTier)(-1))
+            TierRaises++;
+
         if (previous == (HeatTier)(-1) || !_config.ShowHud.Value)
             return;
 
-        var rising = tier > previous;
-        GameBridge.Notify(
-            rising ? "Police attention rising" : "Police attention easing",
-            $"{HeatModel.TierName(tier)} — heat {PeakHeat:0}");
+        if (_config.ShowHud.Value)
+        {
+            PoliceMessages.HeatTierChanged(
+                rising,
+                HeatModel.TierName(tier),
+                PeakHeat,
+                HeatMeaning(tier, rising));
+        }
 
         PoliceLog.Msg($"Heat tier {HeatModel.TierName(previous)} -> {HeatModel.TierName(tier)} at heat {PeakHeat:0.#}.");
     }
@@ -385,17 +411,26 @@ internal sealed class HeatDirector
     {
         PoliceLog.Msg($"Outlaw status for '{record.PlayerKey}': {OutlawState.Describe(previous)} -> {OutlawState.Describe(record.Outlaw)}.");
 
-        if (!_config.ShowHud.Value)
-            return;
-
-        GameBridge.Notify(
-            record.Outlaw == OutlawTier.Clean ? "Record cleared" : "Outlaw status",
-            record.Outlaw switch
-            {
-                OutlawTier.Hunted => "You are HUNTED. Every officer recognises you and nobody is letting you walk.",
-                OutlawTier.Marked => "You are MARKED. Searches will find something and pursuits will not let go.",
-                _ => "You are no longer flagged. Fines and searches are back to normal.",
-            },
-            7f);
+        if (_config.ShowHud.Value)
+            PoliceMessages.OutlawChanged(record.Outlaw);
     }
+
+    private static string HeatMeaning(HeatTier tier, bool rising) => tier switch
+    {
+        HeatTier.Federal => rising
+            ? "Patrols and checkpoints are at their heaviest, officers notice you faster, and holding this band for a full day is what puts a federal team on the calendar."
+            : "Still the top band — do not treat a small dip inside FEDERAL as cover.",
+        HeatTier.TaskForce => rising
+            ? "Expect denser posts, longer vision cones and harsher searches. One more step and you are in federal range."
+            : "Street presence is coming down a notch, but you are still well above a quiet day.",
+        HeatTier.Crackdown => rising
+            ? "Local PD is taking a real interest: more officers per post and tighter attention on the street."
+            : "Things are quieter than they were, but you are not invisible.",
+        HeatTier.Alert => rising
+            ? "A little more attention than a clean slate — more eyes, slightly denser posts."
+            : "Easing toward a normal town. Heat itself is what drives the scheduler, not this label alone.",
+        _ => rising
+            ? "You are back in the calm band; the law scheduler is tracking near its vanilla baseline."
+            : "Back at the calm band. The town is as quiet as this mod lets it get.",
+    };
 }

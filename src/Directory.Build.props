@@ -6,23 +6,38 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Authors>Evan</Authors>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- Without this the SDK appends "+<commit sha>" to InformationalVersion, which is what
+         FileVersionInfo.ProductVersion reports - and that is the string the publisher writes into the
+         update manifest and the updater reads back off disk. Both sides strip build metadata before
+         comparing, so it was never wrong, only unreadable in a report meant for a player. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <GameDir>C:\Program Files (x86)\Steam\steamapps\common\Schedule I</GameDir>
     <Il2CppAssemblies>$(GameDir)\MelonLoader\Il2CppAssemblies</Il2CppAssemblies>
     <MelonNet6>$(GameDir)\MelonLoader\net6</MelonNet6>
   </PropertyGroup>
 
-  <ItemGroup>
+  <PropertyGroup>
+    <!-- Projects that touch the game set this. Expansions.Updater does not: it is a MelonLoader
+         plugin that runs before Unity's scripting domain is usable and before any mod assembly is
+         loaded, so it deliberately references nothing but MelonLoader and the BCL. -->
+    <ExpansionsGameApi Condition="'$(ExpansionsGameApi)' == ''">true</ExpansionsGameApi>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(ExpansionsGameApi)' == 'true'">
     <PackageReference Include="S1API.Forked" Version="3.1.7" />
   </ItemGroup>
 
-  <!-- Same reference set as the shipping CreativeMode.csproj. Nothing is copied local; MelonLoader
-       and the Il2Cpp interop assemblies are already present in the game process. -->
   <ItemGroup>
     <Reference Include="MelonLoader">
       <HintPath>$(MelonNet6)\MelonLoader.dll</HintPath>
       <Private>false</Private>
     </Reference>
+  </ItemGroup>
+
+  <!-- Same reference set as the shipping CreativeMode.csproj. Nothing is copied local; MelonLoader
+       and the Il2Cpp interop assemblies are already present in the game process. -->
+  <ItemGroup Condition="'$(ExpansionsGameApi)' == 'true'">
     <Reference Include="0Harmony">
       <HintPath>$(MelonNet6)\0Harmony.dll</HintPath>
       <Private>false</Private>

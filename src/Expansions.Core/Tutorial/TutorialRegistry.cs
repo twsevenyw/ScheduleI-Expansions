@@ -2,13 +2,19 @@ namespace Expansions.Core.Tutorial;
 
 /// <summary>
 /// Process-wide chapter list, the tutorial counterpart of <see cref="Diagnostics.ProbeRegistry"/>.
-/// Core registers its own chapters plus a placeholder per feature mod; each mod overrides its
-/// placeholder on enable and restores it on disable:
+/// Core registers only its own chapters; each feature mod contributes its own on enable and drops it
+/// on disable:
 /// <code>Lifetime.Add(TutorialRegistry.Register(new DriversChapter()));</code>
+/// <para>
+/// There is no stub, placeholder or reserved slot for a mod that is not installed. A chapter named
+/// after a mod the player has never had reads as a broken install rather than as content they are
+/// missing, and a chapter that ticks itself off to keep the line moving teaches nothing. What is
+/// listed here is exactly what is playable.
+/// </para>
 /// </summary>
 public static class TutorialRegistry
 {
-    private static readonly Dictionary<string, Entry> ById = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, ITutorialChapter> ById = new(StringComparer.OrdinalIgnoreCase);
     private static readonly object Gate = new();
 
     private static ITutorialChapter[] _ordered = Array.Empty<ITutorialChapter>();
@@ -22,28 +28,10 @@ public static class TutorialRegistry
     public static IReadOnlyList<ITutorialChapter> Chapters => _ordered;
 
     /// <summary>
-    /// Adds a chapter, overriding a Core placeholder with the same id. Returns a token that removes it
-    /// again and puts any displaced placeholder back. A second non-placeholder claim on one id is
-    /// rejected with a warning and an inert token, so one bad mod cannot break the line.
+    /// Adds a chapter. Returns a token that removes it again; a second claim on one id is rejected
+    /// with a warning and an inert token, so one bad mod cannot break the line.
     /// </summary>
-    public static IDisposable Register(ITutorialChapter chapter) => Register(chapter, isPlaceholder: false);
-
-    /// <summary>Core's own registration path: yields to any mod that claims the same id.</summary>
-    internal static IDisposable RegisterPlaceholder(ITutorialChapter chapter) =>
-        Register(chapter, isPlaceholder: true);
-
-    public static ITutorialChapter? Find(string id)
-    {
-        if (string.IsNullOrEmpty(id))
-            return null;
-
-        lock (Gate)
-            return ById.TryGetValue(id, out var entry) ? entry.Chapter : null;
-    }
-
-    public static bool IsRegistered(string id) => Find(id) is not null;
-
-    private static IDisposable Register(ITutorialChapter chapter, bool isPlaceholder)
+    public static IDisposable Register(ITutorialChapter chapter)
     {
         if (chapter is null)
             throw new ArgumentNullException(nameof(chapter));
@@ -57,56 +45,62 @@ public static class TutorialRegistry
         {
             if (ById.TryGetValue(id, out var existing))
             {
-                if (!existing.IsPlaceholder)
-                {
-                    ExpansionHost.Log.Warn(
-                        $"Tutorial chapter id '{id}' is already held by '{existing.Chapter.Title}'; " +
-                        $"ignoring the duplicate '{chapter.Title}'.");
-                    return Registration.Inert;
-                }
-
-                if (isPlaceholder)
-                    return Registration.Inert;
-
-                ById[id] = new Entry(chapter, false, existing.Chapter);
-                Rebuild();
-                ExpansionHost.Log.Debug($"Tutorial chapter '{id}' is now supplied by '{chapter.Title}'.");
-                return new Registration(id, chapter);
+                ExpansionHost.Log.Warn(
+                    $"Tutorial chapter id '{id}' is already held by '{existing.Title}'; " +
+                    $"ignoring the duplicate '{chapter.Title}'.");
+                return Registration.Inert;
             }
 
-            ById[id] = new Entry(chapter, isPlaceholder, null);
+            ById[id] = chapter;
             Rebuild();
         }
 
-        Changed?.Invoke();
+        Announce();
         return new Registration(id, chapter);
     }
+
+    public static ITutorialChapter? Find(string id)
+    {
+        if (string.IsNullOrEmpty(id))
+            return null;
+
+        lock (Gate)
+            return ById.TryGetValue(id, out var chapter) ? chapter : null;
+    }
+
+    public static bool IsRegistered(string id) => Find(id) is not null;
 
     /// <summary>Removes <paramref name="chapter"/> only if it is still the live holder of the id.</summary>
     private static void Unregister(string id, ITutorialChapter chapter)
     {
         lock (Gate)
         {
-            if (!ById.TryGetValue(id, out var entry) || !ReferenceEquals(entry.Chapter, chapter))
+            if (!ById.TryGetValue(id, out var existing) || !ReferenceEquals(existing, chapter))
                 return;
 
-            if (entry.Displaced is not null)
-                ById[id] = new Entry(entry.Displaced, true, null);
-            else
-                ById.Remove(id);
-
+            ById.Remove(id);
             Rebuild();
         }
 
-        Changed?.Invoke();
+        Announce();
+    }
+
+    private static void Announce()
+    {
+        try
+        {
+            Changed?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            ExpansionHost.Log.Debug($"A tutorial-registry listener threw ({ex.GetType().Name}: {ex.Message}).");
+        }
     }
 
     private static void Rebuild()
     {
         var ordered = new ITutorialChapter[ById.Count];
-        var index = 0;
-        foreach (var entry in ById.Values)
-            ordered[index++] = entry.Chapter;
+        ById.Values.CopyTo(ordered, 0);
 
         Array.Sort(ordered, static (a, b) =>
         {
@@ -115,23 +109,6 @@ public static class TutorialRegistry
         });
 
         _ordered = ordered;
-    }
-
-    private readonly struct Entry
-    {
-        internal Entry(ITutorialChapter chapter, bool isPlaceholder, ITutorialChapter? displaced)
-        {
-            Chapter = chapter;
-            IsPlaceholder = isPlaceholder;
-            Displaced = displaced;
-        }
-
-        internal ITutorialChapter Chapter { get; }
-
-        internal bool IsPlaceholder { get; }
-
-        /// <summary>The placeholder this chapter took over from, restored when it is disposed.</summary>
-        internal ITutorialChapter? Displaced { get; }
     }
 
     private sealed class Registration : IDisposable

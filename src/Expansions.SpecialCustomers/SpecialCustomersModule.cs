@@ -28,6 +28,8 @@ public sealed class SpecialCustomersModule : ExpansionModule
 
     private readonly VisitDirector _director = new();
 
+    private IDisposable? _chapter;
+    private Action? _poolSettledHandler;
     private bool _detectionEvaluated;
 
     public override string Id => ModuleId;
@@ -84,10 +86,37 @@ public sealed class SpecialCustomersModule : ExpansionModule
         });
 
         Try("registering the tutorial chapter", () =>
-            Lifetime.Add(TutorialRegistry.Register(new CustomersChapter(_director))));
+        {
+            Lifetime.OnDispose(WithdrawChapter);
+
+            // Re-enabling after a stand-down must not put an uncompletable chapter back into the
+            // quest line: the detector's verdict is per-session, so it is still the right answer.
+            var verdict = OfficialFeatureDetector.Verdict;
+            if (!verdict.IsEnabled)
+            {
+                Log.Msg($"The Special Customers tutorial chapter is not registered: {verdict.Reason}");
+                return;
+            }
+
+            _chapter = TutorialRegistry.Register(new CustomersChapter(_director));
+        });
 
         Try("registering menu actions", () =>
             Lifetime.Add(ActionRegistry.RegisterAll(CustomerActions.Build(_director).ToArray())));
+
+        Try("reporting the product allow-list", () =>
+        {
+            _poolSettledHandler = ReportAllowList;
+            VisitorRuntime.PoolSettled += _poolSettledHandler;
+            Lifetime.OnDispose(() =>
+            {
+                if (_poolSettledHandler is null)
+                    return;
+
+                VisitorRuntime.PoolSettled -= _poolSettledHandler;
+                _poolSettledHandler = null;
+            });
+        });
 
         Log.Debug($"Enabled with {VisitorSlot.Count} visitor slot(s): {string.Join(", ", VisitorRoster.PrefabNames)}.");
     }
@@ -123,6 +152,10 @@ public sealed class SpecialCustomersModule : ExpansionModule
         CustomerTuner.ForgetDialogueSetup();
         VisitorDialogue.OnSceneChanged();
 
+        // The schedules and the product registry both belong to the scene being left.
+        PostWatch.OnSceneChanged();
+        ProductAllowList.Invalidate();
+
         if (buildIndex == 1 || string.Equals(sceneName, "Main", StringComparison.Ordinal))
             Try("evaluating official-feature detection", EvaluateDetection);
     }
@@ -155,6 +188,34 @@ public sealed class SpecialCustomersModule : ExpansionModule
             _director.RecordSelfDisable(verdict.Reason);
 
         _director.Unwind(silent: true);
+
+        // No group will ever arrive, so the chapter's objectives are unreachable. It is withdrawn
+        // rather than left in the quest line as a note the player cannot act on; the reason is on
+        // the module card, in the config, in the log and behind "Show detection score".
+        WithdrawChapter();
+        Log.Msg($"The Special Customers tutorial chapter was withdrawn: {verdict.Reason}");
+    }
+
+    private void WithdrawChapter()
+    {
+        var chapter = Interlocked.Exchange(ref _chapter, null);
+        chapter?.Dispose();
+    }
+
+    /// <summary>
+    /// Prints the resolved product allow-list once per save load, so it is obvious which names
+    /// matched a real definition — including definitions other mods created.
+    /// </summary>
+    private void ReportAllowList()
+    {
+        try
+        {
+            ProductAllowList.Report(ProductAllowList.Current(forceRefresh: true));
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Reporting the product allow-list failed; groups will still resolve it when they order.", ex);
+        }
     }
 
     private void Try(string what, Action action)

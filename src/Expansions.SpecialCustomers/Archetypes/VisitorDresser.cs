@@ -5,19 +5,27 @@ using UnityObject = UnityEngine.Object;
 namespace Expansions.SpecialCustomers.Archetypes;
 
 /// <summary>
-/// Turns a neutral pool member into a biker and back again.
+/// Turns a neutral pool member into one specific biker, and back again.
 /// <para>
 /// Both looks are cached <c>AvatarSettings</c> assets applied wholesale, so re-dressing the same
 /// slot for a fifth visit costs one call and cannot accumulate layers. The neutral snapshot is taken
 /// the first time a slot is ever dressed, which is the only moment the mod is certain the avatar is
 /// still exactly what the prefab described.
 /// </para>
+/// <para>
+/// The cache is keyed on the visit as well as the slot, because the point of the visit seed is that
+/// the same slot is a different person next time. Looks built for an older visit are destroyed as
+/// soon as a new seed shows up: each one is a live <c>ScriptableObject</c> flagged
+/// <c>HideAndDontSave</c>, so nothing else would ever collect them.
+/// </para>
 /// </summary>
 internal static class VisitorDresser
 {
-    private static readonly Dictionary<string, UnityObject> Looks = new(StringComparer.Ordinal);
+    private static readonly Dictionary<int, Dressed> Current = new();
     private static readonly Dictionary<int, UnityObject> Neutral = new();
     private static readonly object Gate = new();
+
+    private static int _cachedSeed;
 
     /// <summary>Slots dressed at least once this session, for the probe.</summary>
     internal static IReadOnlyCollection<int> DressedSlots
@@ -34,11 +42,21 @@ internal static class VisitorDresser
         get
         {
             lock (Gate)
-                return Looks.Count;
+                return Current.Count;
         }
     }
 
-    internal static bool Apply(VisitorSlot slot, Archetype archetype, int memberIndex, out string failure)
+    /// <summary>Per-slot look fingerprints for the current visit, so the probe can prove they differ.</summary>
+    internal static IReadOnlyDictionary<int, string> CurrentSignatures
+    {
+        get
+        {
+            lock (Gate)
+                return Current.ToDictionary(pair => pair.Key, pair => pair.Value.Signature);
+        }
+    }
+
+    internal static bool Apply(VisitorSlot slot, Archetype archetype, int visitSeed, out string failure)
     {
         var npc = GameNpc.Resolve(slot.Id, out failure);
         if (npc is null)
@@ -53,14 +71,14 @@ internal static class VisitorDresser
 
         RememberNeutral(slot, donor);
 
-        var look = Resolve(slot, archetype, memberIndex, donor, out failure);
-        if (look is null)
+        var dressed = Resolve(slot, archetype, visitSeed, donor, out failure);
+        if (dressed is null)
             return false;
 
-        if (!npc.LoadAvatarSettings(look, out failure))
+        if (!npc.LoadAvatarSettings(dressed.Value.Settings, out failure))
             return false;
 
-        ApplyProp(slot, archetype);
+        SetProp(slot, dressed.Value.Prop);
         failure = string.Empty;
         return true;
     }
@@ -82,7 +100,7 @@ internal static class VisitorDresser
         if (npc is null)
             return false;
 
-        ClearProp(slot);
+        SetProp(slot, string.Empty);
         return npc.LoadAvatarSettings(neutral, out failure);
     }
 
@@ -93,11 +111,81 @@ internal static class VisitorDresser
 
         lock (Gate)
         {
-            assets = Looks.Values.Concat(Neutral.Values).ToList();
-            Looks.Clear();
+            assets = Current.Values.Select(dressed => dressed.Settings).Concat(Neutral.Values).ToList();
+            Current.Clear();
             Neutral.Clear();
+            _cachedSeed = 0;
         }
 
+        Destroy(assets);
+    }
+
+    private static Dressed? Resolve(VisitorSlot slot, Archetype archetype, int visitSeed, object donor, out string failure)
+    {
+        DropStaleLooks(visitSeed);
+
+        lock (Gate)
+        {
+            if (Current.TryGetValue(slot.Index, out var cached) &&
+                cached.Settings != null &&
+                string.Equals(cached.ArchetypeId, archetype.Id, StringComparison.Ordinal))
+            {
+                failure = string.Empty;
+                return cached;
+            }
+        }
+
+        var clone = AvatarSettingsFactory.Clone(donor, out failure);
+        if (clone is null)
+            return null;
+
+        clone.name = $"SC_{archetype.Id}_{slot.Index:00}_{visitSeed:x8}";
+
+        var look = archetype.BuildLook(slot.Index, visitSeed);
+        var dropped = look.Trim();
+        if (dropped > 0)
+        {
+            VisitorLog.Instance.Warn(
+                $"The {archetype.ShortName} look for slot {slot.Index:00} overflowed the avatar slot budget; " +
+                $"{dropped} layer(s) were dropped.");
+        }
+
+        if (!AvatarSettingsFactory.Apply(clone, look, out var applyFailure))
+        {
+            // Partial application still beats leaving them in neutral grey, so this is a warning and
+            // the clone is kept: the group is the point, and a missing belt is not worth losing it.
+            VisitorLog.Instance.Warn(
+                $"Parts of the {archetype.ShortName} look could not be written for slot {slot.Index:00} ({applyFailure}).");
+        }
+
+        var dressed = new Dressed(archetype.Id, clone, look.EquippablePath, look.Signature());
+
+        lock (Gate)
+            Current[slot.Index] = dressed;
+
+        failure = string.Empty;
+        return dressed;
+    }
+
+    private static void DropStaleLooks(int visitSeed)
+    {
+        List<UnityObject> stale;
+
+        lock (Gate)
+        {
+            if (_cachedSeed == visitSeed)
+                return;
+
+            _cachedSeed = visitSeed;
+            stale = Current.Values.Select(dressed => dressed.Settings).ToList();
+            Current.Clear();
+        }
+
+        Destroy(stale);
+    }
+
+    private static void Destroy(IEnumerable<UnityObject> assets)
+    {
         foreach (var asset in assets)
         {
             try
@@ -110,49 +198,6 @@ internal static class VisitorDresser
                 // A dead native side is exactly what we wanted anyway.
             }
         }
-    }
-
-    private static UnityObject? Resolve(VisitorSlot slot, Archetype archetype, int memberIndex, object donor, out string failure)
-    {
-        var key = $"{archetype.Id}:{slot.Index}";
-
-        lock (Gate)
-        {
-            if (Looks.TryGetValue(key, out var cached) && cached != null)
-            {
-                failure = string.Empty;
-                return cached;
-            }
-        }
-
-        var clone = AvatarSettingsFactory.Clone(donor, out failure);
-        if (clone is null)
-            return null;
-
-        clone.name = $"SC_{archetype.Id}_{slot.Index:00}";
-
-        var look = archetype.BuildLook(memberIndex);
-        var dropped = look.Trim();
-        if (dropped > 0)
-        {
-            VisitorLog.Instance.Warn(
-                $"The {archetype.ShortName} recipe for member {memberIndex} overflowed the avatar slot budget; " +
-                $"{dropped} layer(s) were dropped.");
-        }
-
-        if (!AvatarSettingsFactory.Apply(clone, look, out var applyFailure))
-        {
-            // Partial application still beats leaving them in neutral grey, so this is a warning and
-            // the clone is kept: the group is the point, and a missing belt is not worth losing it.
-            VisitorLog.Instance.Warn(
-                $"Parts of the {archetype.ShortName} look could not be written for slot {slot.Index:00} ({applyFailure}).");
-        }
-
-        lock (Gate)
-            Looks[key] = clone;
-
-        failure = string.Empty;
-        return clone;
     }
 
     private static void RememberNeutral(VisitorSlot slot, object donor)
@@ -177,30 +222,35 @@ internal static class VisitorDresser
             Neutral[slot.Index] = snapshot;
     }
 
-    private static void ApplyProp(VisitorSlot slot, Archetype archetype)
+    private static void SetProp(VisitorSlot slot, string path)
     {
-        if (string.IsNullOrEmpty(archetype.EquippablePath))
-            return;
-
         try
         {
-            VisitorRuntime.Resolve(slot)?.SetEquippable(archetype.EquippablePath);
+            VisitorRuntime.Resolve(slot)?.SetEquippable(path);
         }
         catch (Exception ex)
         {
-            VisitorLog.Instance.Debug($"Equippable '{archetype.EquippablePath}' was rejected ({Describe.Of(ex)}).");
+            var what = path.Length > 0 ? $"Equippable '{path}' was rejected" : "The held prop could not be cleared";
+            VisitorLog.Instance.Debug($"{what} for slot {slot.Index:00} ({Describe.Of(ex)}).");
         }
     }
 
-    private static void ClearProp(VisitorSlot slot)
+    private readonly struct Dressed
     {
-        try
+        internal Dressed(string archetypeId, UnityObject settings, string prop, string signature)
         {
-            VisitorRuntime.Resolve(slot)?.SetEquippable(string.Empty);
+            ArchetypeId = archetypeId;
+            Settings = settings;
+            Prop = prop;
+            Signature = signature;
         }
-        catch (Exception ex)
-        {
-            VisitorLog.Instance.Debug($"Could not clear the held prop for slot {slot.Index:00} ({Describe.Of(ex)}).");
-        }
+
+        internal string ArchetypeId { get; }
+
+        internal UnityObject Settings { get; }
+
+        internal string Prop { get; }
+
+        internal string Signature { get; }
     }
 }

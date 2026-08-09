@@ -38,6 +38,13 @@ public sealed class DriverRecord
     /// <summary>True only for a van the mod spawned, which is therefore the mod's to clean up.</summary>
     public bool SpawnedVehicle { get; set; }
 
+    /// <summary>
+    /// Units that must be aboard before this driver leaves, for every route it runs. 0 derives it from
+    /// the vehicle's capacity. Set by talking to the driver; there is no vanilla field that carries it,
+    /// which is exactly why it lives on the employee rather than on a clipboard row.
+    /// </summary>
+    public int DepartAtUnits { get; set; }
+
     public List<DriverRoute> Routes { get; set; } = new();
 
     /// <summary>

@@ -19,13 +19,26 @@ internal static class GameTypes
 
     internal const string PoliceOfficer = "Il2CppScheduleOne.Police.PoliceOfficer";
     internal const string PoliceStation = "Il2CppScheduleOne.Map.PoliceStation";
+    internal const string EDispatchType = "Il2CppScheduleOne.Map.PoliceStation+EDispatchType";
+    internal const string NpcHealth = "Il2CppScheduleOne.NPCs.NPCHealth";
     internal const string NpcManager = "Il2CppScheduleOne.NPCs.NPCManager";
 
     internal const string Player = "Il2CppScheduleOne.PlayerScripts.Player";
     internal const string PlayerCrimeData = "Il2CppScheduleOne.PlayerScripts.PlayerCrimeData";
+    internal const string PlayerInventory = "Il2CppScheduleOne.PlayerScripts.PlayerInventory";
 
     internal const string BodySearchBehaviour = "Il2CppScheduleOne.NPCs.Behaviour.BodySearchBehaviour";
     internal const string CheckpointBehaviour = "Il2CppScheduleOne.NPCs.Behaviour.CheckpointBehaviour";
+    internal const string CallPoliceBehaviour = "Il2CppScheduleOne.NPCs.Behaviour.CallPoliceBehaviour";
+
+    internal const string Property = "Il2CppScheduleOne.Property.Property";
+    internal const string StorageEntity = "Il2CppScheduleOne.Storage.StorageEntity";
+    internal const string TimeManager = "Il2CppScheduleOne.GameTime.TimeManager";
+
+    internal const string Dealer = "Il2CppScheduleOne.Economy.Dealer";
+    internal const string DealerNPCData = "Il2CppScheduleOne.NPCs.Framework.DealerNPCData";
+    internal const string Customer = "Il2CppScheduleOne.Economy.Customer";
+    internal const string ShopInterface = "Il2CppScheduleOne.UI.Shop.ShopInterface";
 
     internal const string VisionCone = "Il2CppScheduleOne.Vision.VisionCone";
     internal const string EVisualState = "Il2CppScheduleOne.Vision.EVisualState";

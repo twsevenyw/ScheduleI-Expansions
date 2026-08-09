@@ -70,6 +70,25 @@ internal static class WorldApi
         return fallback;
     }
 
+    /// <summary>
+    /// Where the local player is standing. Used only by the "take this vehicle" option, which is an
+    /// in-world gesture rather than a list, so a missing player simply hides that option.
+    /// </summary>
+    internal static bool TryPlayerPosition(out Vector3 position)
+    {
+        position = Vector3.zero;
+
+        var player = Gx.GetStatic(GameTypes.Player, "Local");
+        if (!Gx.Alive(player))
+            return false;
+
+        if (Gx.GetAlive(player, "transform") is not Transform transform)
+            return false;
+
+        position = transform.position;
+        return true;
+    }
+
     // ── Parking ─────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>

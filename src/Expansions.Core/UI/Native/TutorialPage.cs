@@ -7,15 +7,28 @@ using UnityEngine.UI;
 namespace Expansions.Core.UI.Native;
 
 /// <summary>
-/// The Tutorial page: the whole-line controls in a toolbar, then one switchable row per chapter.
+/// The Tutorial page: what the quest line is, where it stands, the whole-line controls, then one
+/// switchable row per chapter.
 /// <para>
 /// It is its own tab rather than a section of the Actions list because with 46 actions, three module
 /// cards and seven chapters, one scrolling column would bury all three. Start / Restart and Reset stay
 /// registered as actions as well, so nothing that used to work by id stops working.
 /// </para>
+/// <para>
+/// The intro paragraph and the progress line are here rather than in a manual because this is the only
+/// screen that knows which chapters exist: they are contributed by whichever mods are installed, so
+/// anything written ahead of time would be wrong on most installs.
+/// </para>
 /// </summary>
 internal sealed class TutorialPage
 {
+    /// <summary>Everything above the toolbar: the paragraph explaining the line, then where it stands.</summary>
+    private const float HeaderHeight =
+        MenuStyle.TutorialIntroHeight + MenuStyle.TutorialIntroGap +
+        MenuStyle.TutorialProgressHeight + MenuStyle.TutorialProgressGap;
+
+    private const float ListTop = HeaderHeight + MenuStyle.TutorialToolbarHeight + MenuStyle.TutorialToolbarGap;
+
     private readonly List<TutorialRow> _rows = new();
     private readonly List<UiCallback> _callbacks = new();
     private readonly List<HoverWatcher> _toolbarHovers = new();
@@ -25,27 +38,31 @@ internal sealed class TutorialPage
     private readonly ScrollView _scroll;
     private readonly TextMeshProUGUI _empty;
     private readonly TextMeshProUGUI _startLabel;
+    private readonly TextMeshProUGUI _progress;
 
     private float _budget = MenuStyle.MaxListHeight;
     private bool _startedLabel;
+    private bool _wasActive;
+    private string _renderedProgress = string.Empty;
 
     private TutorialPage(
         RectTransform root,
         RectTransform listFrame,
         ScrollView scroll,
         TextMeshProUGUI empty,
-        TextMeshProUGUI startLabel)
+        TextMeshProUGUI startLabel,
+        TextMeshProUGUI progress)
     {
         _root = root;
         _listFrame = listFrame;
         _scroll = scroll;
         _empty = empty;
         _startLabel = startLabel;
+        _progress = progress;
     }
 
-    /// <summary>Height the panel has to give this page: the toolbar plus the list it wants.</summary>
-    public float PreferredHeight { get; private set; } =
-        MenuStyle.TutorialToolbarHeight + MenuStyle.TutorialToolbarGap + MenuStyle.TutorialRowHeight;
+    /// <summary>Height the panel has to give this page: the header, the toolbar, and the list it wants.</summary>
+    public float PreferredHeight { get; private set; } = ListTop + MenuStyle.TutorialRowHeight;
 
     /// <summary><paramref name="onChanged"/> fires after anything that resizes or restates the page.</summary>
     public static TutorialPage Build(Transform parent, Action onChanged)
@@ -59,8 +76,36 @@ internal sealed class TutorialPage
         var callbacks = new List<UiCallback>();
         var hovers = new List<HoverWatcher>();
 
+        var introGo = UiFactory.New("Intro", pageGo.transform);
+        UiFactory.AnchorTop(
+            UiFactory.Rect(introGo), MenuStyle.ListPadX, 0f, MenuStyle.TutorialIntroHeight);
+
+        var intro = UiFactory.Text(
+            introGo,
+            GameFonts.Description,
+            MenuStyle.TutorialIntroSize,
+            MenuStyle.TextDim,
+            TextAlignmentOptions.TopLeft,
+            true);
+        intro.text = IntroText;
+
+        var progressGo = UiFactory.New("Progress", pageGo.transform);
+        UiFactory.AnchorTop(
+            UiFactory.Rect(progressGo),
+            MenuStyle.ListPadX,
+            MenuStyle.TutorialIntroHeight + MenuStyle.TutorialIntroGap,
+            MenuStyle.TutorialProgressHeight);
+
+        var progress = UiFactory.Text(
+            progressGo,
+            GameFonts.Description,
+            MenuStyle.TutorialProgressSize,
+            MenuStyle.Text,
+            TextAlignmentOptions.Left,
+            true);
+
         var toolbarGo = UiFactory.New("Toolbar", pageGo.transform);
-        UiFactory.AnchorTop(UiFactory.Rect(toolbarGo), 0f, 0f, MenuStyle.TutorialToolbarHeight);
+        UiFactory.AnchorTop(UiFactory.Rect(toolbarGo), 0f, HeaderHeight, MenuStyle.TutorialToolbarHeight);
 
         var startLabel = AddToolbarButton(
             toolbarGo.transform, 0, "Start", () => built?.StartOrRestart(onChanged), callbacks, hovers);
@@ -73,12 +118,7 @@ internal sealed class TutorialPage
 
         var listGo = UiFactory.New("ChapterList", pageGo.transform);
         var listFrame = UiFactory.Rect(listGo);
-        UiFactory.AnchorTopBox(
-            listFrame,
-            0f,
-            0f,
-            MenuStyle.TutorialToolbarHeight + MenuStyle.TutorialToolbarGap,
-            MenuStyle.TutorialRowHeight);
+        UiFactory.AnchorTopBox(listFrame, 0f, 0f, ListTop, MenuStyle.TutorialRowHeight);
 
         var scroll = ScrollView.Build(listGo, MenuStyle.ListPadX, MenuStyle.TutorialRowGap);
 
@@ -94,9 +134,10 @@ internal sealed class TutorialPage
         emptyGo.AddComponent<LayoutElement>().preferredHeight = MenuStyle.TutorialRowHeight;
         emptyGo.SetActive(false);
 
-        built = new TutorialPage(page, listFrame, scroll, empty, startLabel);
+        built = new TutorialPage(page, listFrame, scroll, empty, startLabel, progress);
         built._callbacks.AddRange(callbacks);
         built._toolbarHovers.AddRange(hovers);
+        built.RefreshProgress();
         return built;
     }
 
@@ -104,6 +145,13 @@ internal sealed class TutorialPage
     {
         if (InteropObjects.Alive(_root))
             _root.gameObject.SetActive(active);
+
+        // Counted on the edge only: the guide chapter asks the player to look at this tab once, and a page
+        // that is re-shown every frame the screen is open would otherwise count thousands of visits.
+        if (active && !_wasActive)
+            TutorialActivity.TutorialTabViewed();
+
+        _wasActive = active;
     }
 
     /// <summary>How much page height the screen is willing to give this list.</summary>
@@ -119,25 +167,22 @@ internal sealed class TutorialPage
 
         _empty.gameObject.SetActive(chapters.Count == 0);
         RefreshRows(chapters);
+        RefreshProgress();
 
-        var listBudget = Mathf.Max(
-            MenuStyle.TutorialRowHeight,
-            _budget - MenuStyle.TutorialToolbarHeight - MenuStyle.TutorialToolbarGap);
+        var listBudget = Mathf.Max(MenuStyle.TutorialRowHeight, _budget - ListTop);
 
         _scroll.Rebuild();
         var listHeight = Mathf.Clamp(_scroll.ContentHeight, MenuStyle.TutorialRowHeight, listBudget);
 
-        _listFrame.offsetMin = new Vector2(
-            _listFrame.offsetMin.x,
-            -(MenuStyle.TutorialToolbarHeight + MenuStyle.TutorialToolbarGap + listHeight));
-
-        PreferredHeight = MenuStyle.TutorialToolbarHeight + MenuStyle.TutorialToolbarGap + listHeight;
+        _listFrame.offsetMin = new Vector2(_listFrame.offsetMin.x, -(ListTop + listHeight));
+        PreferredHeight = ListTop + listHeight;
     }
 
     /// <summary>Per-frame: a chapter's state moves with the game, not with the registry.</summary>
     public void Tick()
     {
         RefreshRows(TutorialRegistry.Chapters);
+        RefreshProgress();
 
         var started = TutorialDirector.IsStarted;
         if (started == _startedLabel)
@@ -208,6 +253,32 @@ internal sealed class TutorialPage
 
         hovers.Add(new HoverWatcher(hover));
         return text;
+    }
+
+    /// <summary>
+    /// What the line is, in the two facts a player needs before pressing Start: it is played in the phone's
+    /// journal like any other quest, and it is assembled from whatever mods are installed.
+    /// </summary>
+    private static string IntroText =>
+        "A quest line that teaches the suite, played in your phone's journal like any other quest. Each " +
+        "installed mod contributes its own chapter, so a mod you add later simply appears here. Press Start " +
+        "with a game loaded; click any row to switch that chapter off and the line will skip it.";
+
+    /// <summary>
+    /// The one line that answers "am I doing this, and how far in am I". Sourced from the director rather
+    /// than counted here, so it says the same thing as the footer and the menu status.
+    /// </summary>
+    private void RefreshProgress()
+    {
+        var line = TutorialDirector.Status;
+        if (line.Length == 0)
+            line = "Tutorial status unavailable.";
+
+        if (string.Equals(_renderedProgress, line, StringComparison.Ordinal))
+            return;
+
+        _renderedProgress = line;
+        _progress.text = line;
     }
 
     private bool Matches(IReadOnlyList<ITutorialChapter> chapters)

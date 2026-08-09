@@ -2,8 +2,8 @@
   <PropertyGroup>
     <RootNamespace>Expansions.PoliceOverhaul</RootNamespace>
     <AssemblyName>Expansions.PoliceOverhaul</AssemblyName>
-    <Version>0.2.0</Version>
-    <Description>Dynamic police intensity, federal agents, outlaw status, and heavier consequences when caught.</Description>
+    <Version>0.3.0</Version>
+    <Description>Persistent heat driving the game's own patrol scheduler, federal agents and stakeouts, outlaw status with economic penalties, property raids, and an arrest that costs the day.</Description>
     <ExpansionsDeployDir>$(GameDir)\Mods</ExpansionsDeployDir>
   </PropertyGroup>
 

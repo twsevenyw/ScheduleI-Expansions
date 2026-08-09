@@ -177,8 +177,9 @@ internal static class DriverSettings
 
         _driveTimeoutMinutes = config.Bind("drive_timeout_minutes", 90, "Give up on a drive after (in-game minutes)");
 
-        _panelHotkey = config.Bind("panel_hotkey", "F6", "Drivers panel hotkey",
-            "Any UnityEngine.KeyCode name. F7 is the Expansions menu and F8 is Creative Mode, so avoid those.");
+        _panelHotkey = config.Bind("panel_hotkey", "F6", "Drivers diagnostic panel hotkey",
+            "Any UnityEngine.KeyCode name; 'None' turns the panel off entirely, since it is read-only " +
+            "diagnostics and nothing needs it. F7 is the Expansions menu and F8 is Creative Mode.");
 
         _debugLogging = config.Bind("debug_logging", false, "Verbose logging",
             "Logs every state transition. Useful once, noisy forever after.");

@@ -35,6 +35,14 @@ public static class ExpansionConfig
     /// <summary>Channel used when <c>update_channel</c> is blank or unreadable.</summary>
     public const string DefaultUpdateChannel = "stable";
 
+    /// <summary>
+    /// The publisher's stable manifest asset. GitHub redirects it to the newest non-draft,
+    /// non-prerelease release, so it needs no API call and has no rate limit. It answers 404 until the
+    /// first such release exists, which the updater treats as "nothing published yet".
+    /// </summary>
+    public const string DefaultUpdateManifestUrl =
+        "https://github.com/twsevenyw/ScheduleI-Expansions/releases/latest/download/update-manifest.json";
+
     private static ModuleConfig? _config;
     private static ConfigValue<bool>? _verboseLogging;
     private static ConfigValue<string>? _menuHotkey;
@@ -56,7 +64,7 @@ public static class ExpansionConfig
     private static string _disabledTutorialChaptersCache = string.Empty;
     private static bool _autoUpdateCache = true;
     private static string _updateChannelCache = DefaultUpdateChannel;
-    private static string _updateManifestUrlCache = string.Empty;
+    private static string _updateManifestUrlCache = DefaultUpdateManifestUrl;
 
     public static string FilePath { get; private set; } = string.Empty;
 
@@ -101,9 +109,11 @@ public static class ExpansionConfig
     }
 
     /// <summary>
-    /// Whether the suite checks the release manifest on startup and stages a newer build. The check
-    /// runs on a background task and never blocks loading; the swap itself always happens between
-    /// sessions, never in a running process. See <c>Updates/UpdateClient.cs</c>.
+    /// Whether the suite keeps itself up to date. Read by the <c>Expansions.Updater</c> plugin, which is
+    /// what actually does the work — it checks on a background task that cannot delay a launch, and
+    /// installs what it found at the start of the next one, in the window before MelonLoader loads the
+    /// mod assemblies. Off means the updater touches nothing at all, including anything already
+    /// downloaded.
     /// </summary>
     public static bool AutoUpdate
     {
@@ -116,8 +126,12 @@ public static class ExpansionConfig
         }
     }
 
-    /// <summary>Which channel of the manifest to read: <c>stable</c>, <c>beta</c>, or whatever the
-    /// publisher declares.</summary>
+    /// <summary>
+    /// Which releases to follow. <c>stable</c> reads the publisher's <c>releases/latest</c> asset, which
+    /// GitHub already filters to non-prerelease, non-draft releases. Any other value means "include
+    /// prereleases", which requires listing the repository's releases instead — the manifest itself carries
+    /// no channel field, because the publisher expresses that with GitHub's prerelease flag.
+    /// </summary>
     public static string UpdateChannel
     {
         get => _updateChannelCache;
@@ -131,8 +145,8 @@ public static class ExpansionConfig
     }
 
     /// <summary>
-    /// Where the update manifest lives. Accepts a GitHub <c>owner/repo</c> shorthand, a GitHub
-    /// releases API URL, or a direct URL to a manifest JSON. Empty means the updater does nothing.
+    /// Where the update manifest lives. Accepts a GitHub <c>owner/repo</c> shorthand or a direct https URL
+    /// to an <c>update-manifest.json</c>. Empty switches the updater off entirely.
     /// </summary>
     public static string UpdateManifestUrl
     {
@@ -235,24 +249,25 @@ public static class ExpansionConfig
         _eventHotkeyCache = ParseHotkey(_eventHotkey.Value, DefaultEventHotkey);
         _eventHotkey.Changed += static (_, current) => _eventHotkeyCache = ParseHotkey(current, DefaultEventHotkey);
 
-        _autoUpdate = config.Bind("auto_update", true, "Check for updates",
-            "Look for a newer release on startup and stage it. Staged files are only swapped in " +
-            "after this session ends, never while the game is running. Off means the Actions tab's " +
-            "update buttons are the only way to check.");
+        _autoUpdate = config.Bind("auto_update", true, "Keep the suite up to date",
+            "Check for a newer release in the background and install it at the next launch, before the " +
+            "mods load. Nothing is ever deleted and a mod you switched off stays off. Off means the " +
+            "updater does nothing at all - there is no manual alternative, by design.");
         _autoUpdateCache = _autoUpdate.Value;
         _autoUpdate.Changed += static (_, current) => _autoUpdateCache = current;
 
         _updateChannel = config.Bind("update_channel", DefaultUpdateChannel, "Update channel",
-            "Which channel of the release manifest to follow. 'stable' ignores anything the " +
-            "publisher marked as a pre-release.");
+            "'stable' follows the newest published release, which is what almost everyone wants. Any " +
+            "other value also picks up pre-releases, which the publisher uses for release candidates.");
         _updateChannelCache = Normalize(_updateChannel.Value, DefaultUpdateChannel);
         _updateChannel.Changed += static (_, current) => _updateChannelCache = Normalize(current, DefaultUpdateChannel);
 
-        _updateManifestUrl = config.Bind("update_manifest_url", string.Empty, "Update manifest URL",
-            "Where to look for releases. A GitHub 'owner/repo' shorthand, a full GitHub releases " +
-            "API URL, or a direct URL to an expansions-manifest.json. Leave empty to disable the " +
-            "check entirely.");
-        _updateManifestUrlCache = _updateManifestUrl.Value?.Trim() ?? string.Empty;
+        _updateManifestUrl = config.Bind("update_manifest_url", DefaultUpdateManifestUrl, "Update manifest URL",
+            "Where to look for releases. A GitHub 'owner/repo' shorthand or a direct https URL to an " +
+            "update-manifest.json. Leave empty to disable update checking entirely.");
+        // Trimmed but not defaulted: an empty value is a deliberate "never check", and defaulting it back
+        // would override the one switch that turns the network off completely.
+        _updateManifestUrlCache = _updateManifestUrl.Value?.Trim() ?? DefaultUpdateManifestUrl;
         _updateManifestUrl.Changed += static (_, current) => _updateManifestUrlCache = current?.Trim() ?? string.Empty;
 
         _allowMutatingProbes = config.Bind(AllowMutatingProbesKey, false, "Allow mutating probes",

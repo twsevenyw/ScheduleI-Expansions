@@ -43,7 +43,14 @@ internal static class CoreActions
             TutorialActions.ShowStatus(),
             FileActions.OpenSettings(),
             FileActions.OpenUserData(),
+            UpdateActions.ShowStatus(),
+            UpdateActions.ShowVersions(),
+            UpdateActions.RevealUpdateFolder(),
             OutputActions.Clear());
+
+        // Registered after Core's own rows so the mirrored event section lands beneath them, and so
+        // the count logged below is the whole surface rather than half of it.
+        EventActions.RegisterAll();
 
         ExpansionHost.Log.Msg(
             $"Actions: {ActionRegistry.Count} registered. Open the Expansions screen and pick the Actions tab; " +
@@ -52,6 +59,7 @@ internal static class CoreActions
 
     internal static void Unregister()
     {
+        EventActions.Unregister();
         _registration?.Dispose();
         _registration = null;
     }

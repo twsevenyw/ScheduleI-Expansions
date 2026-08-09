@@ -1,0 +1,69 @@
+<#
+Waits for the Tweaks project to land in the solution and build clean, then restarts
+Schedule I with everything deployed.
+
+Owner gave explicit permission to force-quit and relaunch the game. A graceful
+CloseMainWindow is tried first so the game gets a chance to flush; Kill is the fallback.
+#>
+
+$ErrorActionPreference = 'Stop'
+$repo    = 'C:\Users\fyfvg\Documents\ScheduleI-CreativeMode'
+$sln     = Join-Path $repo 'src\Expansions.sln'
+$gameDir = 'C:\Program Files (x86)\Steam\steamapps\common\Schedule I'
+$marker  = Join-Path $repo 'scripts\.restart-done'
+$deadline = (Get-Date).AddMinutes(45)
+
+Set-Location $repo
+if (Test-Path $marker) { Remove-Item $marker -Force }
+
+function Say($m) { "[{0}] {1}" -f (Get-Date).ToString('HH:mm:ss'), $m }
+
+Say "WATCHER: waiting for Expansions.Tweaks to enter the solution and build clean."
+
+while ((Get-Date) -lt $deadline) {
+    Start-Sleep -Seconds 15
+
+    # 1. Is the project in the solution yet?
+    $inSln = (dotnet sln $sln list 2>&1 | Select-String 'Expansions.Tweaks').Count -gt 0
+    if (-not $inSln) { Say "waiting: Tweaks not in solution yet"; continue }
+
+    # 2. Has the agent stopped writing? Avoid building a half-saved tree.
+    $recent = Get-ChildItem (Join-Path $repo 'src') -Recurse -File -Include *.cs, *.csproj -EA SilentlyContinue |
+              Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' -and $_.LastWriteTime -gt (Get-Date).AddSeconds(-75) }
+    if ($recent) { Say ("waiting: {0} file(s) still being written" -f $recent.Count); continue }
+
+    # 3. Does the whole solution build? Deploy suppressed so the running game can't fail it.
+    $build = & dotnet build $sln -c Release -p:ExpansionsDeployDir= 2>&1
+    if ($LASTEXITCODE -ne 0) { Say "waiting: solution does not build yet"; continue }
+
+    Say "READY: solution builds clean with Tweaks included."
+
+    # 4. Close the game.
+    $proc = Get-Process -Name 'Schedule I' -EA SilentlyContinue
+    if ($proc) {
+        Say "closing Schedule I (pid $($proc.Id))"
+        $proc.CloseMainWindow() | Out-Null
+        if (-not $proc.WaitForExit(20000)) { Say "graceful close timed out; forcing"; $proc | Stop-Process -Force }
+        Start-Sleep -Seconds 3
+    } else { Say "game already closed" }
+
+    # 5. Deploy everything, including the stale Core and CreativeMode.
+    Say "deploying"
+    & dotnet build $sln -c Release 2>&1 | Out-Null
+    & dotnet build $repo -c Release 2>&1 | Out-Null
+
+    Get-ChildItem "$gameDir\Mods", "$gameDir\UserLibs", "$gameDir\Plugins" -Filter '*.dll' |
+        Sort-Object Name |
+        ForEach-Object { Say ("  {0,-34} {1,6:N0} KB  {2}" -f $_.Name, ($_.Length / 1KB), $_.LastWriteTime.ToString('HH:mm:ss')) }
+
+    # 6. Relaunch through Steam so it initialises normally.
+    Say "relaunching Schedule I"
+    Start-Process 'steam://rungameid/3164500'
+
+    New-Item $marker -ItemType File -Force | Out-Null
+    Say "WATCHER: DONE - game restarted with all mods deployed."
+    exit 0
+}
+
+Say "WATCHER: TIMEOUT after 45 minutes - nothing was restarted."
+exit 1

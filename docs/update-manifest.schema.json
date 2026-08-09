@@ -120,7 +120,7 @@
       "additionalProperties": false,
       "properties": {
         "id": {
-          "description": "Stable module id. Matches the module id used in Expansions.cfg for the three mods; 'expansions_core' for the shared library.",
+          "description": "Stable id, derived from the assembly name at package time. A file installed to Mods uses the module id from Expansions.cfg; anything else is prefixed, e.g. 'expansions_core', 'expansions_updater'.",
           "type": "string",
           "pattern": "^[a-z0-9_]+$"
         },

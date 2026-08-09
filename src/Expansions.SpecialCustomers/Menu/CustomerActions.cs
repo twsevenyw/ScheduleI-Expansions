@@ -1,5 +1,6 @@
 using Expansions.Core.Actions;
 using Expansions.SpecialCustomers.Archetypes;
+using Expansions.SpecialCustomers.Configuration;
 using Expansions.SpecialCustomers.Detection;
 using Expansions.SpecialCustomers.Game;
 using Expansions.SpecialCustomers.Visitors;
@@ -49,11 +50,19 @@ internal static class CustomerActions
 
         yield return new ExpansionAction(
             id: "special_customers.park_visitor",
-            label: "Send the scout back to his post",
-            description: "Warps the scout back onto the Northtown forecourt if he has wandered or got stuck.",
-            isAvailable: HostOnly(() => VisitorRuntime.Resolve(VisitorSlot.Primary) is not null, "he is not in the world"),
-            invoke: ParkScout,
+            label: "Send every idle visitor back to their post",
+            description: "Warps any visitor who is not part of a live visit back onto the Northtown forecourt and takes them out of the generic NPC schedule, which is what walks them off in the first place.",
+            isAvailable: HostOnly(() => VisitorRuntime.ResolvedCount() > 0, "no visitor is in the world"),
+            invoke: () => ParkIdleVisitors(director),
             order: 30);
+
+        yield return new ExpansionAction(
+            id: "special_customers.post_report",
+            label: "Where are the visitors?",
+            description: "Reports every visitor's distance from their post, whether their schedule is pinned, and how often the watchdog has had to put them back.",
+            isAvailable: () => ActionAvailability.Ready,
+            invoke: () => ActionResult.Ok(DescribePosts(director)),
+            order: 35);
 
         yield return new ExpansionAction(
             id: "special_customers.force_visit",
@@ -105,6 +114,14 @@ internal static class CustomerActions
             order: 70);
 
         yield return new ExpansionAction(
+            id: "special_customers.products",
+            label: "Show the product allow-list",
+            description: "Which product names the groups are allowed to order, which of them resolved to a real product definition, and what happened to any that did not.",
+            isAvailable: () => ActionAvailability.Ready,
+            invoke: DescribeAllowList,
+            order: 75);
+
+        yield return new ExpansionAction(
             id: "special_customers.detection",
             label: "Show detection score",
             description: "Whether the module has stood itself down because the game looks like it ships Special Customers natively, and the evidence for it.",
@@ -138,7 +155,7 @@ internal static class CustomerActions
 
         return VisitorRuntime.CustomNpcsReady()
             ? ActionAvailability.Ready
-            : ActionAvailability.Unavailable("the visitor NPCs are not in the world yet");
+            : ActionAvailability.Unavailable("the visitor NPCs are not in the world yet - load a save, and run the diagnostics probes if they still do not appear");
     };
 
     private static IReadOnlyList<ActionChoice> ArchetypeChoices()
@@ -198,21 +215,134 @@ internal static class CustomerActions
             : ActionResult.Failed($"Could not teleport: {failure}");
     }
 
-    private static ActionResult ParkScout()
+    /// <summary>
+    /// Puts every visitor who is not part of a live visit back on their post. The group in town is
+    /// left alone: they were placed there deliberately and the leader may be walking to a handover.
+    /// </summary>
+    private static ActionResult ParkIdleVisitors(VisitDirector director)
     {
-        var slot = VisitorSlot.Primary;
-        var npc = VisitorRuntime.Resolve(slot);
-        if (npc is null)
-            return ActionResult.Failed($"{slot.FullName} is not in the world, so there is nothing to park.");
+        var busy = director.Current?.MemberSlots ?? (IReadOnlyList<int>)Array.Empty<int>();
+        var parked = new List<string>();
+        var problems = new List<string>();
 
+        foreach (var slot in VisitorSlot.All)
+        {
+            if (busy.Contains(slot.Index))
+                continue;
+
+            if (VisitorRuntime.Resolve(slot) is null)
+                continue;
+
+            try
+            {
+                Congregation.Park(slot);
+                parked.Add(slot.FullName);
+            }
+            catch (Exception ex)
+            {
+                problems.Add($"{slot.FullName} ({Describe.Of(ex)})");
+            }
+        }
+
+        if (parked.Count == 0 && problems.Count == 0)
+        {
+            return ActionResult.Failed(busy.Count > 0
+                ? "Every visitor in the world is part of the group in town, so none of them is idle."
+                : "No visitor is in the world, so there is nothing to park.");
+        }
+
+        var message = $"Put {parked.Count} visitor(s) back on the post at {Describe.Of(VisitorSlot.Primary.SpawnPosition)} " +
+                      $"and pinned their schedules: {string.Join(", ", parked)}.";
+
+        return problems.Count > 0
+            ? ActionResult.Failed(message + $" Failed for: {string.Join("; ", problems)}.")
+            : ActionResult.Ok(message);
+    }
+
+    private static string DescribePosts(VisitDirector director)
+    {
+        var busy = director.Current?.MemberSlots ?? (IReadOnlyList<int>)Array.Empty<int>();
+        var lines = new List<string>(VisitorSlot.Count + 3)
+        {
+            CustomerSettings.PinVisitorSchedules
+                ? "Schedules are pinned, so nothing should be walking a parked visitor anywhere."
+                : "Schedule pinning is OFF (pin_visitor_schedules), so parked visitors follow the generic civilian routine.",
+            CustomerSettings.PostWatchdogEnabled
+                ? $"The watchdog re-parks anyone more than {CustomerSettings.PostDriftRadius:0.#} m from their post " +
+                  $"or {CustomerSettings.PostDriftDepth:0.#} m above or below it. {PostWatch.TotalCorrections} correction(s) so far."
+                : "The re-park watchdog is OFF (post_watchdog).",
+        };
+
+        foreach (var slot in VisitorSlot.All)
+        {
+            var status = VisitorRuntime.StatusOf(slot);
+            if (!status.WrapperResolved)
+            {
+                lines.Add($"  {slot.Index:00} {slot.FullName}: not in the world — {status.Failure}.");
+                continue;
+            }
+
+            var post = slot.SpawnPosition;
+            var horizontal = new Vector2(status.Position.x - post.x, status.Position.z - post.z).magnitude;
+            var vertical = status.Position.y - post.y;
+            var state = PostWatch.StateOf(slot);
+            var role = busy.Contains(slot.Index) ? "in the group" : state.Pinned ? "parked, pinned" : "parked";
+
+            lines.Add(
+                $"  {slot.Index:00} {slot.FullName}: {role}, {Describe.Metres(horizontal)} away, {vertical:+0.#;-0.#} m vertical" +
+                (state.Corrections > 0 ? $", re-parked {state.Corrections}x" : string.Empty) + ".");
+        }
+
+        return string.Join("\n", lines);
+    }
+
+    private static ActionResult DescribeAllowList()
+    {
+        var resolution = ProductAllowList.Current(forceRefresh: true);
+        var lines = new List<string>(resolution.Requested.Count + 4)
+        {
+            $"{ProductAllowList.ConfigKey} = {(resolution.ConfiguredText.Length > 0 ? resolution.ConfiguredText : "(empty)")}",
+        };
+
+        if (!resolution.IsRestricted)
+        {
+            lines.Add("The list is empty, so groups may order anything you have listed for sale.");
+            lines.Add($"Put comma-separated product names in {ProductAllowList.ConfigKey} under [SpecialCustomers_01_Main] to restrict them.");
+            return ActionResult.NoChange(string.Join("\n", lines));
+        }
+
+        lines.Add($"Searched {resolution.KnownProductCount} product definition(s), including ones added by other mods.");
+
+        foreach (var match in resolution.Matched)
+        {
+            var name = SafeName(match.Product);
+            lines.Add($"  OK   {match.RequestedName} -> {name}" +
+                      (match.IsAvailableToPlayer ? string.Empty : " (you have not discovered it yet)") +
+                      (match.MatchedOn == "name" ? string.Empty : $" [matched on {match.MatchedOn}]"));
+        }
+
+        foreach (var miss in resolution.Unmatched)
+            lines.Add($"  MISS {miss} — no product on this save has that name or id, so it is skipped.");
+
+        if (resolution.Matched.Count == 0)
+        {
+            lines.Add("No group can place a bulk order until at least one name resolves.");
+            return ActionResult.Failed(string.Join("\n", lines));
+        }
+
+        lines.Add("Nothing outside this list can ever be requested; an archetype's taste only chooses within it.");
+        return ActionResult.Ok(string.Join("\n", lines));
+    }
+
+    private static string SafeName(S1API.Products.ProductDefinition product)
+    {
         try
         {
-            npc.Movement.Warp(slot.SpawnPosition);
-            return ActionResult.Ok($"Warped {slot.FullName} back to {Describe.Of(slot.SpawnPosition)}.");
+            return product.Name ?? "(unnamed)";
         }
-        catch (Exception ex)
+        catch
         {
-            return ActionResult.Error($"Parking {slot.FullName} failed", ex);
+            return "(unreadable)";
         }
     }
 

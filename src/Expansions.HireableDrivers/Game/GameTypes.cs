@@ -27,11 +27,20 @@ internal static class GameTypes
     internal const string ManagementItemFilter = "Il2CppScheduleOne.Management.ManagementItemFilter";
     internal const string ItemFilterMode = "Il2CppScheduleOne.Management.ManagementItemFilter+EMode";
     internal const string RouteEntryUi = "Il2CppScheduleOne.UI.Management.RouteEntryUI";
+    internal const string RouteListFieldUi = "Il2CppScheduleOne.UI.Management.RouteListFieldUI";
+    internal const string PackagerConfigPanel = "Il2CppScheduleOne.UI.Management.PackagerConfigPanel";
     internal const string ManagementInterface = "Il2CppScheduleOne.Management.ManagementInterface";
 
+    /// <summary>The clipboard's own option-list screen, reused for picks the worldspace picker cannot reach.</summary>
+    internal const string ItemSelector = "Il2CppScheduleOne.UI.Management.ItemSelector";
+    internal const string ItemSelectorOption = "Il2CppScheduleOne.UI.Management.ItemSelector+Option";
+
+    internal const string DialogueController = "Il2CppScheduleOne.Dialogue.DialogueController";
     internal const string DialogueControllerFixer = "Il2CppScheduleOne.Dialogue.DialogueController_Fixer";
     internal const string DialogueChoice = "Il2CppScheduleOne.Dialogue.DialogueController+DialogueChoice";
     internal const string ShouldShowCheck = "Il2CppScheduleOne.Dialogue.DialogueController+DialogueChoice+ShouldShowCheck";
+
+    internal const string Player = "Il2CppScheduleOne.PlayerScripts.Player";
 
     internal const string VehicleManager = "Il2CppScheduleOne.Vehicles.VehicleManager";
     internal const string LandVehicle = "Il2CppScheduleOne.Vehicles.LandVehicle";

@@ -103,6 +103,12 @@ internal static class GameBridge
 
     internal static string NameOf(object? player) => Members.Read(player, "PlayerName", string.Empty);
 
+    /// <summary>
+    /// Whether this is the human sitting at this machine. Read from the game's own flag rather than
+    /// compared against <c>Player.Local</c>, so it is still right on a peer that has not spawned one.
+    /// </summary>
+    internal static bool IsLocal(object? player) => Members.Read(player, "IsLocalPlayer", false);
+
     internal static bool IsArrested(object? player) => Members.Read(player, "IsArrested", false);
 
     /// <summary>Region name, or empty. Used only as a heat multiplier, so empty is a safe answer.</summary>

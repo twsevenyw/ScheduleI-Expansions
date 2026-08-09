@@ -17,7 +17,9 @@ internal static class TutorialSlots
     public const string Welcome = "welcome";
     public const string Modules = "modules";
     public const string Diagnostics = "diagnostics";
+    public const string Events = "events";
     public const string CreativeMode = "creative_mode";
+    public const string Guide = "guide";
     public const string Drivers = "drivers";
     public const string Police = "police";
     public const string Customers = "customers";
@@ -26,7 +28,7 @@ internal static class TutorialSlots
     /// <summary>Play order. <see cref="Extras"/> is last so late arrivals never reshuffle the line.</summary>
     public static readonly string[] Ordered =
     {
-        Welcome, Modules, Diagnostics, CreativeMode, Drivers, Police, Customers, Extras,
+        Welcome, Modules, Diagnostics, Events, CreativeMode, Guide, Drivers, Police, Customers, Extras,
     };
 
     /// <summary>Chapter id to slot. Ids not listed here fall through to <see cref="Extras"/>.</summary>
@@ -35,7 +37,9 @@ internal static class TutorialSlots
         [TutorialChapters.MenuId] = Welcome,
         [TutorialChapters.ModulesId] = Modules,
         [TutorialChapters.DiagnosticsId] = Diagnostics,
+        [TutorialChapters.EventsId] = Events,
         [TutorialChapters.CreativeModeId] = CreativeMode,
+        [TutorialChapters.GuideId] = Guide,
         [TutorialChapters.DriversId] = Drivers,
         [TutorialChapters.PoliceId] = Police,
         [TutorialChapters.CustomersId] = Customers,
@@ -50,7 +54,9 @@ internal static class TutorialSlots
         Welcome => typeof(ExpansionsWelcomeQuest),
         Modules => typeof(ExpansionsModulesQuest),
         Diagnostics => typeof(ExpansionsDiagnosticsQuest),
+        Events => typeof(ExpansionsEventsQuest),
         CreativeMode => typeof(ExpansionsCreativeModeQuest),
+        Guide => typeof(ExpansionsGuideQuest),
         Drivers => typeof(ExpansionsDriversQuest),
         Police => typeof(ExpansionsPoliceQuest),
         Customers => typeof(ExpansionsCustomersQuest),
@@ -74,9 +80,19 @@ internal sealed class ExpansionsDiagnosticsQuest : TutorialQuest
     internal override string SlotKey => TutorialSlots.Diagnostics;
 }
 
+internal sealed class ExpansionsEventsQuest : TutorialQuest
+{
+    internal override string SlotKey => TutorialSlots.Events;
+}
+
 internal sealed class ExpansionsCreativeModeQuest : TutorialQuest
 {
     internal override string SlotKey => TutorialSlots.CreativeMode;
+}
+
+internal sealed class ExpansionsGuideQuest : TutorialQuest
+{
+    internal override string SlotKey => TutorialSlots.Guide;
 }
 
 internal sealed class ExpansionsDriversQuest : TutorialQuest

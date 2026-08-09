@@ -73,6 +73,12 @@ internal static class DriverProbes
             "Are the management clipboard's route rows really driving this mod?",
             Area,
             ClipboardProbe);
+
+        yield return new DelegateProbe(
+            "drivers.native_surfaces",
+            "Is every driver setting reachable through the game's own screens?",
+            Area,
+            NativeSurfaces);
     }
 
     internal static IEnumerable<MutatingTestNote> Notes()
@@ -206,8 +212,9 @@ internal static class DriverProbes
         if (drivers.Count == 0)
         {
             result.Inconclusive(
-                $"No drivers hired. Open the panel with {DriverSettings.PanelHotkey} and press Hire, or use the " +
-                "\"Hire a driver\" action in the Expansions menu.");
+                HiringDesk.IsAttached
+                    ? $"No drivers hired. Talk to {HiringDesk.Location} and pick \"Hire a driver\" for one of your properties."
+                    : "No drivers hired, and driver hiring is not on the employee fixer yet — see `drivers.hiring_desk`.");
             return;
         }
 
@@ -230,7 +237,8 @@ internal static class DriverProbes
         {
             result.Fail(
                 $"{unbound} of {drivers.Count} driver record(s) have no matching employee in this save. Either they were " +
-                "fired outside the mod, or the save was written by a different roster. Fire them from the panel to tidy up.");
+                "fired outside the mod, or the save was written by a different roster. Clear them with \"Forget an " +
+                "orphaned driver record\" in the Expansions menu.");
             return;
         }
 
@@ -278,8 +286,9 @@ internal static class DriverProbes
         if (rows.Count == 0)
         {
             result.Inconclusive(
-                "No routes assigned. A route is a source, a destination and what to move; the \"Assign a route " +
-                "automatically\" action fills one in for you.");
+                "No routes assigned. Point the management clipboard at a driver and fill in a Routes row: the " +
+                "pickup is somewhere at the property they were hired to, the drop-off is anywhere you own or a " +
+                "dealer you have recruited.");
             return;
         }
 
@@ -289,7 +298,7 @@ internal static class DriverProbes
         {
             result.Fail(
                 $"{broken} route(s) point at something that no longer exists. Picking up and replacing a machine is the " +
-                "usual cause — re-point those rows in the panel.");
+                "usual cause — re-point those rows on the management clipboard.");
             return;
         }
 
@@ -384,8 +393,8 @@ internal static class DriverProbes
         }
 
         result.Fact("Menu actions", DriverActions.Registered > 0
-            ? $"{DriverActions.Registered} registered in the Expansions menu"
-            : "**none registered** — the drivers panel still carries every verb");
+            ? $"{DriverActions.Registered} registered in the Expansions menu (diagnostics and repair paths only)"
+            : "**none registered** — the diagnostics panel hotkey is the only way in");
 
         result.Fact("Harmony patches applied", DriverPatches.AppliedPatches.Count > 0
             ? string.Join(", ", DriverPatches.AppliedPatches)
@@ -457,6 +466,9 @@ internal static class DriverProbes
         result.Fact("Attached to", HiringDesk.Location.Length > 0 ? HiringDesk.Location : "nothing yet");
         result.Fact("Slot map", DriverSettings.DriverSlotsPerProperty);
 
+        if (HiringDesk.LastFailure.Length > 0)
+            result.Fact("Why it is not attached", "**" + HiringDesk.LastFailure + "**");
+
         var rows = WorldApi.OwnedProperties()
             .Select(property => new[]
             {
@@ -474,15 +486,15 @@ internal static class DriverProbes
         {
             result.Fail(
                 "No DialogueController_Fixer is in the scene, so driver hiring could not be attached where the other " +
-                "employees are hired. The Expansions menu's fallback \"Hire a driver\" action takes over.");
+                "employees are hired. The Expansions menu's \"Hire a driver (repair path)\" takes over and names this reason.");
             return;
         }
 
         if (!HiringDesk.IsAttached)
         {
             result.Inconclusive(
-                "The hiring NPC exists but would not take a driver option. Check the log for the reason; the fallback " +
-                "menu action is available in the meantime.");
+                "The hiring NPC exists but would not take a driver option. Check the log for the reason; the repair " +
+                "path in the Expansions menu is available in the meantime.");
             return;
         }
 
@@ -496,6 +508,14 @@ internal static class DriverProbes
         result.Fact("Route entry patch", DriverPatches.AppliedPatches.Any(p => p.Contains("ObjectValid", StringComparison.Ordinal))
             ? "applied — the source constraint shows in the game's own picker"
             : "**not applied** — the constraint is only enforced on the data");
+
+        result.Fact("Drop-off list patch", DriverPatches.AppliedPatches.Any(p => p.Contains("DestinationClicked", StringComparison.Ordinal))
+            ? "applied — a driver's drop-off button lists every destination in the game"
+            : "**not applied** — the drop-off button only offers what you can point at");
+
+        result.Fact("Panel dressing patch", DriverPatches.AppliedPatches.Any(p => p.Contains("BindInternal", StringComparison.Ordinal))
+            ? "applied — the Stations row is hidden and the Routes heading names the pickup property"
+            : "**not applied** — the Stations row shows but refuses with a reason");
 
         result.Fact("Vanilla dispatcher patch", DriverPatches.AppliedPatches.Any(p => p.Contains("GetTransitRouteReady", StringComparison.Ordinal))
             ? "applied — the Handler brain cannot claim a driver's route"
@@ -531,12 +551,105 @@ internal static class DriverProbes
         {
             result.Fail(
                 "No driver exposes a PackagerConfiguration.Routes field, so the management clipboard cannot be the " +
-                "route editor on this build. Use the Expansions menu's pickers instead.");
+                "route editor on this build. The Expansions menu's repair pickers write to the same records.");
             return;
         }
 
         result.Ok($"{bound} of {drivers.Count} driver(s) are reading their routes from the management clipboard.");
     }
+
+    /// <summary>
+    /// Every player-facing driver setting and the game screen it lives on. A "no" here is the difference
+    /// between the feature feeling shipped and the player having to go looking in a mod menu.
+    /// </summary>
+    private static void NativeSurfaces(ProbeContext context, ProbeResult result)
+    {
+        var hiring = HiringDesk.IsAttached;
+        var pickerOk = RoutePicker.IsAvailable(out var pickerReason);
+        var panelPatched = DriverPatches.IsApplied("BindInternal");
+        var drivers = DriverRegistry.Drivers;
+        var withDialogue = drivers.Count(d => DriverDesk.IsAttached(d.Record.EmployeeId));
+
+        result.Table(
+            new[] { "Setting", "Game screen it lives on", "Working" },
+            new List<IReadOnlyList<string>>
+            {
+                new[]
+                {
+                    "Hire a driver",
+                    hiring ? $"{HiringDesk.Location}'s interaction list" : "the employee fixer's interaction list",
+                    hiring ? "yes" : $"**no** — {Reason(HiringDesk.LastFailure, "still searching for the NPC")}",
+                },
+                new[] { "Bed", "management clipboard, Bed row", "yes (shipped)" },
+                new[] { "Route pickup", "management clipboard, Routes rows", "yes (shipped)" },
+                new[]
+                {
+                    "Route drop-off",
+                    pickerOk ? "management clipboard, drop-off list" : "management clipboard, worldspace picker",
+                    pickerOk ? "yes" : $"**limited** — {pickerReason}; only destinations within arm's reach can be clicked",
+                },
+                new[]
+                {
+                    "Stations row hidden",
+                    "management clipboard",
+                    panelPatched ? "yes" : "**no** — the row shows but refuses with a reason",
+                },
+                new[]
+                {
+                    "Vehicle",
+                    "the driver's own dialogue, standing next to the vehicle",
+                    drivers.Count == 0 ? "no drivers to check" : $"{withDialogue}/{drivers.Count} attached",
+                },
+                new[]
+                {
+                    "Departure size",
+                    "the driver's own dialogue",
+                    drivers.Count == 0 ? "no drivers to check" : $"{withDialogue}/{drivers.Count} attached",
+                },
+                new[] { "Set off now", "the driver's own dialogue", drivers.Count == 0 ? "no drivers to check" : $"{withDialogue}/{drivers.Count} attached" },
+                new[] { "Fire", "the driver's own dialogue", "yes (shipped)" },
+                new[] { "Why aren't you working?", "the driver's own dialogue", "yes (shipped, fed by this mod)" },
+            });
+
+        result.Fact("Drop-off picks applied through the clipboard list", RoutePicker.PicksApplied.ToString());
+
+        if (RoutePicker.LastFailure.Length > 0)
+            result.Fact("Last drop-off list failure", RoutePicker.LastFailure);
+
+        result.Fact("Repair paths showing in the Expansions menu",
+            DriverActions.LastPickerFailure.Length > 0 ? DriverActions.LastPickerFailure : "none");
+
+        if (!hiring)
+        {
+            result.Fail(
+                "Hiring is not on the employee fixer, so the one thing that must be native is not. " +
+                "The Expansions menu carries a repair path in the meantime, and it names this reason.");
+            return;
+        }
+
+        if (!pickerOk)
+        {
+            result.Inconclusive(
+                "Everything is on a game screen, but the drop-off button could not be given its list, so a " +
+                "destination across town or a dealer has to be set from the Expansions menu's repair path.");
+            return;
+        }
+
+        if (drivers.Count > 0 && withDialogue < drivers.Count)
+        {
+            result.Fail(
+                $"{drivers.Count - withDialogue} driver(s) have no DialogueController, so their vehicle and " +
+                "departure size cannot be set by talking to them. Nothing else is affected.");
+            return;
+        }
+
+        result.Ok(
+            "Every driver setting is on a screen the game drew: hiring on the fixer's interaction list, bed and " +
+            "routes on the management clipboard, vehicle and departure size in the driver's own conversation. " +
+            "The mod's own menu carries diagnostics only.");
+    }
+
+    private static string Reason(string reason, string fallback) => reason.Length > 0 ? reason : fallback;
 
     private static IEnumerable<(string Label, string TypeName)> TrackedTypes()
     {

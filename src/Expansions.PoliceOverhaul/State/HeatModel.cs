@@ -85,11 +85,18 @@ internal static class HeatModel
     /// <para>
     /// These are a floor, never a ceiling. Callers take the larger of this and the designer's own
     /// number for that post, because a mod called "police improvements" must never quietly staff a
-    /// checkpoint more thinly than the base game did — at zero heat the world has to be exactly
-    /// vanilla, which is the property that makes the whole feature feel shipped rather than bolted on.
+    /// checkpoint more thinly than the base game did.
+    /// </para>
+    /// <para>
+    /// <paramref name="densityMultiplier"/> is the one thing here that moves the world at zero heat,
+    /// and it does so deliberately: it is the "how many police does this town have" dial, separate
+    /// from "how badly do they want you". At 1 the calm world is exactly vanilla. Whatever it is set
+    /// to, the band still cannot exceed <see cref="HardOfficerCap"/>, which is the engine's own
+    /// refusal point rather than a number chosen here — so per-post staffing alone tops out at four
+    /// and the rest of a large multiplier has to come from opening more posts.
     /// </para>
     /// </summary>
-    internal static (int Min, int Max) OfficerBand(HeatTier tier, float masterScalar, int configuredMax)
+    internal static (int Min, int Max) OfficerBand(HeatTier tier, float masterScalar, int configuredMax, float densityMultiplier = 1f)
     {
         var (min, max) = tier switch
         {
@@ -108,10 +115,37 @@ internal static class HeatModel
             max = 1 + (int)Math.Round((max - 1) * masterScalar);
         }
 
+        var density = Math.Max(0.1f, densityMultiplier);
+        if (density > 1f)
+        {
+            min = (int)Math.Round(min * density, MidpointRounding.AwayFromZero);
+            max = (int)Math.Round(max * density, MidpointRounding.AwayFromZero);
+        }
+
         var cap = Math.Clamp(configuredMax, 1, HardOfficerCap);
         min = Math.Clamp(min, 1, cap);
         max = Math.Clamp(max, min, cap);
         return (min, max);
+    }
+
+    /// <summary>
+    /// A post's intensity requirement after the density dial.
+    /// <para>
+    /// This is the second half of density, and the half that actually scales. Per-post staffing stops
+    /// at four whatever you ask for, so the only way to put three times as many officers on the map
+    /// is to have three times as many posts running at once — and what decides that is each post's
+    /// shipped <c>IntensityRequirement</c> against the current law intensity. Dividing the
+    /// requirement opens the posts the designer meant for a hotter town, in the designer's own order:
+    /// the cheapest posts still come first, the expensive ones still come last. Nothing is invented
+    /// and nothing is reordered.
+    /// </para>
+    /// </summary>
+    internal static int PostRequirement(int vanillaRequirement, float densityMultiplier)
+    {
+        if (densityMultiplier <= 1f || vanillaRequirement <= 1)
+            return vanillaRequirement;
+
+        return Math.Max(1, (int)Math.Round(vanillaRequirement / densityMultiplier, MidpointRounding.AwayFromZero));
     }
 
     /// <summary>Hours added to each end of a checkpoint's shipped window.</summary>

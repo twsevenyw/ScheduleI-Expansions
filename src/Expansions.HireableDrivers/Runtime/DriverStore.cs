@@ -64,9 +64,16 @@ internal static class DriverStore
         Records.FirstOrDefault(r => string.Equals(r.EmployeeId, employeeId, StringComparison.Ordinal));
 
     /// <summary>Grows or shrinks a record's route list to the configured maximum.</summary>
-    internal static void EnsureRouteSlots(DriverRecord record)
+    internal static void EnsureRouteSlots(DriverRecord record) =>
+        EnsureRouteSlots(record, DriverSettings.MaxRoutesPerDriver);
+
+    /// <summary>
+    /// Same, against a row count read from the live <c>RouteListField</c> so the mirror is exactly as
+    /// wide as the clipboard the player is looking at.
+    /// </summary>
+    internal static void EnsureRouteSlots(DriverRecord record, int wanted)
     {
-        var wanted = DriverSettings.MaxRoutesPerDriver;
+        wanted = Math.Clamp(wanted, 1, 10);
 
         while (record.Routes.Count < wanted)
             record.Routes.Add(new DriverRoute());

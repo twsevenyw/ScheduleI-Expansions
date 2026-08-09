@@ -13,8 +13,36 @@ namespace Expansions.PoliceOverhaul.Runtime;
 /// </summary>
 internal static class Estate
 {
+    /// <summary>
+    /// Property ownership changes at most a handful of times a save, but the raid actions ask about it
+    /// on every frame the menu is open, and each answer is a reflection walk of the game's list. Half a
+    /// second of staleness is invisible to the player and turns sixty walks a second into two.
+    /// </summary>
+    private const float OwnedTtlSeconds = 0.5f;
+
+    private static IReadOnlyList<object> _owned = Array.Empty<object>();
+    private static float _ownedStamp = float.NegativeInfinity;
+
     /// <summary>Every property the player owns. Empty before a save is loaded.</summary>
     internal static IReadOnlyList<object> Owned()
+    {
+        var now = UnscaledTime();
+        if (now - _ownedStamp < OwnedTtlSeconds)
+            return _owned;
+
+        _ownedStamp = now;
+        _owned = ReadOwned();
+        return _owned;
+    }
+
+    /// <summary>Drops the cache. Called on scene unload, where every entry is about to be destroyed.</summary>
+    internal static void Forget()
+    {
+        _owned = Array.Empty<object>();
+        _ownedStamp = float.NegativeInfinity;
+    }
+
+    private static IReadOnlyList<object> ReadOwned()
     {
         var type = GameReflection.FindType(GameTypes.Property);
         if (type is null)
@@ -31,6 +59,19 @@ internal static class Estate
         }
 
         return owned;
+    }
+
+    private static float UnscaledTime()
+    {
+        try
+        {
+            return Time.unscaledTime;
+        }
+        catch
+        {
+            // Off the Unity main thread there is no clock; recompute rather than serve a stale list.
+            return float.PositiveInfinity;
+        }
     }
 
     internal static string NameOf(object? property)

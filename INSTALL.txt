@@ -3,25 +3,65 @@
                     Installation runbook  (hand this file to an AI)
 ==================================================================================================
 
-  Package ....... ScheduleI-Expansions-1.2.1-2026-08-06.zip
-  Generated ..... 2026-08-06
-  Game .......... Schedule I (TVGS), tested on v0.4.6 / build 0.4.6f11, Unity 2022.3.62f2
+  Package ....... ScheduleI-Expansions-1.3.0.zip
+  Generated ..... 2026-08-09
+  Game .......... Schedule I (TVGS), BUILT AND TESTED ON v0.4.6 / build 0.4.6f12,
+                  Unity 2022.3.62f2  -- see "WHICH GAME BUILD THIS TARGETS" below
   Branch ........ IL2CPP only  (the DEFAULT Steam branch -- NOT "alternate" / Mono)
   Loader ........ MelonLoader 0.7.3   -- YOU install this, it is not in the zip
   API layer ..... S1API.Forked 3.1.7  -- BUNDLED in the zip, nothing to download
   Platform ...... Windows 10 / 11, 64-bit
 
-  WHAT IS IN THE ZIP  -- nine files
+  WHAT IS IN THE ZIP  -- eleven files
   ----------------------------------------------------------------------------------------------
-     Mods\Expansions.HireableDrivers.dll       Hireable Drivers                     v0.4.0
-     Mods\Expansions.PoliceOverhaul.dll        Police Improvements                  v0.2.0
+     Mods\Expansions.HireableDrivers.dll       Hireable Drivers                     v0.5.0
+     Mods\Expansions.PoliceOverhaul.dll        Police Improvements                  v0.3.0
      Mods\Expansions.SpecialCustomers.dll      Special Customers                    v1.0.0
+     Mods\Expansions.Tweaks.dll                Quality of Life                      v0.1.0
      Mods\S1API.Il2Cpp.MelonLoader.dll         S1API.Forked, third party            v3.1.7
+     Plugins\Expansions.Updater.dll            keeps the suite up to date           v1.0.0
      Plugins\S1APILoader.MelonLoader.dll       S1API loader plugin, third party     v3.1.7
      UserLibs\Expansions.Core.dll              shared library, NOT a mod            v0.1.0
      INSTALL.txt                               this file
-     FEATURES.txt                              the full 2,257-line feature reference
+     FEATURES.txt                              the full feature reference
      LICENSE-S1API.txt                         MIT licence for the two S1API files
+
+  Eight DLLs, three destinations, three text files. Four of the DLLs are mods, one is a shared
+  library, one is a loader plugin, and two are the third-party API layer.
+
+  WHICH GAME BUILD THIS TARGETS                                             *** IMPORTANT ***
+  ----------------------------------------------------------------------------------------------
+     These DLLs were compiled against game build 0.4.6f12. Modded code is compiled against
+     translated copies of the game's own code, and those copies are regenerated from whichever
+     build is installed -- so a package built for one build is not guaranteed to bind correctly
+     on another.
+
+     On 0.4.6f11, which is the previous public build, some features may quietly not work. Nothing
+     is expected to crash; a feature just goes missing and says so in the log.
+
+     HOW TO CHECK WHICH BUILD THEY HAVE, after MelonLoader is installed and the game has been
+     launched once:
+
+        Select-String -Path "<GameDir>\MelonLoader\Latest.log" -Pattern "Game Version"
+
+     It prints a line like  Game Version: 0.4.6f12 . If it says f11, tell them: everything will
+     install and load, but if something in FEATURES.txt does not appear, this is the first thing
+     to suspect, and updating the game in Steam is the fix.
+
+  THIS IS A ONE-TIME INSTALL
+  ----------------------------------------------------------------------------------------------
+     Once these files are in place, the suite keeps itself up to date. Expansions.Updater.dll
+     checks for a newer release in the background and installs it at the start of a later launch,
+     before the game's mods load. There is no prompt, no button and no restart notice, and the
+     human is never asked anything. It never deletes a file, and a mod they switched off stays
+     switched off.
+
+     *** DO NOT SKIP Plugins\Expansions.Updater.dll, AND DO NOT PUT IT IN Mods. ***
+     It is not optional. Without it the install is frozen at this version and they would have to
+     repeat this whole runbook by hand for every future one. And it only works from Plugins:
+     MelonLoader loads Plugins BEFORE Mods, which is the entire trick -- in that gap the mod files
+     are still ordinary unlocked files that can be replaced. Put it in Mods and it loads at the
+     same time as the files it exists to update, and it can never do its job.
 
 ==================================================================================================
  READ THIS FIRST -- ADDRESSED TO THE AI
@@ -37,7 +77,7 @@
      you leave implicit will not happen.
 
   WHAT THEY ARE TRYING TO ACHIEVE
-     A working install of four mod files plus the loader that runs them, ending in a game where
+     A working install of eight DLLs plus the loader that runs them, ending in a game where
      pressing F7 opens a new menu. Nothing here modifies Steam, their account, or any game files
      that Steam manages. Everything added is removable.
 
@@ -106,14 +146,25 @@
 
   What the mods add:
 
-     Expansions Core        The framework the other three hang off. Adds an "Expansions" entry to
+     Expansions Core        The framework the other four hang off. Adds an "Expansions" entry to
                             the game's main menu and an F7 screen in-game.
      Hireable Drivers       Driver employees who move goods between your properties, businesses
                             and dealers on automatic routes.
      Police Improvements    A persistent heat level, escalating police intensity, outlaw status,
-                            federal agents, and heavier arrest consequences.
+                            federal agents, property raids, jail time and heavier arrest
+                            consequences. It also roughly triples the number of police on the
+                            map and puts dead officers back on duty each day, and it texts you
+                            from a "Dispatch Office" phone contact when something happens.
      Special Customers      Groups of out-of-town buyers (bikers, businessmen, hippies, a rock
                             band) who visit and place bulk orders.
+     Quality of Life        Mixing at double speed, a $25,000 weekly ATM limit instead of
+                            $10,000, deliveries in half the time, and a tick box on every row of
+                            the phone's Deliveries app that repeats that order automatically.
+
+  And one thing that is not a mod:
+
+     Expansions Updater     A loader PLUGIN that installs future versions by itself. Goes in
+                            Plugins, never in Mods.
 
   THE PLAN, IN ORDER
      1. Confirm five preconditions.                        (section 2)
@@ -336,7 +387,7 @@
       If there is no checkbox, it was already clean. Move on.
 
       Or PowerShell, which is safe either way:
-         Unblock-File "$env:USERPROFILE\Downloads\ScheduleI-Expansions-1.2.1-2026-08-06.zip"
+         Unblock-File "$env:USERPROFILE\Downloads\ScheduleI-Expansions-1.3.0.zip"
 
   3b. EXTRACT. Right-click the zip -> "Extract All..." -> Extract.
       Extract it to Downloads or the Desktop. Do NOT extract it directly into the game folder
@@ -344,36 +395,41 @@
 
   3c. VERIFY the extracted folder. It must contain, at the top level:
 
-         Mods\        (a folder with 4 files)
-         Plugins\     (a folder with 1 file)
+         Mods\        (a folder with 5 files)
+         Plugins\     (a folder with 2 files)
          UserLibs\    (a folder with 1 file)
          INSTALL.txt
          FEATURES.txt
          LICENSE-S1API.txt
 
       A very common mistake: Windows sometimes creates an extra folder of the same name, so the
-      real contents end up at  ...\ScheduleI-Expansions-1.2.1-2026-08-06\Mods\  instead of
-      ...\Mods\ . Have the human open folders until they can see "Mods", "Plugins" and
-      "UserLibs" side by side, and use THAT folder as the source below.
+      real contents end up at  ...\ScheduleI-Expansions-1.3.0\Mods\  instead of  ...\Mods\ .
+      Have the human open folders until they can see "Mods", "Plugins" and "UserLibs" side by
+      side, and use THAT folder as the source below.
 
   --------------------------------------------------------------------------------------------
   STEP 4 -- COPY THE FILES INTO THE GAME FOLDER
   --------------------------------------------------------------------------------------------
-  Three destinations. The third one is the one people get wrong.
+  Three destinations. Two of them are ones people get wrong.
 
-     <GameDir>\Mods\        <-  the 3 mod DLLs plus S1API.Il2Cpp.MelonLoader.dll
-     <GameDir>\Plugins\     <-  S1APILoader.MelonLoader.dll
+     <GameDir>\Mods\        <-  the 4 mod DLLs plus S1API.Il2Cpp.MelonLoader.dll
+     <GameDir>\Plugins\     <-  Expansions.Updater.dll and S1APILoader.MelonLoader.dll
      <GameDir>\UserLibs\    <-  Expansions.Core.dll
 
   *** Expansions.Core.dll GOES IN UserLibs, NOT IN Mods. ***
   It is a shared library, not a mod. MelonLoader scans UserLibs before Mods and registers it so
-  all three mods bind to the one copy. Put it in Mods and the three Expansions mods will fail to
+  all four mods bind to the one copy. Put it in Mods and the four Expansions mods will fail to
   load with an error about not finding "Expansions.Core", and F7 will do nothing.
+
+  *** Expansions.Updater.dll GOES IN Plugins, NOT IN Mods. ***
+  It is a loader plugin, and plugins load before mods -- which is the only reason it can replace
+  a mod file with a newer one. In Mods it loads too late to ever do anything. Nothing else breaks,
+  but the install stops updating itself and nobody will notice until a version is missed.
 
   4a. THE EASY WAY -- one PowerShell command
       Replace both paths, keep the quotes, paste as one block.
 
-         $src  = "$env:USERPROFILE\Downloads\ScheduleI-Expansions-1.2.1-2026-08-06"
+         $src  = "$env:USERPROFILE\Downloads\ScheduleI-Expansions-1.3.0"
          $dest = "<GameDir>"
          foreach ($f in 'Mods','Plugins','UserLibs') {
              New-Item -ItemType Directory -Force -Path (Join-Path $dest $f) | Out-Null
@@ -397,19 +453,22 @@
       means a failed copy.
 
          <GameDir>\Mods\
-             Expansions.HireableDrivers.dll         180,224 bytes
-             Expansions.PoliceOverhaul.dll          120,832 bytes
-             Expansions.SpecialCustomers.dll        221,184 bytes
+             Expansions.HireableDrivers.dll         205,312 bytes
+             Expansions.PoliceOverhaul.dll          185,856 bytes
+             Expansions.SpecialCustomers.dll        295,424 bytes
+             Expansions.Tweaks.dll                  126,976 bytes
              S1API.Il2Cpp.MelonLoader.dll         1,370,624 bytes
 
          <GameDir>\Plugins\
+             Expansions.Updater.dll                  69,632 bytes
              S1APILoader.MelonLoader.dll             14,848 bytes
 
          <GameDir>\UserLibs\
-             Expansions.Core.dll                    347,136 bytes
+             Expansions.Core.dll                    405,504 bytes
 
-      Six files, and Expansions.Core.dll appears exactly once, in UserLibs.
-      If it also appears in Mods, delete the copy in Mods.
+      Eight files. Expansions.Core.dll appears exactly once, in UserLibs, and
+      Expansions.Updater.dll exactly once, in Plugins. If either also appears in Mods, delete the
+      copy in Mods.
 
   4d. NOTHING ELSE IS NEEDED
       S1API is already installed -- it was in the zip and you just copied it. Do not download it
@@ -490,7 +549,7 @@
   Open Latest.log in Notepad, or read the interesting lines with:
 
      $log = "<GameDir>\MelonLoader\Latest.log"
-     $pat = 'Mods loaded|Game Type|S1API|Expansions|Drivers|Police|Customers'
+     $pat = 'Mods loaded|Plugins loaded|Game Type|Game Version|S1API|Expansions'
      Select-String -Path $log -Pattern $pat
 
   A HEALTHY LOG CONTAINS ALL OF THESE. Exact text, taken from a real working install:
@@ -498,46 +557,71 @@
         MelonLoader v0.7.3 Open-Beta
         Game Type: Il2cpp
         Game Name: Schedule I
-        Game Version: 0.4.6f11
+        Game Version: 0.4.6f12
         Melon Assembly loaded: '.\UserLibs\Expansions.Core.dll'
         0 UserLibs loaded.
+        Melon Assembly loaded: '.\Plugins\Expansions.Updater.dll'
+        Melon Assembly loaded: '.\Plugins\S1APILoader.MelonLoader.dll'
         S1APILoader v2.5.0
+        2 Plugins loaded.
         [S1APILoader] Loading S1API for Il2Cpp...
         [S1APILoader] Successfully loaded S1API for Il2Cpp!
         S1API (Forked by Bars) v3.1.7
-        Hireable Drivers v0.4.0
-        Police Improvements v0.2.0
+        Hireable Drivers v0.5.0
+        Police Improvements v0.3.0
+        Quality of Life v0.1.0
         Special Customers v1.0.0
-        4 Mods loaded.
-        [Expansions/Tutorial] Tutorial ready: 6 chapter(s). ...
-        [Expansions/Core] Ready. Settings: <GameDir>\UserData\Expansions.cfg. ...
-        [Expansions/Core] Actions: 16 registered. ...
+        5 Mods loaded.
+        [Expansions/Tutorial] Tutorial ready: 5 chapter(s). ...
+        [Expansions/Core] Events: 2 registered. Press UpArrow in-game for the chooser ...
+        [Expansions/Core] Actions: 23 registered. ...
         [Expansions/Core] Diagnostics: 18 probe(s). ...
+        [Expansions/Core] Ready. Settings: <GameDir>\UserData\Expansions.cfg. ...
         [Expansions/hireable_drivers] Enabled. Diagnostics: F6. Transport mode: Auto.
+        [Expansions/police_overhaul] Registered 12/12 police menu action(s) with Core.
+        [Expansions/police_overhaul] Registered 5/5 triggerable event(s) with Core.
         [Expansions/police_overhaul] Enabled.
+        [Expansions/tweaks] Enabled.
         [Expansions/special_customers] Enabled.
         [Expansions/UI] Added the 'Expansions' entry to the main menu (cloned 'Settings').
 
-     *** "4 Mods loaded." IS THE NUMBER TO EXPECT. *** It counts the three feature mods plus
-     S1API, which MelonLoader also treats as a mod. Expansions.Core.dll is NOT in that four --
-     see "0 UserLibs loaded." below. Fewer than four means something did not load; more than four
+     *** "5 Mods loaded." IS THE NUMBER TO EXPECT. *** It counts the four feature mods plus
+     S1API, which MelonLoader also treats as a mod. Expansions.Core.dll is NOT in that five --
+     see "0 UserLibs loaded." below. Fewer than five means something did not load; more than five
      means another mod was already installed, which is fine but see section 8.9.
 
-     Those Core counts are Core's own, logged before the three mods enable and add theirs. Once a
-     save is loaded the totals are 47 actions and 41 probes.
+     *** "2 Plugins loaded." IS ALSO A NUMBER TO CHECK. *** That is Expansions.Updater.dll plus
+     S1APILoader. If it says "1 Plugins loaded.", the updater is missing or went into the wrong
+     folder -- everything else will work, but the install will never update itself. Go back to
+     section 4 step 4.
 
-     "6 chapter(s)" IS THE NUMBER FOR THIS PACKAGE. A seventh chapter exists in Expansions Core
-     for a separate mod by the same author that is not included here, and Core only registers it
-     when that mod is actually loaded -- so on a machine that also has it the line reads
-     "7 chapter(s)" and that is equally correct. Any other number means a chapter failed to
-     register; the lines above it in the log say which.
+     Those Core counts are Core's own, logged before the four mods enable and add theirs. Once a
+     save is loaded the totals are 59 actions (66 rows, counting the mirrored event rows), 7
+     events and 53 probes.
+
+     "5 chapter(s)" IS THE NUMBER FOR THIS PACKAGE at that point in the log -- it is Core's own
+     five, before the four mods contribute theirs. Once everything has enabled, the Tutorial tab
+     lists nine. A sixth Core chapter exists for a separate mod by the same author that is not
+     included here, and Core only registers it when that mod is actually loaded, so on a machine
+     that also has it the line reads "6 chapter(s)" and the tab lists ten. Both are correct.
 
   ONE LINE WORTH SEARCHING FOR DELIBERATELY
-        [Expansions/police_overhaul] Registered 8/8 police menu action(s) with Core.
+        [Expansions/police_overhaul] Registered 12/12 police menu action(s) with Core.
 
-     8/8 is correct. "Registered 0/8" means the Police group will not appear on the Actions tab
-     -- see section 8.10. It is the one regression from the previous package that has a
-     single-line tell in the log.
+     12/12 is correct. "Registered 0/12" means the Police group will not appear on the Actions
+     tab -- see section 8.10.
+
+  ONE WARNING THAT IS EXPECTED ON 0.4.6f12, AND IS NOT AN INSTALL PROBLEM
+        [WARNING] [Expansions/hireable_drivers] Could not reach
+          'Object.AddDialogueChoice(DialogueChoice,Int32)' (not found). ...
+        [WARNING] [Expansions/hireable_drivers] Could not add driver hiring to the
+          employee-hiring NPC on this build. The Expansions menu's fallback "Hire a driver"
+          action is available instead.
+
+     Hireable Drivers is designed to put "Hire a driver for the Barn ($1,800)" into the employee
+     fixer's conversation. That hook does not attach on this game build. The mod says so, and the
+     fallback button on the F7 Actions tab does the same job. Everything after hiring -- beds,
+     routes, the clipboard, the deliveries -- is unaffected. See FEATURES.txt section 5.
 
   TWO LINES THAT LOOK WRONG AND ARE NOT
      "0 UserLibs loaded."
@@ -547,11 +631,16 @@
         folder -- see section 8.3.
      "Game Not Found on RemoteAPI Host"
         Correct and expected. See section 5.
+     "[Expansions_Updater] No release is published at ... yet. Nothing to do."
+        Correct and expected until the next version is published. The updater looked, found
+        nothing newer, and got out of the way.
 
   WARNINGS YOU CAN IGNORE
      Yellow [WARNING] lines mentioning "Voice 'female1' was rejected", "could not be dressed",
      or "Class::Init signatures have been exhausted" are known, cosmetic, and do not stop
-     anything from working.
+     anything from working. The voice one appears three times per load: three of the eight
+     Special Customers characters ask for a voice name S1API spells differently, so they keep the
+     one their base character already had.
 
   --------------------------------------------------------------------------------------------
   6.2  THE MAIN MENU
@@ -560,10 +649,10 @@
   should be a new entry reading "Expansions", one slot below Settings. Click it. A screen opens
   with the heading EXPANSIONS and a row of three tabs: Actions, Tutorial, Mods.
 
-  On the Mods tab you should see exactly THREE cards -- Hireable Drivers, Police Improvements
-  and Special Customers -- each with a name, a version, a description and an Enabled / Disabled
-  toggle. Expansions Core is deliberately not listed: it is the framework the cards live in, not
-  something you can switch off.
+  On the Mods tab you should see exactly FOUR cards -- Hireable Drivers, Police Improvements,
+  Quality of Life and Special Customers -- each with a name, a version, a description and an
+  Enabled / Disabled toggle. Expansions Core is deliberately not listed: it is the framework the
+  cards live in, not something you can switch off. Nor is the updater, which is not a mod.
 
   Most buttons on the Actions tab will be greyed out here with the reason "needs a loaded save
   - you are in the main menu". That is correct.
@@ -575,22 +664,22 @@
   --------------------------------------------------------------------------------------------
   Load a save (or start a new game) and get to the point where you are walking around. Then:
 
-     F7   Opens the Expansions screen -- same screen as the main-menu entry, but now the
-          actions work. Escape closes it.
-     F6   Opens the Hireable Drivers panel -- a read-only diagnostic view of drivers, their
-          property slots and their routes. Empty until you hire someone.
+     F7        Opens the Expansions screen -- same screen as the main-menu entry, but now the
+               actions work. Escape closes it.
+     UP ARROW  Raises a short list of things you can make happen right now. Escape closes it.
+     F6        Opens the Hireable Drivers panel -- a read-only diagnostic view of drivers, their
+               property slots and their routes. Empty until you hire someone.
 
-  If both open, the install is finished.
+  If all three open, the install is finished.
 
   ONE LAST CHECK WORTH DOING
      With a save loaded, press F7, go to the Actions tab, and click "Run all diagnostics
      probes". It writes a report and prints a summary into the output pane at the bottom of the
      screen. This proves the mods can actually see and read the running game, which is a much
-     stronger signal than a menu opening. Expect 41 results.
+     stronger signal than a menu opening. Expect 53 results.
 
-     While you are there, SCROLL THE ACTION LIST WITH THE MOUSE WHEEL. There should be 47 rows in
-     four groups, and the wheel should move them. If it does not, say so -- that was a real bug
-     once and its fix has not been confirmed.
+     While you are there, SCROLL THE ACTION LIST WITH THE MOUSE WHEEL. There should be about 66
+     rows in six groups, and the wheel should move them.
 
 ==================================================================================================
  7.  CONTROLS, AND WHAT TO TRY FIRST
@@ -601,65 +690,84 @@
   F7               The Expansions screen. Same screen as the main-menu entry. Three tabs:
                    Actions, Tutorial, Mods. Every list on it scrolls with the mouse wheel, and
                    with PgUp / PgDn / Home / End / the arrow keys.
+  UP ARROW         The event chooser: a short list, in the middle of the screen, of things you
+                   can make happen right now -- send a federal team, put a raid on the clock,
+                   escalate your outlaw status, have someone call the police. Number keys pick,
+                   arrows move, Enter fires, Escape backs out. The list only takes the keyboard
+                   while it is up, so the arrow keys work normally the rest of the time.
+  SHIFT + UP       Re-fire whatever you ran last, with no list at all.
   F6               The Hireable Drivers panel. READ-ONLY DIAGNOSTICS ONLY -- who is hired, what
                    each one is doing and why not. You do not hire or configure anyone here:
-                   hiring is a line in the employee fixer's conversation, and routes are on the
-                   game's own management clipboard, the same one you use for a Handler.
+                   routes are on the game's own management clipboard, the same one you use for a
+                   Handler.
   P                While the Expansions screen is open: run the whole diagnostics suite.
-  Escape           Closes whichever of the two is open. If a search list is open inside one
-                   of them, the first Escape closes the list and the second closes the screen.
+  Escape           Closes whichever surface is open. If a search list is open inside one of
+                   them, the first Escape closes the list and the second closes the screen.
   Backquote        The game's own developer console. The key left of 1 and above Tab, the one
                    that also makes a tilde. Off by default on some saves -- see section 8.6.
                    Nothing in this suite needs it.
 
-  While the Expansions screen is open your character should not move. The screen puts the game
-  into its own UI state, the same one the game's own menus use, so typing into a search box
-  filters the list instead of walking you across town. If it does move you, see section 8.10.
+  While the Expansions screen or the event chooser is open your character should not move. They
+  put the game into its own UI state, the same one the game's own menus use, so typing into a
+  search box filters the list instead of walking you across town. If it does move you, see
+  section 8.10.
 
-  F7 and F6 can be changed, in <GameDir>\UserData\Expansions.cfg :  menu_hotkey  under the
-  [Expansions] heading, and  panel_hotkey  under [HireableDrivers_01_Main]. Both take a key name
-  such as "F9"; setting menu_hotkey to "None" turns F7 off entirely. The comment beside
-  panel_hotkey in that file also names a third key as one to avoid; it belongs to a separate mod
-  that is not in this package, so you can ignore it.
+  All three keys can be changed in <GameDir>\UserData\Expansions.cfg :  menu_hotkey  and
+  event_hotkey  under the [Expansions] heading, and  panel_hotkey  under
+  [HireableDrivers_01_Main]. They take a key name such as "F9"; "None" turns one off entirely.
+  The comment beside panel_hotkey in that file also names a key belonging to a separate mod that
+  is not in this package, so you can ignore that part.
 
-  TRY THIS FIRST -- about ten minutes, in this order
+  TRY THIS FIRST -- about fifteen minutes, in this order
   ----------------------------------------------------------------------------------------------
   1. Load a save. None of this works from the main menu.
 
   2. Press F7 -> Tutorial tab -> "Enable the tutorial quest line".
-     This is the guided tour. It installs six chapters and 22 objectives as real in-game quests,
+     This is the guided tour. It installs nine chapters and 37 objectives as real in-game quests,
      with journal objectives and 50 XP per chapter, walking through every feature in order. It is
      by far the best way in. Every objective is a real task you can actually do -- nothing in the
-     line ticks itself off. Chapters 1 to 3 are the part of this suite that has actually been
-     played through start to finish; chapters 4 to 6 cover the three feature mods and have not.
+     line ticks itself off, and a chapter that cannot be played yet says why instead of pretending
+     to be finished.
 
   3. Press F7 -> Actions tab -> "Run all diagnostics probes".
      Read the output pane at the bottom. It tells you what this particular machine and save can
      and cannot do -- for example whether your vehicles are able to drive themselves, which
      changes how Hireable Drivers behaves.
 
-  4. Hireable Drivers: find the employee fixer NPC you normally hire staff from. Their
-     conversation now has an extra line per property you own -- "Hire a driver for the Barn
-     ($1,800)" or similar. Hire one, give them a bed on the normal Packager clipboard, then use
-     the clipboard's route rows exactly as you would for a Handler. A driver may only COLLECT
-     from the property you hired it at -- the clipboard's own picker will say so if you try
-     somewhere else -- but it can DELIVER anywhere you own. For a drop-off too far away to walk
-     up to and click, or for a dealer, use F7 -> Actions -> "Set the route's drop-off", which
-     writes onto the same rows.
+  4. Press UP ARROW and fire "Test the event hotkey", then press SHIFT+UP to fire it again.
+     That is the whole event system in ten seconds. The interesting entries belong to Police
+     Improvements.
 
-  5. Police Improvements: F7 -> Actions -> the "Police Improvements" group. "Police: heat +25"
-     twice, then walk past a patrol and notice there are more officers than usual.
+  5. Police Improvements: F7 -> Actions -> the "Police Improvements" group. "Heat +25" twice,
+     then walk past a patrol and notice there are more officers than usual. Then press UP ARROW
+     -> "Put a raid on the clock", and go and stand in the property it names before the timer
+     runs out: if you are there, they drive past and you lose nothing.
+     Check your PHONE afterwards. Anything substantial this mod does now arrives as a text from
+     a contact called "Dispatch Office", with the full story and the bill. If your streets look
+     deserted instead, use "Put the police back on duty" -- see section 8.10.
 
-  6. Special Customers: there is a permanent NPC called Marcus Vale standing at the Northtown
-     motel. F7 -> Actions -> "Teleport to Marcus Vale" puts you next to him.
+  6. Quality of Life: order anything from the phone's Deliveries app. The quoted arrival time is
+     already halved. Tick the little box on that row and the same order will place itself again
+     as soon as this one lands.
+
+  7. Hireable Drivers: on this game build the hiring line does NOT appear on the employee fixer
+     (see section 6.1). Use F7 -> Actions -> "Hire a driver (repair path)" instead. Then give
+     them a bed on the normal Packager clipboard and use the clipboard's route rows exactly as
+     you would for a Handler. A driver may only COLLECT from the property you hired it at -- the
+     clipboard's own picker will say so if you try somewhere else -- but it can DELIVER anywhere
+     you own.
+
+  8. Special Customers: there is a permanent NPC called Marcus Vale standing at the Northtown
+     motel. F7 -> Actions -> "Teleport to Marcus Vale" puts you next to him. He is the advance
+     scout for the groups that visit every two or three days.
 
   THE FULL REFERENCE
   ----------------------------------------------------------------------------------------------
-  FEATURES.txt, in the same zip as this file, is the complete 2,257-line reference: every one of
-  the 47 menu actions, all 41 diagnostic probes, all 86 configuration settings, the six
+  FEATURES.txt, in the same zip as this file, is the complete reference: every one of the 59 menu
+  actions, all 7 events, all 53 diagnostic probes, all 129 configuration settings, the nine
   tutorial chapters, and an honest list of what is known to be untested. This file gets you
   installed; that file tells you what everything does. Read section 2 of it for the quick
-  reference, section 12 for what is worth testing first, and section 13 for the known
+  reference, section 14 for what is worth testing first, and section 15 for the known
   limitations.
 
 ==================================================================================================
@@ -730,16 +838,16 @@
   *** This is the single most likely mistake in the whole install. ***
 
   CAUSE   Expansions.Core.dll is in <GameDir>\Mods instead of <GameDir>\UserLibs .
-          The three Expansions mods are compiled against it, and MelonLoader only publishes
+          The four Expansions mods are compiled against it, and MelonLoader only publishes
           UserLibs as a shared assembly search path. In Mods it is loaded as if it were a mod,
-          fails to register (it has no mod entry point), and the three mods that depend on it
+          fails to register (it has no mod entry point), and the four mods that depend on it
           throw at load time.
 
   SYMPTOMS IN THE LOG, any of these:
           Expansions.Core.dll listed under "Loading Mods..." rather than "Loading UserLibs..."
           "Could not load file or assembly 'Expansions.Core'"
           FileNotFoundException / TypeLoadException naming Expansions.Core
-          a mod count of 1 instead of 4 -- S1API loads and the three Expansions mods do not
+          a mod count of 1 instead of 5 -- S1API loads and the four Expansions mods do not
           no "Expansions" entry in the main menu, and F7 doing nothing in-game
 
   CHECK   Test-Path "<GameDir>\UserLibs\Expansions.Core.dll"    -> must be True
@@ -826,9 +934,15 @@
              1. Expansions.SpecialCustomers.dll
              2. Expansions.HireableDrivers.dll
              3. Expansions.PoliceOverhaul.dll
-          Leave Expansions.Core.dll in UserLibs and both S1API files alone the whole time --
-          removing Core takes all three Expansions mods down and tells you nothing.
+             4. Expansions.Tweaks.dll
+          Leave Expansions.Core.dll in UserLibs, Expansions.Updater.dll in Plugins and both S1API
+          files alone the whole time -- removing Core takes all four Expansions mods down and
+          tells you nothing.
           When it stops crashing, the last file you moved is the one to report.
+
+          Better still, do it from inside the game where you can: F7 -> Mods tab -> switch a card
+          off. That is reversible, immediate, and does not have the consequences that removing a
+          file does (see section 9).
 
   BEFORE YOU DO ANY OF THAT, read section 9: moving Expansions.SpecialCustomers.dll out is NOT
   the same as disabling it, and has consequences for saves that already met its NPCs. If the
@@ -874,7 +988,7 @@
 
   CHECK    Get-ChildItem "<GameDir>\Mods","<GameDir>\Plugins","<GameDir>\UserLibs" -File |
                Select-Object Directory, Name, Length
-           Anything not in the six-file list in section 4c belongs to somebody else.
+           Anything not in the eight-file list in section 4c belongs to somebody else.
 
   THE ONE THAT ACTUALLY MATTERS -- a different S1API version
      Many Schedule I mods ship their own copy of S1API. Only one can win, and whichever is
@@ -898,34 +1012,62 @@
   8.10  SMALLER THINGS THAT LOOK LIKE BUGS
   --------------------------------------------------------------------------------------------
   "Typing in a search box walks my character around."
-     This was a real bug and it has been fixed -- the Expansions screen now puts the game into
-     its own UI state while it is open, which is what stops keystrokes reaching the character.
-     If it still happens, the mod could not take that state; the MelonLoader log says why, once.
-     Work around it by scrolling the list instead of typing, or by using the direct rows that
-     need no search ("Teleport to Marcus Vale", "Teleport to the visiting group").
+     The Expansions screen puts the game into its own UI state while it is open, which is what
+     stops keystrokes reaching the character. If it still happens, the mod could not take that
+     state; the MelonLoader log says why, once. Work around it by scrolling the list instead of
+     typing, or by using the direct rows that need no search.
 
   "The mouse wheel does not scroll the lists on the F7 screen."
-     Also a real bug, also fixed, also unconfirmed. Every list on that screen should scroll with
-     the wheel, and PgUp / PgDn / Home / End / the arrow keys should work too. If it does not
-     scroll, most of the 47 actions are unreachable and that is worth reporting straight away.
+     Every list on that screen should scroll with the wheel, and PgUp / PgDn / Home / End / the
+     arrow keys should work too. If it does not scroll, most of the 66 rows are unreachable and
+     that is worth reporting straight away.
 
   "There is no 'Police Improvements' group in the F7 actions list."
-     Fixed since the last package. If it is still missing, search the MelonLoader log for
-     "police menu action" -- a line reading "Registered 0/8" means the fix did not take, and
-     every police verb is unreachable from the menu until it is fixed again. Nothing else in
-     that mod is affected; heat still runs, and the diagnostics report still shows it.
+     Search the MelonLoader log for "police menu action" -- a line reading "Registered 0/12"
+     means every police verb is unreachable from the menu. Nothing else in that mod is affected;
+     heat still runs, and the diagnostics report still shows it.
+
+  "There are no police anywhere, even at maximum heat."
+     Not a mod fault, and it is fixable from the menu. The map ships a FIXED set of officers and
+     the game never creates new ones, so on a long or violent save they can all end up dead and
+     the streets stay empty for everybody -- vanilla police features included. Use F7 -> Actions
+     -> "Put the police back on duty": it revives them immediately and tells you how many. This
+     mod also does it automatically at the start of each in-game day.
+
+  "I am not getting any police messages on my phone."
+     Substantial police events text you from a contact called "Dispatch Office". The contact is
+     created when the world loads, so nothing arrives from the main menu. If the contact is
+     missing entirely, run the diagnostics probes and read police.messages -- it says whether the
+     contact came up and what the last delivery was. Short warnings (an inbound raid, being held
+     overnight) are still on-screen pop-ups on purpose, because a phone thread is too slow to act
+     on.
+
+  "The employee fixer has no 'Hire a driver' line."
+     Expected on game build 0.4.6f12, and the log says so in two warnings (see section 6.1). Use
+     F7 -> Actions -> "Hire a driver (repair path)". That button is deliberately hidden whenever
+     the proper hook DOES work, so if you can see it, this is why.
 
   "The F6 panel will not let me do anything."
-     Correct, it is read-only now. It is a diagnostic view: who is hired, what each driver is
-     doing, and why one is standing still. Hire drivers from the employee fixer's conversation
-     and set their routes on the game's own management clipboard.
+     Correct, it is read-only. It is a diagnostic view: who is hired, what each driver is doing,
+     and why one is standing still. Set their routes on the game's own management clipboard.
+
+  "The UP ARROW does nothing."
+     It only works during gameplay, never in the main menu, and never while the F7 screen is
+     already open -- that screen owns the arrow keys for scrolling. If it still does nothing,
+     check event_hotkey in Expansions.cfg is "UpArrow" and not "None".
+
+  "A delivery says it will arrive in six million hours."
+     That is a real bug from an earlier version of the Quality of Life mod, and this version
+     repairs it: within about twenty seconds of loading a save, any order with an impossible
+     arrival time is re-quoted and the log says so by name. F7 -> Actions -> "Repair stuck
+     deliveries" forces the same pass. Nothing else about the order is changed.
 
   "My friend joined my game and sees none of this."
      Everyone must install the same mods. See section 10.
 
-  "The visiting customers are all wearing normal civilian clothes."
-     Known cosmetic issue seen in the developer's own logs. The group still arrives, still
-     orders and still pays. Report it if you like, but it is not an install problem.
+  "Three yellow warnings about a rejected voice, every single load."
+     Cosmetic. Three of the eight Special Customers characters ask for a voice under a name
+     S1API spells differently, so they keep the voice their base character already had.
 
   "Something in the log says allow_mutating_probes."
      Leave it set to false. It is a diagnostic mode that is allowed to write directly into game
@@ -970,7 +1112,7 @@
         <GameDir>\UserData\Expansions.cfg
 
      Find the section heading you want and change  enabled = true  to  enabled = false . The
-     three headings, exactly as they appear:
+     four headings, exactly as they appear:
 
         [HireableDrivers_01_Main]
         enabled = false
@@ -980,6 +1122,12 @@
 
         [SpecialCustomers_01_Main]
         enabled = false
+
+        [Tweaks_01_Main]
+        enabled = false
+
+     Tweaks_01_Main is Quality of Life. The heading uses the mod's internal name and the menu
+     uses its friendly one; they are the same mod.
 
      Save the file. Changing it while the game is running also works -- the mods pick it up.
      Do not rename the headings and do not delete them; the file is regenerated with defaults if
@@ -992,9 +1140,14 @@
                                          from ever reaching a save.
      Expansions.HireableDrivers.dll      SAFE. Drivers are ordinary game employees underneath;
                                          removing the mod leaves them as normal Handlers.
+     Expansions.Tweaks.dll               SAFE. It owns nothing in the world. Mixing, the ATM
+                                         ceiling and delivery times all go back to vanilla, and
+                                         any standing auto-reorders simply stop.
      Expansions.SpecialCustomers.dll     NOT SAFE once a save has met the visitors. See above.
-     Expansions.Core.dll                 Removing it disables all three Expansions mods at once
-                                         and they will log load errors. Remove the three mods
+     Expansions.Updater.dll              SAFE, but then the install stops updating itself and
+                                         every future version is a manual job again.
+     Expansions.Core.dll                 Removing it disables all four Expansions mods at once
+                                         and they will log load errors. Remove the four mods
                                          first if you are doing this.
      S1API / S1APILoader                 Only remove these if you are removing every mod that
                                          uses them, which may include mods from other people.
@@ -1002,17 +1155,20 @@
   FULL UNINSTALL, EVERYTHING BACK TO VANILLA
   ----------------------------------------------------------------------------------------------
      1. Close the game.
-     2. Delete these six files:
+     2. Delete these eight files:
            <GameDir>\Mods\Expansions.HireableDrivers.dll
            <GameDir>\Mods\Expansions.PoliceOverhaul.dll
            <GameDir>\Mods\Expansions.SpecialCustomers.dll
+           <GameDir>\Mods\Expansions.Tweaks.dll
            <GameDir>\Mods\S1API.Il2Cpp.MelonLoader.dll
+           <GameDir>\Plugins\Expansions.Updater.dll
            <GameDir>\Plugins\S1APILoader.MelonLoader.dll
            <GameDir>\UserLibs\Expansions.Core.dll
      3. Remove MelonLoader: run MelonLoader.Installer.exe again, select the game, and use its
         Uninstall button. (Deleting <GameDir>\version.dll by hand also stops it loading, but the
         installer cleans up properly.)
-     4. Optionally delete <GameDir>\UserData\Expansions.cfg and the Expansions-Probe-*.md files.
+     4. Optionally delete <GameDir>\UserData\Expansions.cfg, the Expansions-Probe-*.md files and
+        the <GameDir>\UserData\Expansions.Update\ folder.
      5. If a save had ever met the Special Customers visitors, restore that save from the backup
         made in section 10.
 
@@ -1026,35 +1182,48 @@
   --------------------------------------------------------------------------------------------
   READ THIS BEFORE INSTALLING, NOT AFTER                                    *** IMPORTANT ***
   --------------------------------------------------------------------------------------------
-  These mods are NEW AND LIGHTLY TESTED. That is not modesty, it is the actual state:
+  These mods are NEW AND ONLY PARTLY TESTED. That is not modesty, it is the actual state:
 
      Expansions Core / the F7 screen       Finished. Used in a real game.
-     The tutorial quest line               Six chapters, 22 objectives, all of them real.
-                                           Chapters 1-3 played end to end and confirmed.
-                                           Chapters 4-6 cover the three feature mods and have
-                                           not been played.
-     Hireable Drivers                      Complete in source, compiles clean, every game
-                                           function it calls was checked against the real game
-                                           files -- and it has NEVER BEEN RUN in a live game.
-                                           It was also rebuilt since the last package: hiring
-                                           and route editing moved onto the game's own NPC
-                                           dialogue and management clipboard.
-     Police Improvements                   Same. Never run. Its menu buttons failed to appear
-                                           the first time anyone tried; that is fixed and the
-                                           fix has not been seen working.
-     Special Customers                     Same, except that one character (Marcus Vale) is
-                                           confirmed to exist correctly in a live game. A group
-                                           has been brought into town once and the sale got
-                                           stuck; that is fixed and unconfirmed too.
+     The event chooser (Up arrow)          Used in a real game.
+     The auto-updater                      Runs on every launch. Has never had a release to
+                                           install, because this is the first one.
+     The tutorial quest line               Nine chapters, 37 objectives, all of them real tasks.
+                                           Core's chapters have been played end to end. The
+                                           four mod chapters have not.
+     Police Improvements                   The most exercised mod here. Heat climbing through
+                                           all five tiers, a raid warned and then dodged by
+                                           being present, a raid that actually took things,
+                                           federal agents arriving, and an informant named and
+                                           penalised have all been seen in a real game.
+                                           FOUR THINGS IN IT ARE BRAND NEW AND HAVE NOT BEEN
+                                           PLAYED: the daily officer revival and the density
+                                           increase, the Dispatch Office phone messages, the
+                                           randomised event schedule, and the fix for federal
+                                           agents borrowing a civilian's name. They are the most
+                                           likely place to find a bug in this release.
+     Quality of Life                       Working in a real game: mixing scaled, the ATM
+                                           ceiling raised, deliveries quoted at half time, and
+                                           standing orders re-placing themselves and paying.
+     Special Customers                     The characters exist and behave, and the product
+                                           allow-list resolves. But NO GROUP HAS EVER COMPLETED
+                                           A SALE -- arrive, offer, accept on the phone, hand
+                                           over, get paid has not been seen end to end.
+     Hireable Drivers                      NEVER RUN. Complete in source, compiles clean, every
+                                           game function it calls was checked against the real
+                                           game files -- and not one delivery has happened. On
+                                           this game build its intended hiring line does not
+                                           even appear (section 6.1); use the fallback button.
 
   "It compiles and the symbols all resolve" is not the same as "it works". Expect bugs. Expect
   something to behave oddly the first time you use it. That is the deal.
 
-  The whole suite has been through exactly ONE real play session. That session found six genuine
-  bugs -- lists that would not scroll, an output pane that squeezed those lists down to a handful
-  of rows, typing that moved the character, a menu group that never appeared, and two ways
-  Special Customers could wedge itself. All six are fixed in this package and NONE of the fixes
-  has been run. If something in section 8.10 says "fixed and unconfirmed", that is what it means.
+  ONE BUG WORTH KNOWING ABOUT IN ADVANCE. An earlier version of the Quality of Life delivery
+  tweak poisoned the arrival time on shop deliveries -- orders came back quoted at roughly
+  403,884,000 in-game minutes, which the phone showed as about 6,731,407 hours. If you are coming
+  from that version you have orders that will never arrive. This version cannot create the
+  problem any more, and it repairs existing ones automatically within about twenty seconds of
+  loading a save, naming each one it fixed in the log.
 
   BACK UP YOUR SAVES. NOW.
   ----------------------------------------------------------------------------------------------
@@ -1091,8 +1260,9 @@
   ALSO WORTH KNOWING
   ----------------------------------------------------------------------------------------------
   - Play on a save you would not be devastated to lose, at least at first.
-  - The Special Customers mod bumped its save format once already. A save written by this
-    version and then opened by an older build of the mod loses whatever visit was in progress.
+  - The Special Customers mod has bumped its save format twice. A save written by this version
+    and then opened by an older build of the mod loses whatever visit was in progress, and the
+    visiting group's faces are re-rolled once.
   - CO-OP IS HOST-ONLY AND EVERY PLAYER NEEDS THE SAME MODS.
     All the world-changing logic runs on the host. A guest who has the mods installed gets a
     read-only version -- they can look at status screens and teleport their own camera, but
@@ -1173,7 +1343,9 @@
      <GameDir>\Mods\Expansions.HireableDrivers.dll        mod
      <GameDir>\Mods\Expansions.PoliceOverhaul.dll         mod
      <GameDir>\Mods\Expansions.SpecialCustomers.dll       mod
+     <GameDir>\Mods\Expansions.Tweaks.dll                 mod ("Quality of Life")
      <GameDir>\Mods\S1API.Il2Cpp.MelonLoader.dll          third-party API layer
+     <GameDir>\Plugins\Expansions.Updater.dll             keeps the suite up to date -- NOT Mods
      <GameDir>\Plugins\S1APILoader.MelonLoader.dll        third-party loader plugin
      <GameDir>\UserLibs\Expansions.Core.dll               shared library -- NOT in Mods
 
@@ -1181,11 +1353,14 @@
      <GameDir>\MelonLoader\Latest.log                     the log for the most recent run
      <GameDir>\MelonLoader\Logs\                          archived logs, yy-M-d_H-mm-s.log
      <GameDir>\MelonLoader\Il2CppAssemblies\              generated on first launch, ~130 DLLs
-     <GameDir>\UserData\Expansions.cfg                    all 86 settings for the suite
+     <GameDir>\UserData\Expansions.cfg                    all 120 settings for the suite
      <GameDir>\UserData\Loader.cfg                        MelonLoader's own settings
      <GameDir>\UserData\Expansions-Probe-*.md             diagnostics reports
      <GameDir>\UserData\Expansions-Probe-*-avatars.json   diagnostics sidecar
      <GameDir>\UserData\Expansions-Probe-journal.log      crash journal for the diagnostics
+     <GameDir>\UserData\Expansions.Update\status.json     what the updater last did
+     <GameDir>\UserData\Expansions.Update\staged\         a verified release waiting for a launch
+     <GameDir>\UserData\Expansions.Update\attic\          the files the last update replaced
 
   OUTSIDE THE GAME FOLDER
      %USERPROFILE%\AppData\LocalLow\TVGS\Schedule I\Saves\      save games -- BACK THIS UP
@@ -1196,6 +1371,7 @@
         hireable_drivers.json         the driver roster and their trip counters
         expansions_police.json        heat and outlaw status
         special_customers.json        the current visit
+        tweaks_auto_reorder.json      which delivery rows are set to repeat
         ExpansionsTutorial\           tutorial progress
 
      Driver ROUTES are not in that list on purpose. They live in the game's own save data, in
@@ -1215,35 +1391,41 @@
   MelonLoader scans three folders and treats each one differently. This is the entire reason the
   layout matters.
 
-     Plugins\    Loaded FIRST, before the game's own code is ready. Used by things that must be
-                 in place before anything else runs. S1APILoader lives here because its job is
-                 to decide which flavour of S1API to load, and that decision has to happen
-                 before any mod asks for it.
+     Plugins\    Loaded FIRST, before the game's own code is ready, and before Mods. Used by
+                 things that must be in place before anything else runs. S1APILoader lives here
+                 because its job is to decide which flavour of S1API to load. Expansions.Updater
+                 lives here because in that window every mod DLL is still an ordinary unlocked
+                 file, which is the only moment a newer copy can be dropped over one.
 
-     UserLibs\   Scanned BEFORE Mods, and registered as a shared assembly search directory. Code
-                 here is a LIBRARY, not a mod -- MelonLoader will not look for a mod entry point
-                 in it, and correctly reports "0 UserLibs loaded". Expansions.Core.dll lives
-                 here so that all three Expansions mods bind to one single copy of it.
+     UserLibs\   Scanned BEFORE Plugins and Mods, and registered as a shared assembly search
+                 directory. Code here is a LIBRARY, not a mod -- MelonLoader will not look for a
+                 mod entry point in it, and correctly reports "0 UserLibs loaded".
+                 Expansions.Core.dll lives here so that all four Expansions mods bind to one
+                 single copy of it.
 
      Mods\       Loaded LAST. Every file here is expected to be a real mod with an entry point.
-                 The three feature DLLs and the S1API runtime live here -- which is why the log
-                 says "4 Mods loaded." and not 3.
+                 The four feature DLLs and the S1API runtime live here -- which is why the log
+                 says "5 Mods loaded." and not 4.
 
   THE FILES
 
      Expansions.Core.dll               v0.1.0    The framework: the F7/main-menu screen, the
-                                                 settings file, the 47-action surface, the
-                                                 diagnostics harness, the tutorial director.
-                                                 Not a mod. Goes in UserLibs.
-     Expansions.HireableDrivers.dll    v0.4.0    Needs Expansions.Core.dll. F6 diagnostics
-                                                 panel. Hiring lives on the employee fixer's
-                                                 conversation and routes on the game's own
-                                                 management clipboard.
-     Expansions.PoliceOverhaul.dll     v0.2.0    Needs Expansions.Core.dll. Shows in menus as
+                                                 event chooser, the settings file, the action
+                                                 surface, the diagnostics harness, the tutorial
+                                                 director. Not a mod. Goes in UserLibs.
+     Expansions.Updater.dll            v1.0.0    Installs future versions by itself, before the
+                                                 mods load. Not a mod. Goes in Plugins.
+     Expansions.HireableDrivers.dll    v0.5.0    Needs Expansions.Core.dll. F6 diagnostics
+                                                 panel; routes on the game's own management
+                                                 clipboard.
+     Expansions.PoliceOverhaul.dll     v0.3.0    Needs Expansions.Core.dll. Shows in menus as
                                                  "Police Improvements".
      Expansions.SpecialCustomers.dll   v1.0.0    Needs Expansions.Core.dll. The only mod here
                                                  that writes custom characters into saves --
                                                  see section 9.
+     Expansions.Tweaks.dll             v0.1.0    Needs Expansions.Core.dll. Shows in menus as
+                                                 "Quality of Life"; its settings heading in
+                                                 Expansions.cfg is [Tweaks_01_Main].
      S1API.Il2Cpp.MelonLoader.dll      v3.1.7    Third party. The cross-version API layer every
                                                  mod above talks to.
      S1APILoader.MelonLoader.dll       v3.1.7    Third party. Picks the IL2CPP build of S1API
@@ -1255,17 +1437,17 @@
   EVERY VERSION ABOVE IS THE VERSION THE GAME AND THE LOG WILL SHOW
      Each mod's project version and the version baked into its MelonLoader banner are the same
      string, so what Windows file properties report, what the log prints and what the F7 Mods
-     tab shows all agree. An earlier package documented a 0.3.0 / 0.4.0 disagreement on
-     Hireable Drivers; that is resolved, and 0.4.0 is the number to quote in a bug report.
-     Expansions.Core.dll has no MelonLoader banner at all, because it is a library and not a
-     mod -- its 0.1.0 comes from file properties only.
+     tab shows all agree. Expansions.Core.dll has no MelonLoader banner at all, because it is a
+     library and not a mod -- its 0.1.0 comes from file properties only.
 
-  THE THREE MODS ARE INDEPENDENT
-     Install one, two or all three. Expansions.Core.dll handles any combination. Core on its own
-     still gives you the Expansions screen, its 16 actions, the diagnostics suite and the first
-     three tutorial chapters. Removing a feature mod does not remove its chapter -- the chapter
-     stays in the line and reports "coming soon" instead, collapsing to a single objective that
-     ticks itself off after about three seconds so the line does not stall.
+     The SUITE version, 1.3.0, is the number on the zip and the GitHub release. It is not any
+     individual mod's version, and the four mods are versioned separately on purpose.
+
+  THE FOUR MODS ARE INDEPENDENT
+     Install any subset. Expansions.Core.dll handles any combination. Core on its own still gives
+     you the Expansions screen, its own actions and events, the diagnostics suite and five
+     tutorial chapters. Removing a feature mod removes its tutorial chapter cleanly -- the line
+     closes up rather than leaving a placeholder behind.
 
   ABOUT THE BUNDLED S1API
      S1API.Forked 3.1.7 by ifBars, released under the MIT licence, which permits redistribution.

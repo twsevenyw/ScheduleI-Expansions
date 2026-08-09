@@ -170,6 +170,7 @@ internal sealed class TutorialRow
     {
         TutorialChapterState.Complete => MenuStyle.TextGood,
         TutorialChapterState.Playing => MenuStyle.Text,
+        TutorialChapterState.Unavailable => MenuStyle.TextWarn,
         _ => MenuStyle.TextDim,
     };
 
@@ -186,6 +187,13 @@ internal sealed class TutorialRow
             case TutorialChapterState.Playing:
                 var objective = TutorialDirector.CurrentObjectiveTitle(ChapterId);
                 return objective.Length > 0 ? $"In progress - {objective}" : "In progress";
+
+            // The one state with something to say. A blocked chapter is stepped over rather than faked, so
+            // this sentence is all the player gets to explain why the line moved past it — and it is the
+            // chapter's own words, not ours.
+            case TutorialChapterState.Unavailable:
+                var reason = TutorialDirector.ReasonFor(ChapterId);
+                return reason.Length > 0 ? $"Blocked - {reason}" : "Blocked - not ready yet";
 
             default:
                 return TutorialDirector.IsStarted ? "Waiting its turn" : "Not started";
