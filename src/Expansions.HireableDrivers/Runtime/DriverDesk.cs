@@ -220,7 +220,7 @@ internal static class DriverDesk
             {
                 try
                 {
-                    if (_brain.Employee is null || !visible(enabled))
+                    if (!HostGate.IsAuthority || _brain.Employee is null || !visible(enabled))
                         return false;
 
                     if (choice is not null)
@@ -302,6 +302,9 @@ internal static class DriverDesk
         /// </summary>
         private object? NearbyVehicle()
         {
+            if (_brain.Record.PendingCargo.IsActive)
+                return null;
+
             if (!WorldApi.TryPlayerPosition(out var player))
                 return null;
 
@@ -380,12 +383,21 @@ internal static class DriverDesk
         // ── Set off now ─────────────────────────────────────────────────────────────────────────
 
         private bool CanSetOff() =>
-            !_brain.IsOnTrip && _brain.Record.Routes.Any(route => route.Enabled && route.IsComplete);
+            !_brain.IsOnTrip &&
+            (_brain.Record.PendingCargo.IsActive ||
+             _brain.Record.Routes.Any(route => route.Enabled && route.IsComplete));
 
         private void SetOff()
         {
             try
             {
+                if (!_brain.CanStartNow(out var refusal))
+                {
+                    Expansions.Core.Actions.ActionLog.Fail(refusal);
+                    DriverLog.Msg($"{_brain.Name} cannot set off now: {refusal}");
+                    return;
+                }
+
                 _brain.RequestStart(departWithAvailableCargo: true);
                 Expansions.Core.Actions.ActionLog.Ok(
                     $"{_brain.Name} will collect one available batch and leave without waiting for the normal threshold.");

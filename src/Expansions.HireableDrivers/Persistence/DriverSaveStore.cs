@@ -118,6 +118,15 @@ public sealed class DriverSaveStore : Saveable
                     .Select(id => id.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
+                if (route.FilterItemIds.Count == 0 && route.ItemId.Length > 0)
+                {
+                    route.FilterMode = "Whitelist";
+                    route.FilterItemIds.Add(route.ItemId);
+                }
+
+                // AdvancedTransitRoute has no native enabled toggle. Keep legacy sidecar values from
+                // silently disabling a row the player has no way to turn back on.
+                route.Enabled = true;
             }
         }
     }

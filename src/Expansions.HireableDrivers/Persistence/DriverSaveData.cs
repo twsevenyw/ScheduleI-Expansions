@@ -11,7 +11,7 @@ namespace Expansions.HireableDrivers.Persistence;
 /// </summary>
 public sealed class DriverSaveData
 {
-    /// <summary>Bumped on any breaking shape change. A newer blob is ignored rather than misread.</summary>
+    /// <summary>Bumped on breaking changes; older readers preserve known fields and ignore additions.</summary>
     public int Version { get; set; } = 1;
 
     public List<DriverRecord> Drivers { get; set; } = new();

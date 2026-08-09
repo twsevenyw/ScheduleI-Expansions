@@ -150,7 +150,12 @@ internal static class DriverRegistry
 
         foreach (var configurable in Gx.List(Gx.Get(management, "Configurables")))
         {
-            if (TryGet(Gx.Cast(configurable, GameTypes.Packager) ?? configurable, out var brain))
+            var packager = Gx.Cast(configurable, GameTypes.Packager)
+                           ?? Gx.GetAlive(configurable, "packager")
+                           ?? Gx.GetAlive(Gx.Get(configurable, "Configuration"), "packager")
+                           ?? configurable;
+
+            if (TryGet(packager, out var brain))
             {
                 _configured = brain;
                 return brain;

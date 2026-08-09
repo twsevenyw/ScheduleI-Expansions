@@ -425,11 +425,11 @@ internal sealed class DriverBrain
         switch (State)
         {
             case DriverState.ToSource:
-                RunLeg(now, DriverState.AtSource, $"At {_source.Label}.");
+                RunLeg(now, DriverState.AtSource, $"At {_source!.Label}.");
                 break;
 
             case DriverState.AtSource:
-                RunWalkTo(now, _source, DriverState.Loading, $"Loading at {_source.Label}.");
+                RunWalkTo(now, _source!, DriverState.Loading, $"Loading at {_source.Label}.");
                 break;
 
             case DriverState.Loading:
@@ -676,7 +676,8 @@ internal sealed class DriverBrain
     private void ResolveAcrossJump(int now)
     {
         var vehicle = Vehicle;
-        if (vehicle is null || _source is null || _destination is null)
+        var needsSource = State is DriverState.ToSource or DriverState.AtSource or DriverState.Loading;
+        if (vehicle is null || _destination is null || (needsSource && _source is null))
         {
             Finish(now, "Trip abandoned across a time skip.");
             return;
@@ -698,7 +699,7 @@ internal sealed class DriverBrain
                         break;
 
                     var loaded = TransitApi.SourceToStorage(
-                        _source.Transit,
+                        _source!.Transit,
                         storage,
                         _employee,
                         _cargoItemId,
@@ -708,6 +709,7 @@ internal sealed class DriverBrain
 
                     var cargoNow = Math.Max(0, TransitApi.UnitsInStorage(storage, _cargoItemId) - _cargoBaseline);
                     _unitsAboard = Math.Min(_unitsAboard + loaded, cargoNow);
+                    Record.PendingCargo.Units = _unitsAboard;
                 }
             }
 
@@ -741,6 +743,8 @@ internal sealed class DriverBrain
                 {
                     _unitsAboard = Math.Max(0, _unitsAboard - moved);
                     _deliveredThisTrip += moved;
+                    Record.PendingCargo.Units = _unitsAboard;
+                    Record.PendingCargo.DeliveredThisTrip = _deliveredThisTrip;
                     Record.UnitsDelivered += moved;
                 }
 
@@ -761,6 +765,8 @@ internal sealed class DriverBrain
                     Record.CompletedTrips++;
                     TutorialSignals.Raise(DriversChapter.ChapterId, DriversChapter.StepDelivered);
                 }
+
+                Record.PendingCargo.Clear();
             }
 
             _leg.Begin(_employee, vehicle, _homeLot, HomeAnchor(), _path, now);
@@ -824,6 +830,79 @@ internal sealed class DriverBrain
 
         State = DriverState.Idle;
         StatusNote = "Starting…";
+    }
+
+    internal bool CanStartNow(out string reason)
+    {
+        if (!HostGate.IsAuthority)
+        {
+            reason = "Only the host can direct drivers.";
+            return false;
+        }
+
+        if (IsOnTrip)
+        {
+            reason = "The driver is already on a trip.";
+            return false;
+        }
+
+        if (!Patches.DriverPatches.TransportSafe)
+        {
+            reason = "Driver transport is paused because the Handler isolation patches are incomplete.";
+            return false;
+        }
+
+        if (!GameClock.WithinWorkingHours)
+        {
+            reason = "The driver is off shift (07:00–04:00).";
+            return false;
+        }
+
+        if (DriverSettings.RespectCurfew && WorldApi.IsCurfewActive())
+        {
+            reason = "The driver is waiting out curfew.";
+            return false;
+        }
+
+        if (DriverSettings.RequireBedAndWage && !EmployeeApi.CanWork(_employee))
+        {
+            reason = "The driver needs a bed and today's wage.";
+            return false;
+        }
+
+        var vehicle = Vehicle;
+        if (vehicle is null)
+        {
+            reason = "No vehicle is assigned.";
+            return false;
+        }
+
+        if (VehicleApi.HasPlayerAboard(vehicle))
+        {
+            reason = $"A player is using the {VehicleApi.Name(vehicle)}.";
+            return false;
+        }
+
+        if (VehicleApi.Storage(vehicle) is null)
+        {
+            reason = "The assigned vehicle has no cargo storage.";
+            return false;
+        }
+
+        if (Record.PendingCargo.IsActive)
+        {
+            reason = string.Empty;
+            return true;
+        }
+
+        if (!SelectRoute(out _, out _, out _, out _, out var routeReason))
+        {
+            reason = routeReason;
+            return false;
+        }
+
+        reason = string.Empty;
+        return true;
     }
 
     internal string Describe()

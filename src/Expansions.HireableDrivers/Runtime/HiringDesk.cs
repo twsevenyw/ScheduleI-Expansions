@@ -33,6 +33,7 @@ internal static class HiringDesk
     private static int _attempts;
     private static bool _attached;
     private static bool _loggedExhausted;
+    private static bool _deferred;
     private static string _pendingReason = string.Empty;
 
     internal static bool IsAttached
@@ -112,6 +113,7 @@ internal static class HiringDesk
 
         var added = 0;
         string? addFailure = null;
+        _deferred = false;
 
         foreach (var controller in controllers)
         {
@@ -165,6 +167,7 @@ internal static class HiringDesk
         Location = DialogueApi.ControllerName(controllers[0]);
         LastFailure = string.Empty;
         _pendingReason = string.Empty;
+        _deferred = false;
 
         lock (Gate)
             _attached = true;
@@ -187,10 +190,14 @@ internal static class HiringDesk
             return;
 
         int attempts;
+        bool deferred;
         lock (Gate)
+        {
             attempts = _attempts;
+            deferred = _deferred;
+        }
 
-        if (attempts > MaxAttempts)
+        if (attempts > MaxAttempts && !deferred)
             return;
 
         Attach();
@@ -198,7 +205,10 @@ internal static class HiringDesk
         lock (Gate)
             attempts = _attempts;
 
-        if (attempts >= MaxAttempts && !IsAttached && !_loggedExhausted)
+        lock (Gate)
+            deferred = _deferred;
+
+        if (attempts >= MaxAttempts && !deferred && !IsAttached && !_loggedExhausted)
         {
             _loggedExhausted = true;
             if (LastFailure.Length == 0 && _pendingReason.Length > 0)
@@ -219,7 +229,8 @@ internal static class HiringDesk
     {
         _pendingReason = reason;
         LastFailure = reason;
-        StatusLine = $"waiting ({Attempts}/{MaxAttempts}): {reason}";
+        _deferred = true;
+        StatusLine = $"waiting (attempt {Attempts}): {reason}";
 
         if (Attempts == 1 || Attempts % 10 == 0)
             DriverLog.Msg($"Driver hiring not attached yet — {StatusLine}.");
@@ -230,6 +241,7 @@ internal static class HiringDesk
     {
         LastFailure = reason;
         _pendingReason = reason;
+        _deferred = false;
         StatusLine = giveUp
             ? $"failed: {reason}"
             : $"retrying ({Attempts}/{MaxAttempts}): {reason}";
@@ -263,6 +275,7 @@ internal static class HiringDesk
             _attached = false;
             _attempts = 0;
             _loggedExhausted = false;
+            _deferred = false;
         }
 
         LastFailure = string.Empty;

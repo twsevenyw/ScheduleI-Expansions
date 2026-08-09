@@ -88,6 +88,11 @@ internal static class RoutePicker
         if (_passingThrough)
             return true;
 
+        // Dealer destinations and the sidecar are host-owned. Clients retain the vanilla picker,
+        // whose own RPC path is the only safe mutation surface for them.
+        if (!HostGate.IsAuthority)
+            return true;
+
         var brain = DriverRegistry.ConfiguredDriver();
         if (brain?.Employee is null)
             return true;

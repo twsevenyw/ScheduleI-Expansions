@@ -523,12 +523,14 @@ function Get-GeneratedChangelog {
     param([string] $Tag)
 
     $range = if ($Tag) { "$Tag..HEAD" } else { 'HEAD' }
-    $subjects = @(git log --no-merges --pretty=format:%s -n 12 $range 2>$null) |
-        Where-Object { $_ -and $_ -notmatch '^(wip|fixup!|squash!)' }
+    # Both collections must be array-wrapped: a pipeline that yields a single item returns a scalar,
+    # and .Count on a scalar throws rather than returning 1.
+    $subjects = @(@(git log --no-merges --pretty=format:%s -n 12 $range 2>$null) |
+        Where-Object { $_ -and $_ -notmatch '^(wip|fixup!|squash!)' })
 
-    if (-not $subjects -or $subjects.Count -eq 0) { return '' }
+    if ($subjects.Count -eq 0) { return '' }
 
-    $head = $subjects | Select-Object -First 3
+    $head = @($subjects | Select-Object -First 3)
     $line = ($head -join '; ')
     if ($subjects.Count -gt $head.Count) { $line += ", and $($subjects.Count - $head.Count) more change(s)" }
 
