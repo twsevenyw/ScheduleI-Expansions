@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Expansions.HireableDrivers</RootNamespace>
+    <AssemblyName>Expansions.HireableDrivers</AssemblyName>
+    <Version>0.4.0</Version>
+    <Description>Driver employees who can transport items between your properties, businesses, and dealers.</Description>
+    <ExpansionsDeployDir>$(GameDir)\Mods</ExpansionsDeployDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Private=false: Core ships once, to UserLibs. A copy next to the mod would shadow it. -->
+    <ProjectReference Include="..\Expansions.Core\Expansions.Core.csproj" Private="false" />
+  </ItemGroup>
+</Project>

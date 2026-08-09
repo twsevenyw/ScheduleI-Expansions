@@ -1,0 +1,439 @@
+# Shared Agent Context
+> **Purpose**: This file is shared memory across all agents working on this project. Every agent should read this file at the start of each interaction and update it with important context, decisions, or state changes before finishing.
+
+## Project Overview
+- **Product**: Schedule I mod suite. Two workstreams:
+  1. **Creative Mode** (shipped, v1.3.0) — in-game GUI to spawn items, edit money, run cheats
+  2. **Roadmap Expansions** (in progress) — three unshipped roadmap features rebuilt as native-feeling mods:
+     - **Hireable Drivers** — driver employees transporting items between properties, businesses, and dealers
+     - **Police Improvements** — dynamic police intensity, federal agents, outlaw status, heavier consequences
+     - **Special Customers** — customer groups (bikers, hippies, businessmen) visiting town to buy in bulk
+- **Tech stack**: C# / .NET 6, **MelonLoader 0.7.3**, **S1API.Forked 3.1.7**, Unity IMGUI + uGUI/TMP (IL2CPP)
+- **Repo**: Local at `C:\Users\fyfvg\Documents\ScheduleI-CreativeMode`
+- **Owner**: Evan Klein
+
+## Key Files
+| File | Purpose |
+|------|---------|
+| `CreativeModeMod.cs` | MelonMod entry + F8 GUI |
+| `ItemCatalog.cs` | Full item discovery (Registry/Resources/products + shroom/AC IDs) |
+| `QuestCatalog.cs` | Live quest list + complete helpers |
+| `NpcCatalog.cs` | Live NPC/supplier list + unlock / relationship helpers |
+| `CreativeMode.csproj` | Build + auto-deploy to game `Mods` folder |
+| `README.md` | Install / usage |
+| `FEATURES.txt` | Full plain-text feature reference for the whole suite, with `[SHIPPED]`/`[IN PROGRESS]`/`[PLANNED]`/`[UNVERIFIED]` markers. Keep it honest and current. **Goes out in the distributable — refresh it whenever behaviour changes.** |
+| `INSTALL.txt` | Install runbook written to be pasted into an AI, for non-technical users. Ships in the zip. |
+| `dist/` | **Current: `ScheduleI-Expansions-1.2.1-2026-08-06.zip`** (9 entries, ~900 KB, no Creative Mode). Only ever keep one archive here. Distributable ZIPs (gitignored). Mirrors the game folder layout: `Mods/`, `Plugins/`, `UserLibs/` + `INSTALL.txt` + `FEATURES.txt` + `LICENSE-S1API.txt`. |
+| `research/raw/**` | Ground-truth IL2CPP dumps (assemblies, namespaces, type index, subclass/interface reverse indexes, per-namespace member dumps, `global-metadata.dat` strings + literals) |
+| `research/probe/` | The dumper tool (`Program.cs`, `Strings.cs`, `type.ps1` helper) that generated `research/raw` |
+| `research/API-NPCS.md` | **NPC system API reference** — NPC base class, 81 subclasses, NPCManager, spawning, movement/health/inventory/awareness/actions/responses, schedules, behaviour tree, relationships, dialogue, AvatarFramework/appearance, clothing, map touchpoints, runtime flow, Harmony hooks, new-NPC recipe |
+| `research/raw/*` | Ground-truth IL2CPP metadata dumps (assemblies, namespaces, per-namespace member dumps, string literals, subclass/interface reverse indexes) |
+| `research/probe/type.ps1` | Helper: `type.ps1 <FullTypeName>` prints a type's dumped member block; `type.ps1 --grep <substr>` lists matching type headers |
+| `research/API-UI-MENU.md` | **UI / main-menu API reference** — main menu, settings, pause menu, phone apps, shared UI infra, asset loading, and the recommended native-UI injection point |
+| `Directory.Build.props` (root) | Excludes `src/`, `research/`, `research-ext/` from CreativeMode's `**/*.cs` glob |
+| `src/Expansions.sln` | Roadmap Expansions solution (4 projects) |
+| `src/Directory.Build.props` / `.targets` | Shared TFM + Il2Cpp/Melon reference set; `PreventS1APICopy` + `DeployToGame` |
+| `src/Expansions.Core/` | Shared lib → `UserLibs`. Module registry, lifecycle, config, logging, UI seam |
+| `src/Expansions.HireableDrivers/` | Mod → `Mods`. Module id `hireable_drivers` |
+| `src/Expansions.PoliceOverhaul/` | Mod → `Mods`. Module id `police_overhaul`, displays as "Police Improvements" |
+| `src/Expansions.SpecialCustomers/` | Mod → `Mods`. Module id `special_customers` |
+| `research-ext/DESIGN-INTENT.md` | External research: original design intent for the 3 cut roadmap features + shipped-system balance numbers + "Balance numbers we will use" table |
+| `research-ext/raw/trello-board.json` | Full Trello roadmap board export (fetched 2026-08-03) |
+| `research-ext/raw/steam-news-*` | Full Steam news/patch-note archive for app 3164500 (80 items, back to 2024-09) |
+| `research-ext/raw/fandom-*.json` | Fandom wiki page captures (Employees, Police, Customers, Vehicles, Properties, etc.) |
+
+## Working Rules (read before acting)
+- **NEVER launch the game.** The owner runs it themselves. Repeated agent-driven launches are disruptive and are not an acceptable testing strategy. Ask the owner to run a specific check instead, and give them exact steps.
+- **Never kill the game process** if it's already running. Deploy targets use `ContinueOnError`, so file-lock warnings during a build are expected and harmless.
+- Verify statically instead: build at 0 errors / 0 warnings, and metadata-check every game/S1API symbol against `<GameDir>\MelonLoader\Il2CppAssemblies\` and `<GameDir>\Mods\S1API.Il2Cpp.MelonLoader.dll` using a `MetadataLoadContext` harness. Late-bind anything uncertain via reflection so an unverified assumption degrades to a logged warning, never a load-time exception.
+- Batch anything needing runtime confirmation into a single list the owner can check in one session, rather than trickling requests.
+
+## Game / Modding Environment
+- **Real IL2CPP namespace prefix**: `Il2CppScheduleOne.*` (assembly `Assembly-CSharp.dll`)
+- **Research dumps**: `research/raw/ns/` = 576 per-namespace metadata dumps (`ns-<Namespace>.txt`); `research/raw/save-samples/` = real save-file layout. `research-ext/raw/extract-*` = real extracted fonts/sprites.
+- **Game UI font**: OpenSans family (+ Caveat, PerfectDOSVGA437, fs-sevegment). TMP SDF asset names in `research-ext/raw/dump-tmpfonts/`.
+- **Reusable UI sprites**: `Rectangle_RoundedEdges`, `Outline_RoundedEdges`, `trophy`, `UISprite`, `MenuTitle` — 9-slice insets in `research-ext/raw/sprite-9slice.tsv`.
+- **Game path**: `C:\Program Files (x86)\Steam\steamapps\common\Schedule I`
+- **Backend**: IL2CPP (`GameAssembly.dll`, MelonLoader Il2CppAssemblies generated)
+- **MelonLoader**: **0.7.1** (verified). Ships `0Harmony` = **HarmonyX 2.10.2**, `Il2CppInterop` **1.5.0**, Mono.Cecil 0.11.6, Newtonsoft.Json 13.0.3.
+- **Unity**: **2022.3.62f2** (verified from `Schedule I.exe`)
+- **Game version**: **v0.4.6 / build 0.4.6f11** (current public release; "Special Customers" announced but NOT yet shipped by TVGS)
+- **S1API**: Installed **3.1.4** (`Mods\S1API.*.dll` + `Plugins\S1APILoader.MelonLoader.dll`). Latest is **3.1.7**.
+- **Game namespace**: `ScheduleOne.*` (Mono) / `Il2CppScheduleOne.*` (IL2CPP interop assemblies)
+- **Community symbol convention**: `#if IL2CPP` / `#if MONO` (S1API-internal uses `IL2CPPMELON` / `MONOMELON` — do not copy)
+- **MelonGame attribute**: `[assembly: MelonGame("TVGS", "Schedule I")]`
+- **This mod DLL**: Deployed to `...\Schedule I\Mods\CreativeMode.dll`
+
+## Current State
+- MelonLoader + S1API installed on the game.
+- Creative Mode mod built and deployed (**v1.3.0**).
+- Hotkey: **F8**. Cursor unlocks while menu open.
+- Tabs: Items, Money, Player, Unlock, **NPCs**, Quests, World.
+- UI: absolute `GUI.Button`/`GUI.Label` only. Avoid stripped IL2CPP APIs (`TextField`, `DrawTexture`).
+- Item search: click search **button**, then type (`Input.inputString`).
+- Item catalog: Registry + Resources + FindObjectsOfTypeAll + known IDs (~206+).
+- Quest complete: native SetQuestState/Complete via reflection + `setqueststate … 2` / entry states.
+- **NPCs tab**: `NPCManager.NPCRegistry` + Resources scan; unlock via `setunlocked` + `RelationData.Unlock`; relationship via `ConsoleHelper.SetNpcRelationship` / `setrelationship` / native `SetRelationship` (0–5). Filters: All / Suppliers / Locked / Unlocked. Bulk unlock+max.
+- **World time scale**: preset buttons Pause / 0.25x / 0.5x / 1x / 2x / 5x / 10x via `settimescale` + `Time.timeScale`.
+
+### Roadmap Expansions — research status
+- IL2CPP ground truth dumped to `research/raw/**` (assemblies, namespaces, 02-types-index, 03-subclasses, 04-interface-implementors, per-namespace member dumps, metadata strings/literals).
+- **NPC system documented** → `research/API-NPCS.md`. Key verified facts for the expansions:
+  - `Il2CppScheduleOne.NPCs.NPC : Il2CppFishNet.Object.NetworkBehaviour`, 81 direct subclasses, none `sealed`.
+  - Most `NPCs.CharacterClasses.*` classes contain **zero** hand-written code (FishNet codegen only) — character data lives in prefabs + `NPCs.Framework.NPCData` ScriptableObjects.
+  - Only real runtime NPC factory: `EmployeeManager.CreateEmployee_Server(property, EEmployeeType, firstName, lastName, id, male, appearanceIndex, position, rotation, guid)`. Cartel goons and police officers come from fixed pools (`GoonPool.SpawnGoon`, `PoliceStation.PullOfficer`).
+  - Movement/transport surface: `NPCMovement.SetDestination` (4 overloads), `Warp`/`ReceiveWarp`, `CanGetTo`, `GetPathTo`, `SmartSampleNavMesh`, `NPCSpeedController.AddSpeedControl`, plus `NPC.EnterBuilding`/`ExitBuilding` for door traversal.
+  - Appearance: `BasicAvatarSettings` (31 fields) → `GetAvatarSettings()` → `Avatar.LoadAvatarSettings(AvatarSettings)`. Slot budget = 6 face layers / 8 body layers / 9 accessories.
+  - Still unknown (see the doc's "Open questions"): NPC id string values, the concrete `NetworkObject` spawn call, avatar/clothing asset-path catalogue, animator + emotion names, relationship min/max constants.
+
+### Research phase (Roadmap Expansions)
+- IL2CPP metadata fully dumped to `research/raw/` (assemblies, 01-namespaces, 02-types-index, 03-subclasses, 04-interface-implementors, per-namespace member dumps under `ns/`, 23,869 string literals, global-metadata + globalgamemanagers string tables).
+- **`research/API-UI-MENU.md` written** — covers `Il2CppScheduleOne.UI.MainMenu`, `.UI.Settings`, `.UI`, `.UI.Phone(+subs)`, `.UI.Input`, `.UI.Tooltips`, `.CustomUI`, `.Core.Settings(.Framework)`, `.Configuration`, `.DevUtilities`, `.State`, plus the `Il2CppTMPro` / `UnityEngine.UI` / `UnityEngine.Events` members the game actually uses.
+- **Scene names confirmed**: `Menu` (build index 0 → `level0`, 5.4 MB), `Main` (1 → `level1`), `Tutorial` (2 → `level2`). Reachable in code via `Il2CppScheduleOne.Persistence.SaveManager.MENU_SCENE_NAME` / `MAIN_SCENE_NAME` / `TUTORIAL_SCENE_NAME`. Unity 2022.3.62f2.
+- **Chosen injection point**: Harmony `Postfix` on `Il2CppScheduleOne.UI.MainMenu.SettingsScreen.Awake()`, appending a `SettingsScreen.SettingsCategory { UnityEngine.UI.Toggle Toggle; UnityEngine.GameObject Panel; }` to the public `Categories` array. `ShowCategory(int)` + `OnEnable()` wire it for free.
+- **No UI assets are loadable by path**: no `ui/` folder in the Resources table, no asset bundles in `StreamingAssets`. UI must be built by cloning live GameObjects. Only UI-adjacent Resources tree is `inputdata/promptdata/**` + `inputdata/promptbindings/**`.
+- **Correct cursor/input handling for native UI**: `Il2CppScheduleOne.State.MonoState` + `StateProperties` presets (`UIDefault`, `EMouseState.Free`) and `GameInput.RegisterExitListener(...)` — replaces the per-frame `Cursor.lockState` fight in `CreativeModeMod.cs`.
+- **`Button.onClick.AddListener` takes `UnityEngine.Events.UnityAction`** (not `Il2CppSystem.Action`); both have `op_Implicit(System.Action)`. Inspector-wired clicks on a cloned button CAN be stripped: `onClick.m_PersistentCalls.Clear()` + `DirtyPersistentCalls()` + `RemoveAllListeners()`.
+- **Phone apps are already solved by S1API 3.1.4**: subclass `S1API.PhoneApp.PhoneApp` (S1API patches `Il2CppScheduleOne.UI.Phone.HomeScreen.Start`). `App<T>.Apps` is per-closed-generic, so there is no shared registry to append to.
+
+### Roadmap Expansions (in progress)
+- Scaffolding **complete & compile-verified**: `dotnet build src/Expansions.sln -c Release` → 0 errors, 0 warnings; DLLs deploy to `UserLibs` (Core) and `Mods` (3 mods).
+- Feature logic **not yet written** — pending API recon.
+- Menu hotkey **F7** (placeholder IMGUI menu; avoids Creative Mode's F8). Native uGUI screen swaps in via `ExpansionMenu.Use(menu)`.
+- Config: `UserData/Expansions.cfg`. Categories are `HireableDrivers_01_Main`, `PoliceImprovements_01_Main`, `SpecialCustomers_01_Main` + global `Expansions` — four sibling top-level TOML tables. Every module auto-gets an `enabled` entry (default on). Category comes from an overridable `ConfigCategory` on `ExpansionModule`; `PoliceOverhaulModule` overrides it so id `police_overhaul` stays decoupled from the displayed "Police Improvements".
+- `ExpansionRegistry.Register` guards: warns if a melon assembly lacks `[assembly: HarmonyDontPatchAll]`; refuses categories containing a dot, matching the global category, or already claimed.
+- Module authoring: derive `ExpansionModule`; use protected `Log` / `Config` / `Harmony` / `Lifetime`. Register teardown in `OnEnabled` via `Lifetime` — leave `OnDisabled` empty.
+- **`OnRegistered` side effects are never undone** — it runs once, outside any cycle, with no teardown hook. Declare settings there; patch in `OnEnabled`.
+- Toggles apply live in both directions (our menu, a third-party settings app, or a hand-edited `.cfg`). Re-entrancy guarded per-context via `ModuleContext.IsApplyingToggle` — `MelonPreferences_Entry<T>.set_Value` fires `OnEntryValueChanged` synchronously on the assigning stack.
+- Enable/disable is genuinely reversible: per-module Harmony instance (`com.evan.expansions.<id>`) unpatched on disable; `Lifetime` disposes tracked objects/subscriptions in reverse order.
+- A module throwing 10x in a frame hook is auto-disabled for the session; persisted toggle stays on.
+
+#### Probe harness (shipped, in `Expansions.Core`)
+- **Run it**: console command `expprobe` (also `expprobe list` / `expprobe <id|area>` / `expprobe help`), or press **P** while the F7 menu is open (footer button shows OK/missing/failed counts).
+- **Output**: `<GameDir>\UserData\Expansions-Probe-<timestamp>.md` + `-avatars.json` sidecar. Every probe emits a greppable `RESULT:<probe_id>:<status>`.
+- 17 probes across vehicles/drivers, police, NPCs/spawning, version detection, identity, constants, environment. All late-bound via reflection — `Diagnostics` holds **no** compile-time reference to `Assembly-CSharp` or FishNet, so a renamed symbol can't stop Core loading.
+- One mutating probe (`police.tuning_statics`) sentinel-writes 31 statics and restores each in a `finally`, all within one frame.
+- Report ends with a **"Requires a mutating test"** section listing 20 items that can't be answered read-only, each with its recipe.
+- `ProbeRegistry.Register` returns `IDisposable` → modules use `Lifetime.Add(ProbeRegistry.Register(probe))`.
+- Run it **twice in separate sessions** to settle the `PlayerCode`-stability question (diff the two reports).
+- **`police.tuning_statics` used to hard-kill the game process** (writing IL2CPP consts — see Gotchas). Now four-way gated: explicit-only (bare `expprobe`, the Diagnostics button and `expprobe police` all skip it), requires `allow_mutating_probes = true` in `Expansions.cfg`, requires a loaded save, and only writes fields proven non-const. New always-on read-only `police.tuning_writability` answers the same question safely via `il2cpp_field_get_flags`.
+- **Crash-resilient journal**: every native step writes `BEGIN`/`END` through a `FileStream` (`bufferSize: 1`, `FileOptions.WriteThrough`) + `Flush(flushToDisk: true)`, so a hard process kill is still attributable. A `BEGIN` with no `END` is promoted to `UserData/Expansions-Probe-quarantine.txt`, reported, and skipped forever. `expprobe quarantine` / `expprobe quarantine clear`. Converges a bisect in ~2 runs instead of 31.
+
+#### Runtime data already captured (2026-08-03 session)
+- `research/AVATAR-ASSET-CATALOGUE.md` — **127 NPCs, 94 distinct avatar asset paths**, grouped by slot with usage counts and example NPCs. Raw dump at `research/raw/avatars-dump-2026-08-03.json`. This is the catalogue the archetype recipes must be built from. Confirms real paths for `CombatBoots`, `OpenVest`, `LegendSunglasses`, `Blazer`, `GoldChain`, `PoliceBelt`, `BulletproofVest_Police`, `Oakleys`, `DressShoes`, `Respirator`, `Beanie`, `BucketHat` and 82 more.
+- Probe reports in `<GameDir>\UserData\Expansions-Probe-*.md` — only single-probe bisect runs completed; **a full-suite run is still owed**.
+- `sc.visitor_runtime` = **OK**: Marcus Vale is a fully registered NPC (S1API wrapper + game-side `NPCManager` entry + GUID + mugshot + world position, 1 m drift from spawn, region Northtown).
+- Tutorial quest line verified end-to-end in-game: all 7 chapters completed as real S1API quests, progress persisted, 50 XP per chapter via `LevelManager.AddXPLocal`.
+- ⚠ **`SaveGame_3` was mutated by testing** (~400 XP + tutorial data, left parked mid-chapter-2). Full pre-test backup of the entire Saves folder: `_backup/saves-20260803-214245/` (171 files, 5.8 MB).
+
+#### Special Customers M1 (shipped)
+- **`SpecialVisitor01` / "Marcus Vale"** — one custom NPC on the Northtown motel forecourt, baked impostor, mugshot. No customer behaviour, no groups, no contracts (later milestones).
+- **Console**: `scvisitor` (status), `scvisitor tp` (teleport to him), `scvisitor park` (warp him back to spawn, host-gated).
+- **Probes**: `sc.visitor_prefab`, `sc.visitor_impostor`, `sc.visitor_appearance`, `sc.visitor_runtime` → report area "8. Special Customers". `expprobe sc` runs just these.
+- Files under `src/Expansions.SpecialCustomers/{Visitors,Diagnostics,Commands}/`. `VisitorPrefab.cs` holds the shared `ConfigurePrefab` body so slots 02–08 stay ~8 lines each.
+- **Zero compile-time references to `Assembly-CSharp` or FishNet** — all game touches go through `GameReflection`, so a renamed game type degrades to a logged probe failure, not a load-time `TypeLoadException`.
+- Free answer to open question V2: if live layer counts *grow* across a reload, `Appearance.Build()` appends rather than replaces, and the re-dressing milestone must clone `AvatarSettings` wholesale.
+
+#### Menu layout — reworked 2026-08-04 (playtest round 1)
+- Tab strip is now **Actions / Tutorial / Mods** (tabs 116→104px so three fit the narrow panel).
+- **Every** list (actions, modules, tutorial chapters, picker, output pane) runs through one `ScrollView`: `ScrollRect` host + masked viewport + **transparent raycast catcher** + top-anchored self-sizing content + auto-hiding scrollbar in a reserved 12px gutter. Wheel is applied by hand from `Input.mouseScrollDelta` with `ScrollRect.scrollSensitivity` pinned to **0**, so there is exactly one implementation and it can't double-apply. Dragging + the scrollbar handle stay on the component. PgUp/PgDn/Home/End/arrows supported.
+- Panel height now derives from the display (`Screen.height / canvas.scaleFactor`, 90% clamped 360–1000) instead of fixed constants. Narrow Mods panel 362→374 to absorb the gutter (the 310px card is a measurement, not a choice).
+- **Output pane** is capped at ⅓ of the page with a Hide/Show control persisted as `output_pane_open`. Was a fixed 168px slice the list could never reclaim — with a 372px list cap and ~3,100px of content that left ~5 of 46 actions reachable. On 1080p it's now ~9 rows expanded / ~11 collapsed.
+- **Per-chapter tutorial toggles** on the Tutorial tab (+ Start-Restart, Reset, Enable all, Disable all). Persisted as a single comma-separated `tutorial_disabled_chapters` under the `Expansions` category — one list rather than an entry per chapter, because chapters arrive at runtime from whichever mods are loaded and an id from an absent mod must survive the round trip. A disabled chapter is skipped by the director, contributes no journal objectives, and is deliberately **not** marked complete so re-enabling replays it.
+
+#### Actions surface (shipped, `Expansions.Core`) — replaces the console
+- The Expansions screen now has an **Actions / Mods** tab strip and opens on Actions. Panel widens to 640px for Actions, returns to the measured 362px for module cards (the cards are pixel-measured and would stretch otherwise).
+- **Output pane** below the action list: timestamped, colour-coded, wrapping, auto-scrolled, last 60 lines. Every probe summary, file path, action result and error lands there **and** mirrors to the MelonLoader log. Modules push to it via `ActionLog.Ok/Note/Fail`.
+- 16 Core actions: console (enable-and-open / enable-only / show-binding), teleport (NPC picker + Marcus Vale direct), probes (run all / run area / open newest report / show quarantine / clear quarantine), tutorial (start-restart with dynamic label / reset / status), files (reveal `Expansions.cfg` / reveal `UserData`), clear output.
+- IMGUI fallback got the same surface (paged, no search — `TextField` is stripped on this build).
+- **`ActionRegistry` API**: `ActionRegistry.Register(new ExpansionAction(id, label, description, isAvailable, invoke))` wrapped in `Lifetime.Add`. `ActionAvailability` converts implicitly from `bool` and from `string` (a string is always a refusal + greyed-out reason); `ActionResult` from `string`/`bool`; `invoke` has `Func<ActionResult>` and `Action` overloads. Picker form = `choices:` + `invokeChoice:`. `ExpansionAction.WithDynamicLabel` for state-dependent verbs. Group derives from the id prefix before the first dot → the module's `DisplayName`; `group:`/`order:` override. `Register` returns `IDisposable`; `RegisterAll(...)` returns one token.
+- Availability predicates re-read every frame, so expensive primitives sit behind short-TTL caches (ConsoleUI heap walk 1s, NPC registry 2s, session state 0.5s, report dir 2s).
+
+#### Special Customers — interaction fixes 2026-08-04
+- Root cause of **both** playtest bugs: the mod trusted return values that prove nothing (see the `OfferContract` and `SetUpDialogue` gotchas).
+- Offers now **pre-flight** the leader and **read `OfferedContractInfo` back** after the call; flavour text only sends after that check passes. Failed offers retry up to 3× per visit instead of latching `OfferSent = true`.
+- Stale offers/contracts cleared across the whole 8-visitor pool on group **arrival** and **departure**.
+- **Leader** dialogue: "About the *&lt;group&gt;* order" → send to my phone / status / something's stuck, start over / later. Outcomes return as an NPC text, because dialogue node text is baked at build time.
+- **Non-leaders**: "Talk business" → "You buying?" (hands off to the shipped street-deal flow → handover → real money) + "Who's running this?". With `allow_walkup_sales = false` they keep the menu but only point at the leader. Either way the conversation exits cleanly.
+- New probe `sc.sale_loop` walks all 6 stages (unlocked → outstanding offer → accepted contract → reached the phone with live responses → delivery location → completed handovers) and ends with a one-sentence next step. `sc.group_state` gained per-member columns.
+- New actions: **"Why can't I sell to them?"** and **"Clear the group's stuck order"**.
+- ⚠ **Save schema 1 → 2.** Old saves load fine; a save written now and opened with an older build drops its in-progress visit.
+- ⚠ **OUTSTANDING**: owner observed Marcus at `(-82.3, -3.9, 66.7)` in **Westville**, but he's configured for the Northtown motel forecourt and a prior probe had him there with 1 m drift. He appears to wander off-post and/or sink ~4 m. Not yet investigated.
+
+### Current install state (2026-08-08)
+- **Only `CreativeMode.dll` is enabled.** The three Expansions mods are renamed `*.dll.disabled` in `Mods\` at the owner's request. Re-enable by dropping the `.disabled` suffix.
+- **Game is still `0.4.6f11`** — all four saves report it (incl. one saved 2026-08-07 19:21), `GameAssembly.dll` is dated 08-01, and Steam's manifest has `buildid == TargetBuildID` (24484559) with `StateFlags 4`. No f12 on this machine as of now. Owner believed f12 shipped 08-07; Steam cannot patch while the game is running.
+- If/when f12 lands: close the game → let Steam patch → launch once so MelonLoader regenerates `Il2CppAssemblies` (needs internet) → rebuild both solutions → re-verify symbols. The interop assemblies are a projection of `GameAssembly.dll`, so a native update invalidates them.
+
+### Open items (as of 2026-08-05)
+| Item | Notes |
+|------|-------|
+| Marcus Vale leaves his post | Undiagnosed. Documented + workaround (`scvisitor park` / the park menu action) but nothing changed to address it. |
+| Cross-property route save round-trip | Now **load-bearing**, because driver routes moved into the vanilla `PackagerConfiguration.Routes` field. Only answerable in-game. |
+| Two probe areas both titled "9." | Hireable Drivers and Police Improvements collide. Cosmetic. |
+| Tutorial chapters aren't numbered by the director | There is no "Chapter N" string in the suite. `TutorialRegistry.Rebuild` sorts by the integer `Order` (ties broken by ordinal id); a chapter's number is just its sort position. The only number a player sees is the footer's `Tutorial {done+1}/{total}`, where total = **enabled** chapters — so switching one off renumbers everything after it. |
+| `FEATURES.txt` header leaks the repo path | Line 6 contains `C:\Users\fyfvg\...`, i.e. the Windows username, and it ships in the zip. Harmless but worth knowing before sending it to strangers. |
+| Every round-1 "fix" is unexecuted | The six playtest fixes and the entire Drivers rework are source-verified only — nothing has run in a live game. |
+
+#### Special Customers (original build — full feature)
+- Marcus Vale is reframed as the group's **advance scout** and is the only pool member visible between visits; slots 02–08 sit hidden, parked and zeroed so they generate nothing.
+- **Loop**: every 2–3 in-game days a group arrives 07:00 in one unlocked district → warps in hidden → reveals 1 member / 6 frames → leader texts the player + map marker → at the archetype's order time the leader texts a bulk contract → player accepts on the phone → leader walks to the delivery location → shipped handover screen pays out. Non-leaders sell smaller walk-up deals. 04:00 departure, full undress/untune/re-park, next visit scheduled.
+- **Zero Harmony patches in the core loop.** The only patch is M1's `NPCsLoader.Load` prefix for prefab pre-registration.
+- **Archetypes** (all paths from the live catalogue): **Ashfall MC** (5, 21:00, meth/weed, VeryLow, 0.80, 60–90); **Wexler Group** (5, 14:00, cocaine, High, 0.92, 40–60, navy/brown Blazer — charcoal reserved for Police feds); **Longhaul Caravan** (6, 11:00, weed **+** shrooms two-line order, Low, 0.85, 50–80); **Static Sermon** (4, 23:00, cocaine/shrooms, Moderate, 0.88, 45–70). Skirt variants dropped — the wiki documents skirts clipping through tucked shirts.
+- **Detection baselines measured on 0.4.6**: Economy type count 20, `CustomerData` properties 17, `ECustomerStandard` 5, `EDrugType` 6, `EMapRegion` 6. Version probe worth 100 via `SaveManager.GetVersionNumber` (from `Application.version`, else the loaded save's `SaveVersion`); structural drift 60; config-editable name scan 60. ≥100 disables, 50–99 disables as ambiguous, unresolvable version disables.
+- **Self-disable is inert**: never touches the persisted toggle, silently unwinds any group, records a sticky per-save flag. Reason surfaces three ways (MelonLoader banner, read-only `detection_status` config entry, and the toggle card's display name becoming "Special Customers (standing down — …)"). `detection_mode = always_on` overrides and clears the sticky flag.
+- 9 menu actions, 8 probes, 20 config keys, 5-step tutorial chapter (all steps **poll**, incl. reading the leader's live `CurrentContract` and the pool's `CompletedDeliveries` — no patch needed to observe the shipped pipeline).
+- Deferred: Party Bus (no seating/occupancy API on `LandVehicle`), per-archetype prefab schedules (`WithSchedule` is prefab-time and static, so it can't vary per archetype on a shared pool), runtime affinity writes, optional patches P1–P4.
+
+#### Hireable Drivers — reworked 2026-08-04 to native clipboard hiring
+- **Hiring is on the employee-fixer NPC's own dialogue**, one entry per owned property ("Hire a driver for the Barn ($1,800)"), added via the game's **public** `DialogueController.AddDialogueChoice(DialogueChoice, int)` — the same extension point shipped controllers use. **Zero Harmony patches for hiring.** Properties with no free slot aren't offered; fee and slot counts recompute each time the conversation opens.
+- Deliberately **not** grafted onto the Fixer's dialogue graph: node links live in ScriptableObject data we can't author, so a new branch would dead-end. An action-only choice (`Conversation` left null, `shouldShowCheck` via the generated `op_Implicit(Func<bool,bool>)`) has no such problem.
+- **Management = the shipped Packager clipboard panel.** Bed, Stations (refused with a reason), and the five real Route rows with in-world endpoint picking.
+- **Driver slots are a separate budget from employee capacity.** `driver_slots_per_property = "*=1,dockswarehouse=2"`; `drivers_use_employee_capacity` defaults **off**, so "one driver regardless of how many employees" is literally true.
+- **Verified `PropertyCode` set** (read from real save files, not display names): `barn`, `bungalow`, `dockswarehouse`, `manor`, `motelroom`, `rv`, `seweroffice`, `storageunit`, `sweatshop`, plus the four businesses.
+- **Route pickup pinned to the hiring property**, enforced in 3 places: the game's own picker (`RouteEntryUI.ObjectValid` postfix, showing "Driver X only collects from the Barn"), on every pull, and on load (violating routes from old saves / co-op peers rejected + logged). Destinations are *widened* — the postfix overturns vanilla refusals for any entity that accepts items.
+- `ClipboardRoutes` mirrors the vanilla field into `DriverRecord.Routes` once per tick by **polling**, not by subscribing to `onListChanged` (a `UnityEvent<T>` over a game generic — a collected interop delegate fails silently).
+- **F6 is now read-only diagnostics**: per-property slot usage, driver state + no-work reason, resolved route rows (flagging dead endpoints), binding failures. The Expansions menu keeps only what the clipboard can't do — the drop-off picker (the clipboard's is range-limited, so a cross-town warehouse or a dealer can't be clicked), the departure threshold (no vanilla field carries it), vehicle assignment, and roster verbs.
+
+#### Hireable Drivers (original build — 28 files, ~5,200 lines)
+- **Two console-free surfaces**: 14 driver actions in the F7 Expansions menu (several with searchable pickers), plus a dedicated **F6 drivers panel** (roster left; vehicle + 5 route rows right, each `on/off · source → destination · item · threshold · clear`, plus Run now / Send home / Fire).
+- **Minimum path**: Hire a driver → pick a property (shows fee, staff/capacity, free beds) → give them a bed on the vanilla clipboard → "Assign a route automatically". Fee escalates $100 per employee owned, matching the shipped rule. A new driver auto-claims the first unclaimed owned vehicle.
+- **Transport path is decided per trip, per vehicle.** `VehicleApi.CanSelfDrive` requires a `VehicleAgent` **and** both `Seeker`s **and** a `VehicleTeleporter` — a non-null `Agent` alone is not trusted. Yes → the game's own driving stack (`Navigate` on the A* road graph, `DriveFlags`, reverse-then-teleport stuck ladder, `Park`). No → a timed relay (distance-derived travel time in game minutes). **Both paths deliver.** `transport_mode` config = `auto` (default) / `drive` / `relay`.
+- Only the cross-town leg differs between paths; collection, deposit, slot locking, capacity, wages, persistence and the time-skip snap are shared.
+- **No cached interop delegates anywhere.** Polls `AutoDriving` / `NavigationCalculationInProgress` / distance / `GetIsStuck()` instead of a `NavigationCallback` (a collected interop callback silently never fires). Clock derived from two integer reads per tick rather than subscribing to `onSleepStart`/`onTimeSkip`.
+- Dealers as destinations: `AddItemToInventory`, 10-item cap, home building as parking anchor, no slot reservation, atomic single-tick transfer.
+- 9 probes, 7 Harmony patches, **6**-step tutorial chapter (`hireable_drivers`, order 500). (The old 7th step, "open the F6 panel", went when F6 was demoted to diagnostics.)
+
+#### Police Improvements (shipped — all 4 pillars, 27 files)
+- **Heat** 0–100 per player, survives sleep/save/reload. Gain = the game's own fine ÷ 5, read from `PenaltyHandler` at runtime (self-calibrating). ×1.5 curfew, region multipliers, +15 per arrest, ~−10/night. Persisted at `<save>/Modded/Saveables/expansions_police.json`.
+- **Intensity**: heat maps to 5 tiers, each **added to** the vanilla `LawController.LE_Intensity` baseline, never replacing it. All writes are **raise-only** vs the designer's numbers, so **heat 0 == vanilla**. `internalLawIntensity` never written → `Law.json` byte-identical.
+- **Levers actually used** (given only 3 statics are writable): schedule `MinMembers`/`MaxMembers`, raise-only clamp on `PoliceStation.Dispatch`, per-officer `VisionCone.RangeMultiplier` + `BodySearchChance` (instance fields — can't be const-inlined), and 16 Harmony postfixes. Module works correctly even if **zero** statics are writable.
+- **Consequences**: tier-scaled fines (×2 while outlawed), packaging no longer hides product, vehicle-adjacent product seized, shortfall taken from the **online balance** (the real difficulty knob — cash is abundant, bank deposits cap at $10k/week).
+- **Outlaw**: latched `Clean → Marked → Hunted`; rule changes only; 3 clean in-game days per tier to clear.
+- **Federal agents**: runtime viability check first (`"PoliceNPC"` spawnable → fallback to cloning a live officer + FishNet init trio). If neither works, `Spawn` returns 0 and **no other pillar is affected**. Never added to `PoliceStation.OfficerPool`; `ShouldSave` forced false; removed from both registries on despawn → cannot reach the save. Look = subtraction from real harvested paths (cap/marked vest/duty belt off; charcoal blazer, Oakleys, dress shoes, plain belt on).
+- 22 config settings, 5 probes ("9. Police Improvements"), 8 menu actions, 5-step tutorial chapter.
+- ⚠ Known limitation: a cloned agent **inherits the donor's NPC id** — the id lives on a shared asset and rewriting it would rename every officer in the game.
+
+#### Native menu (shipped, in `Expansions.Core/UI/Native/`)
+- **Open it**: an **"Expansions"** entry in the main-menu nav column (one slot below Settings), or **F7** in-game — *the same screen*. Escape or the footer Close button closes it.
+- Nav entry is a **clone of a real nav button**, so it inherits the game's font, `ButtonScaler` hover-grow, `ButtonSound` and `UISelectable` gamepad registration for free. No Harmony, no asset bundle.
+- Screen lives on its own `DontDestroyOnLoad` overlay canvas (sortingOrder 30000), **not** a cloned `MenuScreen` — that keeps one `ModuleCard` renderer serving both surfaces instead of two.
+- Files: `NativeExpansionMenu.cs` (the `IExpansionMenu`, now the default) + `Native/{ExpansionsScreen, ModuleCard, MainMenuInjector, MenuStyle, UiFactory, GameFonts, GameSprites, GameSounds, InteropObjects, UiCallback, HoverWatcher}.cs`.
+- All fonts/sprites/sounds bound at runtime with fallback chains, re-harvested per scene; screen rebuilt on scene change.
+- **Core holds zero compile-time `Assembly-CSharp` references** — `MenuScreen`, `ButtonSound`, `MENU_SCENE_NAME` all reached by name. A renamed game type is a warning, never a `TypeLoadException` that would stop `Expansions.Core.dll` loading and take all three mods down.
+- Injector waits 20 frames then retries to frame 180. Never-injected → falls back to `ImguiExpansionMenu`. Previously-injected → keeps the native screen and logs that F7 works.
+- `ImguiExpansionMenu` retained as the fallback surface. `ExpansionConfig.ProbeHotkey` is now the shared probe-key constant.
+
+### Roadmap Expansions — research status
+- **A2 external survey complete** → `research-ext/raw/a2-mods-survey.md` (mod table, deep dives with quoted code, FishNet/MP findings, main-menu injection, update survival, sourced URL list).
+- Key external references (all MIT unless noted): `DooDesch-Mods/ScheduleOne-SideHustle` (main-menu hub), `DooDesch-Mods/ScheduleOne-Personnel` (custom NPC framework), `k073l/s1-modsapp` (settings framework + `PREFERENCES.md`), `RoachxD/ScheduleOne.HonestMainMenu` (menu object names), `DooDesch-Mods/ScheduleOne-Cookbook` (community FishNet/IL2CPP/AssetBundle wiki), `XOWithSauce/schedule-nacops` (police internals — **no licence, read-only**).
+- Verified scene facts: menu scene = **`Menu`**; gameplay scene = **`Main`** (buildIndex **1**); menu root GameObject = `MainMenu`, nav buttons under `MainMenu/Home/Bank`, screens are siblings with a `Title` TMP child; types in `Il2CppScheduleOne.UI.MainMenu` (`MenuScreen.OpenOnStart`, `MainMenuRig`, `MainMenuPopup.Instance.Open`).
+- Prior art to study for each feature: Drivers → `bwyan-HireableDeliveryDriver_IL2CPP_port` (no source, host-only) + `DevKaiE/DealerTransportMod`; Police → `XOWithSauce/schedule-nacops`; Special Customers → **nothing exists** (greenfield), closest is `hdlmrell/OTC-S1-Mod`.
+
+## Game Version / Roadmap Facts (verified 2026-08-03)
+- **Current shipped version: v0.4.6 "Gamepad Support + Optimization"** (2026-08-01).
+- The three expansion features are the **three Community Vote #3 ballot options** (Steam announcement 2026-04-17) — NOT Trello card text.
+  - Vote #3 result (2026-04-26): **Special Customers 142,287** (won) · Drivers 125,314 · Police 117,677.
+- **Special Customers is IN PROGRESS at TVGS** — Trello "In Progress" list, reserved as **v0.5.0**, "not far off now" per v0.4.6 notes. Our mod must be namespaced + kill-switchable.
+- **Drivers**: unshipped, lost votes #2 and #3, still in Trello "Future Update Ideas". Vote #2 (2025-09-01) has the real spec: *"designate automatic transit routes and specify the required conditions (e.g. number of items in the vehicle) for a route to begin."*
+- **Police Improvements**: unshipped, lost votes #1 and #3. Two live Trello cards. Only partial ship = v0.4.6 *"Police patrols, sentries, checkpoints now assign 1-2 officers instead of 2 all the time"* — the one dynamic-intensity hook that exists.
+- Key shipped anchors: employees $100/$200/$200/$300 per day (Cleaner/Botanist/Handler/Chemist); Handler = 5 routes, property-local only; dealers flat 20% cut, 10 customers each (v0.4.3); 1 in-game hour ≈ 1 real minute; day 7:00 AM → 4:00 AM pause; curfew 9:00 PM ($100 fine); $10,000/wk ATM cap, $20,000/24h laundering cap.
+
+## Decisions Log
+| Date | Decision | Rationale |
+|------|----------|-----------|
+| 2026-08-02 | Use MelonLoader + S1API instead of raw Assembly-CSharp | Cross-version console/item/money helpers; less reverse-engineering |
+| 2026-08-02 | Target IL2CPP only | User's Steam install is IL2CPP; simpler than dual Mono/IL2CPP |
+| 2026-08-02 | IMGUI window (not uGUI) | Fast MelonLoader pattern; no asset bundles needed |
+| 2026-08-02 | Wrap console commands via ConsoleHelper | Same systems as `give` / `changecash`; stable across patches |
+| 2026-08-02 | Drop TextField / GUILayout for absolute Rect UI | IL2CPP strips TextField → layout mismatch → empty window |
+| 2026-08-02 | Force Cursor.unlock every OnUpdate while open | Game re-locks mouse otherwise |
+| 2026-08-02 | Don't rely only on S1API GetAllItemDefinitions | Misses unloaded ScriptableObjects / update content; use Resources + Registry |
+| 2026-08-02 | Never call GUI.DrawTexture on this build | Stripped → aborts DrawWindow → blank Items tab |
+| 2026-08-02 | NPC unlock/rel via console + native RelationData | `setunlocked` / `setrelationship` + direct RelationData for reliability |
+| 2026-08-02 | Time speed via settimescale + Time.timeScale | Console command is the game path; Unity timescale as backup |
+| 2026-08-03 | Expansions built as 3 separate mod DLLs + 1 shared core lib (provisional) | User asked for "a mod for each"; shared core avoids triplicating NPC/UI/config code. Pending feasibility confirmation from research. |
+| 2026-08-03 | Toggle UI = native uGUI/TMP main-menu screen, not IMGUI | Must not feel third-party. Reuse the game's own TMP font assets + sprites at runtime rather than shipping copies. |
+| 2026-08-03 | Research phase before any implementation | Accuracy over speed; every game API symbol must be verified against the real IL2CPP assemblies, not guessed. |
+| 2026-08-03 | New NPCs will be created by **cloning an existing NPC GameObject**, not by injecting a new `NPC` subclass | Verified: the only real runtime NPC factory is `EmployeeManager.CreateEmployee_Server` (Employee-only); `GoonPool`/`PoliceStation.OfficerPool` are fixed pools of scene-placed NPCs; FishNet bakes RPC links and `BehaviourIndex` per type, so `ClassInjector`-created NPC types won't replicate. |
+| 2026-08-03 | Author NPC appearance via `BasicAvatarSettings.GetAvatarSettings()` → `Avatar.LoadAvatarSettings(...)` | 31 semantic slots instead of 72 raw `AvatarSettings` fields; both are `ScriptableObject`s creatable at runtime. There is no `ApplyBasicSettings` method. |
+| 2026-08-03 | Prefer the game's `UnityEvent`/`Action` hooks over Harmony where possible; when patching FishNet RPCs, patch `RpcLogic___X_<hash>` | `RpcLogic___` is the real body and runs on every peer; the public method only sends. Also `Awake` is FishNet-generated — the hand-written body is the renamed `Method_Protected_Virtual_[New_]Void_N`, whose ordinal is unstable across regenerated Il2CppAssemblies. |
+| 2026-08-03 | Expansions toggle UI = a new category tab appended to `SettingsScreen.Categories`, not a new top-level main-menu button | The game's `ShowCategory`/`OnEnable` do the wiring; radio-group, gamepad tab-cycling and hover animation come free from cloning; works in the pause menu too. A top-level button needs a cloned `MenuScreen` + persistent-call stripping + sibling-index management. |
+| 2026-08-03 | Build all mod UI by cloning live game GameObjects; never ship fonts/sprites | No `ui/` Resources path and no asset bundles exist, so nothing is loadable by name. Cloning inherits the exact TMP font asset, SDF material, palette, `ButtonScaler` hover and `UISelectable` gamepad registration. |
+| 2026-08-03 | Persist expansion toggles in `MelonPreferences`, not the game's settings file | `Il2CppScheduleOne.DevUtilities.Settings` exposes no path and no `PlayerPrefs` surface; its on-disk location is unverified. |
+| 2026-08-03 | Use `MonoState`/`StateProperties` + `GameInput.RegisterExitListener` for cursor & Esc, not `Cursor.lockState` | `StatePropertiesTransitionHandler` is what re-locks the mouse; participating in the state stack is why native screens need zero cursor code. |
+| 2026-08-03 | Never bind to `field_Private_*` / `Method_*_PDM_*` / `__c__DisplayClass*` members | Il2CppInterop fallback names for stripped members; they are position-dependent and shift between game versions. |
+| 2026-08-03 | Shared `Expansions.Core.dll` goes in `UserLibs`, not `Mods` | Verified in MelonLoader 0.7.1 IL: `MelonFolderHandler.ScanForFolders` scans UserLibs before Plugins/Mods and registers it with `MelonAssemblyResolver.AddSearchDirectory`. |
+| 2026-08-03 | Root `Directory.Build.props` excluding `src/`+`research*/` | `CreativeMode.csproj` globs `**/*.cs` from root; without it the new tree and research probe files compile into `CreativeMode.dll`. |
+| 2026-08-03 | Mod entry classes don't share a `MelonMod` base class | Couldn't verify MelonLoader's type scanner accepts a mod whose base type lives in another assembly; explicit forwarding trades ~12 lines/mod for zero runtime risk. |
+| 2026-08-03 | First mod to init becomes the frame-pump "driver" | Load-order independent; guarantees exactly one fan-out per frame with 1–3 mods installed. |
+| 2026-08-03 | **`[assembly: HarmonyDontPatchAll]`** in each mod entry file | MelonLoader auto-`PatchAll`s each mod assembly under *its own* Harmony id (`Assembly.FullName + ":" + MelonInfo.Name`), so `[HarmonyPatch]` classes would survive our per-module `UnpatchSelf()` — silently breaking the reversible-toggle guarantee. Modules must patch only via the injected per-module instance. |
+| 2026-08-03 | ~~`[HarmonyDontPatchAll]` on mod entry *classes*~~ **CORRECTED** | The attribute is `[AttributeUsage(AttributeTargets.Assembly)]` — the class form is a hard compile error (CS0592), and `MelonAssembly.LoadMelons` only ever reads it at assembly scope. Applied as `[assembly: …]` instead. |
+| 2026-08-03 | Config categories → `<ModName>_01_Main` convention | Matches the community convention third-party mod-settings apps key off, and fixes a real data-loss bug (below). Renamed before any user settings existed. |
+| 2026-08-03 | ~~Dotted categories merely *nest* in TOML~~ **CORRECTED — they silently lose data** | `Expansions.<id>` made Tomlet create a nested table, then `GetSubTable` threw `TomlNoSuchValueException`, swallowed by `InsertIntoDocument`'s catch-all. **Every module's `enabled` entry never reached disk** — a user disabling a module would lose it on restart. |
+| 2026-08-03 | Never subclass a game `NetworkBehaviour` | FishNet codegen doesn't run against mod assemblies on IL2CPP. To get a *game* NPC type, clone a live instance and re-run `UpdateNetworkBehaviours` → `Preinitialize_Internal` → `Initialize`. |
+| 2026-08-03 | Custom NPCs via `S1API.Entities.NPC` subclass | `ConfigurePrefab(NPCPrefabBuilder)` = persistent setup; `OnCreated()` = runtime. `ConfigurePrefab`/`IsPhysical`/`IsDealer` run on an **uninitialized** instance — must not touch ctor-set fields. `Appearance.Build()` + impostor are mandatory or the NPC is a blank billboard past 50m. |
+| 2026-08-03 | Main-menu injection via SideHustle pattern | Find the `MenuScreen` with `OpenOnStart == true`, wait ~20 frames, clone a label-matched nav button, neutralize with `RemoveAllListeners()` **plus** `SetPersistentListenerState(…, Off)`, relabel the TMP child. No Harmony, no AssetBundle, works pre-save. |
+| 2026-08-03 | Patch on first gameplay scene, never at mod load | Community-standard; avoids patching before game types are ready. Always try/catch around patching. |
+| 2026-08-03 | **Avoid `ClassInjector.RegisterTypeInIl2Cpp`** — use a managed registry keyed on GUID | Injection is **process-global and irreversible**, which breaks the module reversible-toggle guarantee. A dictionary lookup on `__instance` inside a Harmony patch is an equally good marker. **Supersedes** the earlier research recommendation of injected `MonoBehaviour` marker components. |
+| 2026-08-03 | Driver = repurposed vanilla `Packager` (`EEmployeeType.Handler`), not a new `Employee` subclass | FishNet's weaver runs at **build time**: an injected `Employee` subclass gets no RPCs, no SyncVars, and no spawnable prefabId, so `Employee.Initialize` (an ObserversRpc/TargetRpc) would never replicate name/appearance/assignment. A synthetic `(EEmployeeType)4` needs 6+ patches and still hits vanilla `switch`es that fail *silently*. |
+| 2026-08-03 | ~~Driver routes stored in vanilla `PackagerConfiguration.Routes`~~ → ~~mod-private blob~~ → **BACK to vanilla `Routes`** (final, 2026-08-04) | The private blob avoided the vanilla Handler brain fighting our state machine, but it also meant no real UI. Storing routes in the vanilla field buys `RouteListFieldUI`, five `RouteEntryUI` rows, the `TransitEntitySelector` worldspace picker, transit-line previews, the item-filter screen, FishNet replication and vanilla save/load **for free** — which is what the owner asked for ("should work like the clipboard"). The brain-conflict risk is retired instead by postfixing `Packager.GetTransitRouteReady` to return null for drivers. |
+| 2026-08-04 | Suppress `Packager.UpdateBehaviour` **only during a trip**, not permanently | The vanilla dispatcher also carries the bed-and-wage bookkeeping; a permanently suppressed driver is never marked paid and `CanWork()` stays false forever. |
+| 2026-08-03 | Runtime-verification probes before feature code | Every plan carries UNVERIFIED items only resolvable in-game. Build one shared read-only probe harness (console command) in Core rather than three ad-hoc ones. **All three plans independently reached this conclusion.** |
+| 2026-08-03 | Police: drive the game's own law scheduler, don't build a parallel spawner | `PatrolInstance`/`CheckpointInstance`/`SentryInstance`/`VehiclePatrolInstance`/`CurfewInstance` already self-gate on `LawController.LE_Intensity`. Postfix `OnUncappedMinPass()` → set intensity → `CurrentSettings.Evaluate()`. Makes teardown trivial and the feature feel shipped. |
+| 2026-08-03 | Police: Heat is a *separate* persistent 0–100 scalar, not the wanted level | Sleeping wipes the shipped wanted level. Heat gain = shipped fine ÷ 5, read from `PenaltyHandler` constants **at runtime** so the mod self-calibrates to future balance patches. |
+| 2026-08-03 | Police: never write `internalLawIntensity`; never add feds to `PoliceStation.OfficerPool` | Keeps `Law.json` vanilla (save byte-identical on disable), and stops the vanilla dispatcher sending a federal agent to a jaywalking call. |
+| 2026-08-03 | Federal agents = tagged vanilla `PoliceOfficer`, look built by *subtraction* | Drop `PoliceCap`/`BulletProofVest_Police`, keep plain navy vest, swap `PoliceBelt`→`Belt`, add Blazer/Oakleys/DressShoes. Local PD reads black + duty-belt clutter; federal reads navy/charcoal. |
+| 2026-08-03 | Special Customers: 8-NPC reusable pool re-dressed per archetype | ~10% NPC-count overhead vs 37% if each archetype got its own member types. Max 6 visible, one group at a time, revealed 1 member / 6 frames after hidden warp-in. |
+| 2026-08-03 | Special Customers: `EnsureCustomer()` at **prefab** time | Sidesteps the mod's single biggest unknown ("does a `Customer` added after `NetworkObject` spawn replicate?") by putting the component on before S1API network-spawns it. |
+| 2026-08-03 | Special Customers: author only the *offer*; never fake the sale | Build via `ContractInfoBuilder` → `NPCCustomer.OfferContract`, then let the shipped pipeline run (phone → `CustomerAttendDealBehaviour` → `HandoverScreen` → `EvaluateDelivery` → `Contract.SubmitPayment`). Real money/quality/XP/receipts. **Core loop needs zero Harmony patches.** Margin haircut = lower `ContractInfo.Payment`, not a patched formula. |
+| 2026-08-03 | Special Customers: detection **fails closed** | 3 weighted probes (version ≥ 0.5.0 = 100pts; structural type/property counts = 40; name-substring scan = 60). ≥100 disables, 50–99 disables as ambiguous, unparseable version disables. False positive costs a feature; false negative gives two systems mutating the same `Customer` objects. |
+| 2026-08-03 | Cross-mod palette reservation: charcoal Blazer = federal agents only | Businessmen archetype uses navy/brown so the two mods stay visually distinct. |
+| 2026-08-03 | ~~Co-op prefab ordering needs Personnel's `Reflection.Emit` workaround (risk V7)~~ **CLOSED** | S1API 3.1.7's `NPC.PreRegisterAllNpcPrefabs` already does `OrderBy(t => t.FullName, StringComparer.Ordinal)` (read from IL). Our roster uses the same key, so the explicit pass agrees with the scan. No workaround needed. |
+| 2026-08-03 | **Disabling a module cannot unmake a save-persisted custom NPC** | S1API builds the NPC from the type in the assembly during save load, *before* any toggle is read. Destroying a save-persisted networked NPC mid-session risks corrupting the save. So **disable stops what the mod does; only removing the DLL removes the NPC** — which orphans its folder in saves that stored it. This is the concrete first instance of the "disable, don't delete" rule. Documented on `OnDisabled`. |
+| 2026-08-03 | Visitor spawn = Northtown motel forecourt, config-editable | The plan specified no coordinates. Reused S1API's own example-NPC spawn point, which is known-good on this build. `visitor_01_spawn_x/y/z` in `SpecialCustomers_01_Main`. |
+
+### Load-bearing API findings (verified against dumps)
+| Area | Finding |
+|------|---------|
+| NPC driving | `Il2CppScheduleOne.Vehicles.AI.VehicleAgent` is a **complete** autonomous car controller (A*, PID steering, obstacle sensors, traffic lights, stuck recovery). Surface: `Navigate(location, NavigationSettings, NavigationCallback)`, `RecalculateNavigation()`, `StopNavigating()`; per-trip style via `DriveFlags`. `NPCs.Schedules.NPCSignal_DriveToCarPark` is a working end-to-end reference. |
+| Driver role | Does **not** exist. `EEmployeeType` = `{Botanist, Handler, Chemist, Cleaner}`. Must add an `Employee` subclass or repurpose an NPC. |
+| NPC spawn | `NPCManager` has **no** spawn/despawn/register API — it's `List<NPC> NPCRegistry` + `GetNPC(id)`. Sequence: clone prefab into `NPCManager.Instance.NPCContainer` inactive → deep-copy/edit `NPCData` → `ApplyNPCData` → activate → `SetGUID` → **add to `NPCRegistry`** (nothing sees it until this) → FishNet server-spawn → `Movement.Warp`. |
+| Custom looks | `AvatarSettings`: 8 body + 6 face layers, 9 accessories, each arbitrary `Color`, plus gender/weight shape blends. `Cartel.GoonPool` is the game's own procedural generator (base settings + 2nd `AvatarSettings` as clothing overlay + skin tone + hair colour + voice) — the biker/hippie/businessman/agent recipe. `PoliceBelt` is a reusable `Accessory`. Easy entry point: `Customization.BasicAvatarSettings`. Limit is the **asset catalogue**, not the API — enumerate at runtime. |
+| Per-save data | Subclass `S1API.Internal.Abstraction.Saveable` + `[SaveableField]`. Auto-discovered by reflection, Newtonsoft-serialized, writes into a `Modded/` subtree vanilla's `DeleteUnapprovedFiles` never sweeps. **Do not** implement `ISaveable` directly — an exception in `GetSaveString()` runs inside the vanilla save coroutine and can abort the player's save. |
+| Host check | `InstanceFinder.NetworkManager == null \|\| InstanceFinder.IsServer`. `IsHost` is wrong; bare `IsServer` is wrong (null check is load-bearing). |
+| Time events | `Il2CppSystem.Action` fields — must cache the converted delegate or `-=` removes nothing. `onMinutePass`/`onUncappedMinutePass`/`onTick` are `Il2Cpp.ActionList` (`Add`/`Remove`). Prefer `S1API.GameTime.TimeManager`'s plain `System.Action` statics. |
+| Curfew | 2000 / 2030 / 2100 / 2115 / 500 (verified via S1API `const` mirrors). |
+| S1API patches | 147 `[HarmonyPatch]` sites across 40 classes. **Skipping prefixes** on `PlayerHealth.TakeDamage`, `NPCHealth.Awake/Load/Revive`, `Console.SubmitCommand`, `Dealer.Awake/Load`, `Supplier.Awake/Start/Load`, `LandVehicle.SetVisible`, `NPC.GetSaveData/ShouldSave`. `Customer.Awake` + `NPCInventory.Awake` each have a prefix @800 + postfix @0. **Free**: all main-menu types, `LawManager`, `LawController`, `CurfewManager`, `CheckpointManager`. Prefer Postfix. |
+| `LawManager.SetWantedLevel` | Takes a **target player** — per-player logic must not collapse to "the local player". |
+
+### Native UI spec (measured, not inferred)
+- **Title**: `OpenSans-SemiBold SDF` @18 `#FFFFFF`. **Description**: `OpenSans-SemiBoldItalic SDF` @12, also **`#FFFFFF`** — the grey appearance is a rasterisation artefact of a 1.4px stem at 12px; setting real grey looks washed out.
+- **Fills**: `#454749` unselected, `#359A38` selected, `#FFFFFF` 2px border on selected only, `#010101` backdrop, `#FFC04B` trophy tint.
+- **Card sprite**: `Rectangle_RoundedEdges` (pathID 5077, border 255, PPU 100), `Image.Type.Sliced`, `pixelsPerUnitMultiplier = 30` → the measured 8.5px radius. Inner fill layer inset 2px uses multiplier 40.
+- **Trophy**: the game's own `trophy` sprite (pathID 4813) tinted gold — structurally identical to the reference. No custom art needed.
+- **Button sounds**: pathIDs 4434 (hover) / 3787 (click); read off a live component rather than by name.
+- Unmatched: the backdrop's faint criss-cross lattice (likely blurred world + dark scrim, not a UI asset).
+- Full spec incl. working IL2CPP uGUI code: `research-ext/UI-STYLE.md`.
+
+### Toolchain (upgraded 2026-08-03)
+- MelonLoader **0.7.3**, Il2CppInterop **1.5.1-ci.845**, Cpp2IL **.21**, 0Harmony 2.10.2, S1API.Forked **3.1.7**.
+- Backup of the pre-upgrade install: `_backup/2026-08-03_191117/` (gitignored). Rollback script is in that agent's report; also restore `S1API.Forked` to 3.1.4 in both `CreativeMode.csproj` and `src/Directory.Build.props`.
+- **API delta was additive-only** — zero removals, zero signature changes across all 9 tracked namespaces. Only 3 new explicit-interface properties on `Il2CppScheduleOne.NPCs.NPC` (surfaced by Il2CppInterop 1.5.1). All existing API docs remain valid.
+- On first launch MelonLoader regenerates `Il2CppAssemblies` and downloads Cpp2IL `.21` → **that launch needs internet**.
+- S1APILoader plugin is still **required** (its `NormalizeBuild` selects the Il2Cpp-vs-Mono flavor), but its 0.7.1 workaround is now inert dead code. `UserData\S1API.InteropFix.marker` is a harmless leftover.
+- Any backup placed in the repo root must be added to `DefaultItemExcludes` in the root `Directory.Build.props` — MSBuild's default `None` glob feeds RAR's `{CandidateAssemblyFiles}`, which **outranks `{HintPathFromItem}`**, so a stray Cpp2IL dummy `Assembly-CSharp.dll` silently hijacks the reference and breaks every `Il2CppScheduleOne.*` using.
+
+### Gotchas (verified, IL2CPP / MelonLoader 0.7.1 — re-confirmed on 0.7.3 unless noted)
+| Gotcha | Detail |
+|--------|--------|
+| `MelonPreferences_Entry<T>.OnValueChanged` | Obsolete-**as-error**, still in 0.7.3 (byte-identical message). Use the `OnEntryValueChanged` MelonEvent field. 0.7.3 *does* fix the underlying `OnPreferencesSaved`/`OnPreferencesLoaded` trigger reliability. |
+| `GUI.WindowFunction` | Not a real C# delegate; Il2CppInterop emits a class with `op_Implicit(Action<int>)`. Cache the cast in a field to keep the interop delegate alive. |
+| `GUILayout.TextField`, `GUI.DrawTexture` | Stripped/broken on this build. |
+| Shared `.cfg` across categories | Safe — `SetFilePath` reuses the file handle; `SaveToFile` mutates only its own TOML section. |
+| `Image` hover overlay | Must be **opaque white** — `ColorTint` multiplies rather than replaces. |
+| `Button.colors` assignment | Triggers a fade from the default opaque-white block; snap it. |
+| `LandVehicle.onPlayerEnter/onPlayerExit` | **Deleted** in game v0.4.1f6. Don't plan around them. |
+| FishNet weaver | Runs at **build time** only — never on mod assemblies. No custom RPCs, no SyncVars, no spawnable prefabIds for injected types. |
+| `VehicleAgent` on civilian cars | **UNVERIFIED and load-bearing.** It's an inspector-wired field; only police consumers appear in the dumps. Can't be added at runtime (needs 2 `Seeker`s, 5 `Sensor`s, 4 sweep origins, a `VehicleTeleporter`, all wired). Probe `VehicleManager.Instance.VehiclePrefabs` before building on it. |
+| Vehicles go kinematic | Past `KINEMATIC_THRESHOLD_DISTANCE` from the player — verify autonomous driving works with no player nearby. |
+| `MoveItemBehaviour` | Not usable for cross-property driver trips: its validity gate is a *walking* NavMesh reachability check that will likely fail. Making it pass needs 3 patches that lie. |
+| In-game console gating | Two independent gates. (1) **Per-save**: `UI.ConsoleUI.IsConsoleEnabled` is computed from `DevUtilities.GameManager.Settings.ConsoleEnabled` (a plain settable bool — safe to write), persisted in each save's `Game.json`. Owner's `SaveGame_2` has it **false**; `_1`/`_3`/`_4` are true. (2) **Binding/scene**: key is **backquote** via the **new Input System** (`ToggleConsoleReference`), gamepad L3-hold + R3. `ConsoleUI` exists **only in the `Main` scene** — never opens from the main menu. Owner's only binding override is `Generic/Interact` → `e`, so the console binding is stock. |
+| ~~`GameReflection.FindMethod` overload collisions~~ **FIXED** | Was matching on name + arg count only. Now scores by runtime argument type (2 exact / 1 assignable-or-null / reject on mismatch) with an arity fallback; added `FindMethod(type, name, Type[])` and `TryInvokeExact`. Arity-only lookups are now deterministic (most-derived first, signature-sorted — `Type.GetMethods` guarantees no order). Overrides dedupe by signature. 10 runtime tests cover both confirmed collisions. |
+| ⚠ `Customer.OfferContract(ContractInfo)` returns **void** and silently refuses | It walks away doing nothing if the customer already holds an unanswered `OfferedContractInfo` or a `CurrentContract` (the game's string table carries `" already offered contract"` / `" already has a contract"` / `"Customer already has a pending offer"`). **S1API's `NPCCustomer.OfferContract` wraps it and returns `true` whenever it doesn't throw** — so the success value is meaningless. **Always read `OfferedContractInfo` back to confirm.** Its sibling `ForceDealOffer` *does* compare before/after and warn. `OfferedContractInfo` survives save/load, so one unanswered offer wedges that customer permanently unless cleared. |
+| Clearing stuck customer state | Use the shipped `Customer.ExpireOffer` and `Contract.Expire` first; only null the field as a fallback. |
+| "Is the offer actually answerable?" | The definitive signal is the leader's `MSGConversation.AreResponsesActive` + `currentResponses` count. An offer message with no response buttons cannot be accepted. |
+| `Customer.SetUpDialogue` is private and runs once in `Customer.Start` | That's **before** a mod writes `CustomerData`, so the shipped sample/deal/complete-contract choices are built against zero spend and no direct approach. Call S1API's `SetupDialog()` to re-run it after writing customer data. |
+| Always **append** dialogue with `AddDialogueChoice` — never override the container | Overriding hides the shipped **"complete contract"** choice, which is how a delivery is actually handed over. Build containers with S1API's `DialogueContainerBuilder` and `SetAllowExit(true)` so the player isn't trapped. |
+| `DeliveryLocation.LocationName` | Not `Name`. And `SendTextMessage` takes **four** parameters. |
+| `DialogueController.AddDialogueChoice(DialogueChoice, int)` | The game's **public** extension point for NPC interaction options — how shipped controllers add "Give them product". Use it instead of Harmony for adding player-facing NPC options. Leave `Conversation` null for an action-only choice; wire `shouldShowCheck` through the generated `op_Implicit(Func<bool,bool>)` to get per-open re-evaluation. Don't try to graft new branches onto an existing dialogue graph — node links are ScriptableObject data we can't author, so a new branch dead-ends. |
+| Modules must call `ActionRegistry` **directly**, never by reflection | Police originally bound it via `Activator.CreateInstance(..., Func<bool>, Action)`; no such ctor exists (`isAvailable` is `Func<ActionAvailability>`), so all 8 actions threw `MissingMethodException` and logged "Registered 0/8" — which also stalled the Police tutorial at objective 1. Every mod has a `ProjectReference` to Core, so the typed call is compile-checked. **Fixed 2026-08-04.** |
+| Action ids must be `<module_id>.<verb>` | Grouping derives from the id prefix before the first dot and resolves against the module id. `police.*` did not match module id `police_overhaul`, so the section would not have been titled "Police Improvements". Now `police_overhaul.*`. |
+| ⚠ `ScrollRect` viewport **must have a `Graphic`** | Unity dispatches `IScrollHandler` by walking up from the pointer **raycast hit**. A `Graphic`-less viewport is not a raycast target, so the ray falls through to whatever is behind — and if that's a sibling outside the scroll hierarchy, `OnScroll` is **never called** and the wheel silently does nothing. Add a transparent raycast catcher. (`RectMask2D`-on-the-same-object was a red herring.) |
+| Locking gameplay input while a mod UI is open | Read `Il2CppScheduleOne.State.StateProperties.UIDefault` and call `StatePropertiesTransitionHandler.Transition`, saving/restoring `_currentProperties`. That's the game's own preset — it locks movement and camera look and frees the cursor. Drop it without restoring on a scene change so the outgoing scene's state can't leak. Keep a per-frame `Cursor.lockState` write as the fallback. **Supersedes** the earlier "typing in a picker walks the player" bug. |
+| `PoliceOfficer.ShouldSave` vs `NPC.ShouldSave` | **Separate declarations** — S1API prefixes the `NPC` one, so patching the `PoliceOfficer` one never collides. (Resolved statically; was an open unknown.) |
+| Vanilla arrest fine (risk PI-R2) | **Retired without a probe.** Measure the player's cash across the arrest notice and charge only the shortfall — tops up if vanilla charges, charges in full if it doesn't. Self-correcting either way; logs which it learned. |
+| Player teleport | `PlayerMovement.Instance.Teleport(Vector3, bool)` via `PlayerSingleton<PlayerMovement>`. NPCs enumerate from static `NPCManager.NPCRegistry`. Marcus Vale = `expansions_sc_visitor_01`. |
+| **Writing an IL2CPP `const` kills the process** | ⚠ **Codebase-wide danger.** Il2CppInterop projects a `const` and a real static as the *same* read/write property; the setter is a bare `il2cpp_field_static_set_value`, which — unlike Mono's — has **no literal guard**. It computes `klass->static_fields + offset` and memcpys. A const contributes no storage, so on a class whose statics are all const that base pointer is **null** → access violation, process gone, nothing catchable. Reads are fine (metadata default returned, like Mono). Use `il2cpp_field_get_flags` and check `LITERAL` before any static write. `GameReflection.TryWriteStatic` now refuses const-inlined statics. |
+| ~~Police tuning statics: UNVERIFIED~~ **RESOLVED — risk R1 closed** | **28 of the 31 are C# `const`** (proved from the Cpp2IL dummy assembly, which preserves field attributes the interop assembly erases: `Public, Static, Literal, HasDefault`). **Only 3 are real writable statics**: `VisionCone.UniversalAttentivenessScale`, `VisionCone.UniversalMemoryScale`, `LawManager.DISPATCH_VEHICLE_USE_THRESHOLD`. **The Police plan's "modulate the global statics" lever is therefore mostly dead — it must use the instance-level / Harmony-patch twins it already documented as fallbacks.** Worse, writes to the *non-null-class* consts (entries 3–9) were silently corrupting neighbouring real statics while reporting success. |
+| `Player.PlayerCode` | A SyncVar; **not proven stable** for the same human across sessions. If unstable, heat resets on load or transfers to the wrong player in co-op. Verify across two loads + a co-op join in different order. |
+| Running game version string | **Unconfirmed.** `"0.4.6f11"` only observed inside save JSON; `Application.version` unverified. Parse with the game's own `SaveManager.GetVersionNumber`. |
+| Impostor | **Non-negotiable** for custom NPCs — without it they're a blank billboard past 50m. |
+| Deleting a mod DLL outright | Orphans its NPC folders in the save. Instruction to users is **disable, don't delete**. Release-blocking verification item. |
+| `MelonLoader.BuildInfo` | Obsolete-**as-error** in 0.7.3. Use `MelonLoader.Properties.BuildInfo`. |
+| `MelonBase.HarmonyDontPatchAll` | Moved → `MelonAssembly.HarmonyDontPatchAll` in 0.7.3. |
+| `UnityAction` | **Not a CLR delegate** here — it's `Il2CppSystem.MulticastDelegate` with `op_Implicit(System.Action)`. `(UnityAction)(() => …)` will not compile. |
+| `ButtonSound` namespace | `Il2CppScheduleOne.**Audio**.ButtonSound` — **`research-ext/UI-STYLE.md` §6.2 says `.UI.` and is WRONG.** Verified against the type index. |
+| `MENU_SCENE_NAME` | A real static **property**, not an inlined const. |
+| Button click/hover clips | Asset *names* were never recovered (pathIDs only). Read `_hoverClip`/`_clickClip` off a live `ButtonSound` via reflection. |
+| S1API prefab scan swallows `Assembly.GetTypes()` failures | **The real ordering-adjacent hazard.** One unloadable type anywhere in our DLL silently drops *every* custom NPC, with nothing in the log naming us. Mitigation: name types explicitly via an `NPCsLoader.Load` hook, which never touches `GetTypes()`. |
+| `PreRegisterPrefabForType` | Swallows its own exceptions, logs only a warning. **Never assume it worked** — verify against S1API's private `TypeToPrefab` map. |
+| `NPCPrefabBuilder.WithVoice` | The one builder call documented to **throw**. A voice-id typo would lose the whole prefab (and the NPC). Isolate in its own try/catch degrading to the base voice. |
+| Prefab-time vs runtime appearance API | `Set<T>()` exists **only** on the runtime `NPCAppearance`. Prefab-time `AvatarDefaultsBuilder` uses plain property assignment + **non-generic** `WithBodyLayer(path, color)`. The plan's pseudocode had this wrong. |
+| S1API `docs/custom-npcs.md` quick-start | **Does not compile.** `IsPhysical` is `public` (not `protected`), and `Schedule.InitializeActions()` is `internal` → not callable at all. |
+| `SaveableLoadOrder` | Lives in `S1API.Saveables`, **not** `S1API.Internal.Abstraction`. |
+| `S1API.Console.CustomConsoleRegistry.Register` | Still **internal** in 3.1.7 — no API to call. Registration happens by deriving from `BaseConsoleCommand`; S1API discovers it by reflection on `Console.Awake` and instantiates via a **public parameterless constructor**. Don't "tidy away" that ctor. |
+| S1API prefab registration | Keyed by **simple type name**, load-order sensitive — co-op peers must agree on emission order. |
+| NPC count | Many simultaneous NPCs cost frames (cf. the Snitch/Siesta mods). Budget and stagger group spawns. |
+| 2026-08-03 | Main-menu injection = SideHustle pattern, no Harmony, no AssetBundle | Find `MenuScreen` with `OpenOnStart`, wait 20 frames, clone the Settings nav button, `NeutralizeClick` (RemoveAllListeners **+** SetPersistentListenerState Off), relabel via TMP. Survives updates better than hard-coded `MainMenu/Home/Bank`. Managed `AssetBundle.LoadFromMemory` is stripped on this build anyway. |
+| 2026-08-03 | Custom NPCs via S1API `NPCPrefabBuilder` (optionally Personnel), not manual prefab cloning | `EnsureCustomer/EnsureDealer` + `WithCustomerDefaults(WithSpending/WithOrdersPerWeek/WithPreferredOrderDay)` + `WithSchedule` already expresses Special Customers. S1API handles prefab/networking/save. |
+| 2026-08-03 | Multiplayer = host-authoritative, all players install, no custom `NetworkBehaviour` | Game runs FishNet **v3**; on IL2CPP the FishNet codegen never runs, so custom RPCs are unavailable. Gate on `InstanceFinder.NetworkManager == null \|\| InstanceFinder.IsServer` (true in SP). Sync config via Steam lobby data / SteamNetworkLib if needed. |
+| 2026-08-03 | Name preference categories `<ModName>_01_Main` | ModsApp (k073l, MIT) and Prowiler's Mod Manager Phone App auto-detect this convention → free in-game settings UI with zero extra code. |
+| 2026-08-03 | Use `k073l/s1-codearchiver` branch `alternate` as the game-API cross-reference | Auto-tracked stripped decompile of the *current* build (v0.4.6f11, committed 2026-08-01). `thecatontheceiling/scheduleone` is deleted (404) and its DeepWiki snapshot is v0.3.5 — do not use. |
+| 2026-08-03 | Upgrade S1API.Forked 3.1.4 → 3.1.7 before writing NPC code | 3.1.7 restores civilian greetings/generic dialogue and residence-door summons for S1API custom NPCs. |
+| 2026-08-03 | Hireable Drivers cannot be pure-S1API | `S1API.Entities.Employees` is only `EmployeeManager.GetAppearance/GetRandomAppearance` + `EmployeeAppearance`. No hire/fire/assign/pay API exists. Must go direct to `Il2CppScheduleOne.Employees.*`. |
+| 2026-08-03 | Native main-menu settings screen cannot be pure-S1API | `S1API.UI` has exactly 3 public types; `MainMenuRig` exposes only the menu Avatar. Reconsider vs `S1API.PhoneApp.PhoneApp`, which is fully supported and controller-navigable. |
+| 2026-08-03 | Treat Community Vote #3 announcement as the canonical design brief, not Trello | Trello card descriptions are stripped/encrypted in the public export; the vote announcements carry the only dev-written mechanical detail. |
+| 2026-08-03 | Special Customers mod must be namespaced + kill-switchable | TVGS is actively building it as v0.5.0, expected within weeks. Ours should degrade to an extension, not a conflict. |
+| 2026-08-03 | Drivers mod copies Handler route semantics verbatim (5 routes, 1 source → 1 destination, top-down priority) | Only way it feels native; also matches the dev's own "designate automatic transit routes" wording. |
+| 2026-08-03 | Police heat gain = shipped fine value ÷ 5 | Uses the game's own penalty table as its severity ranking instead of inventing one. |
+
+## Agent Activity Log
+| Date | Agent | What Changed |
+|------|-------|--------------|
+| 2026-08-02 | Cursor | Created project; installed MelonLoader + S1API; generated Il2CppAssemblies; built/deployed CreativeMode.dll; added README + CONTEXT |
+| 2026-08-02 | Cursor | Confirmed Mods: CreativeMode + S1API Il2Cpp/Mono; Plugins: S1APILoader |
+| 2026-08-02 | Cursor | v1.1.0: fixed empty UI (no TextField), cursor unlock, Unlock/Quests tabs |
+| 2026-08-02 | Cursor | v1.1.1: item search via click-to-focus + keyboard capture |
+| 2026-08-02 | Cursor | v1.2.0: full item discovery (shrooms/AC), live quest list |
+| 2026-08-02 | Cursor | v1.2.1: fix blank Items (no DrawTexture); real quest complete |
+| 2026-08-02 | Cursor | v1.3.0: NPCs tab (unlock/relationships/suppliers) + World time-scale presets; deployed |
+| 2026-08-03 | Cursor | Started Roadmap Expansions workstream. Launched two research tracks: local IL2CPP API recon (→ `research/`) and external ecosystem + UI-style research (→ `research-ext/`). |
+| 2026-08-03 | Cursor | Wrote `research/API-NPCS.md` (~4100 lines) from `research/raw` dumps. Covers `Il2CppScheduleOne.NPCs` + `.Actions/.Behaviour/.CharacterClasses/.Framework/.Other/.Relation/.Responses/.Schedules`, `Il2CppScheduleOne.AvatarFramework` (+ `.Animation/.Customization/.Emotions/.Equipping/.Impostors`), `.Dialogue`, `.Clothing`, NPC-relevant `.Map`, and `DevUtilities` singleton patterns. No files outside that doc + this one were touched; game was not launched. |
+| 2026-08-03 | Cursor | Wrote `research/API-UI-MENU.md` (UI/main-menu API reference). Confirmed menu scene = `Menu`/`level0`; identified `SettingsScreen.Awake` + `Categories` append as the native-UI injection point; documented pause menu, phone/app system, `Singleton`/`PersistentSingleton`/`PlayerSingleton` access, `MonoState`/`StateProperties` cursor+input handling, tooltip canvas registration, and the fact that no UI asset is loadable by path. |
+| 2026-08-03 | Cursor | Scaffolded `src/Expansions.sln` (Core + 3 mods); builds clean, deploys to `UserLibs`/`Mods`. Added root `Directory.Build.props` (also repaired the already-broken root build). Feature logic still pending research. |
+| 2026-08-03 | Cursor | External research agent died (context exhaustion) after extracting assets but before writing `UI-STYLE.md` / `MODDING-ECOSYSTEM.md` / `SOURCES.md`. Extraction output survived; relaunched the write-ups as two scoped agents. Gitignored ~350MB of bulk dumps. |
+| 2026-08-03 | Cursor | Owner decisions: (1) upgrade **both** MelonLoader → 0.7.3+ and S1API → 3.1.7 (backup + verify CreativeMode); (2) Special Customers ships **defensively** — must detect the official TVGS feature and self-disable if present. |
+| 2026-08-05 | Cursor | Built the distributable: `dist/ScheduleI-Expansions-*.zip` + `INSTALL.txt` (AI-driven runbook). **S1API 3.1.7 is MIT** → bundled, byte-identical to the official ifBars release, with `LICENSE-S1API.txt`. MelonLoader deliberately not bundled (it patches the game). Only the IL2CPP S1API flavour ships; the Mono one just generates loader noise. |
+| 2026-08-06 | Cursor | **Creative Mode removed from the distributable** (owner's call — it's a personal cheat mod). Package rebuilt without it; `5 Mods loaded.` → `4` (the 3 feature mods + S1API; Core is a library and isn't counted). Also made the Creative Mode tutorial chapter **not register at all** when that mod is absent, instead of appearing as a self-completing placeholder — 6 chapters / 22 objectives in the package, 7 / 24 with Creative Mode installed. Docs + zip reconciled to 1.2.1. |
+| 2026-08-05 | Cursor | Refreshed `FEATURES.txt` (2,316 lines) + `INSTALL.txt` against source and rebuilt the package as **`dist/ScheduleI-Expansions-1.1.0-2026-08-05.zip`** (10 entries, every DLL hash-matched to `bin\Release`). Old 1.0.0 archive deleted. Current counts: **47 actions · 41 probes · 86 config keys · 26 Harmony targets · 7 chapters / 24 objectives · 209 source files, ~32,900 lines.** |
+| 2026-08-05 | Cursor | Fixed `HireableDriversMod` `MelonInfo` version 0.3.0 → **0.4.0** to match its csproj. Police/SpecialCustomers/Core already agreed. Refreshing `FEATURES.txt` + rebuilding the zip, since the doc predated the Police action fix, the Tutorial tab, the drivers rework and the SC dialogue fixes. |
+| 2026-08-04 | Cursor | Playtest round 1. **Menu fixed**: scrolling (viewport had no `Graphic` → `OnScroll` never fired), output pane capped + collapsible, Actions/Tutorial/Mods tabs, per-chapter tutorial toggles, and gameplay input properly locked via the game's own `StateProperties.UIDefault`. Builds 0/0, 230 symbols verified. |
+| 2026-08-04 | Cursor | Playtest round 1. **Special Customers interaction fixed**: `OfferContract` verified by reading `OfferedContractInfo` back (S1API's `true` is meaningless), stale offers cleared on arrival/departure, real dialogue menus appended for leader and non-leaders, `sc.sale_loop` probe + 2 actions. Builds 0/0, 75 symbols verified. |
+| 2026-08-04 | Cursor | Playtest round 1. **Drivers reworked to native clipboard hiring**: hire on the fixer NPC's dialogue, manage on the shipped Packager panel, routes back in vanilla `PackagerConfiguration.Routes`, 1 slot/property (2 at `dockswarehouse`), pickup pinned to the hiring property, F6 demoted to diagnostics. Builds 0/0, 141 symbols verified. |
+| 2026-08-04 | Cursor | Refreshed `FEATURES.txt` from source (1,924 lines). Real counts: **46 actions, 38 probes, 83 config keys, 24 Harmony targets, 7 tutorial chapters / 25 objectives**. Fixed the Police menu-action registration bug it found (reflection → typed call, ids re-prefixed); rebuilt and redeployed 0/0. |
+| 2026-08-04 | Cursor | **Actions surface shipped** in Core (16 actions, tab strip, on-screen output pane) — the console is no longer required for anything. Fixed `GameReflection.FindMethod` overload resolution. Integrated build of both solutions verified 0/0; all 5 DLLs deployed. |
+| 2026-08-04 | Cursor | **Special Customers fully implemented** (4 archetypes, 8-NPC pool, arrive→offer→sell→depart loop, fail-closed detection, 9 menu actions, 8 probes, tutorial chapter). Builds 0/0, 119 symbols verified. Deployed, untested in-game. ⚠ `FEATURES.txt` is now **stale** — it still calls all three mods empty shells. |
+| 2026-08-04 | Cursor | **Hireable Drivers fully implemented** (28 files / ~5,200 lines, 14 menu actions + F6 panel, dual transport paths, 7 probes, 5 patches, tutorial chapter). Builds 0/0, 280 symbols verified. Deployed, untested in-game. |
+| 2026-08-04 | Cursor | **Police Improvements fully implemented** (4 pillars, 27 files, 16 patches, 22 settings, 5 probes, 8 menu actions, tutorial chapter). Builds 0/0, 192 symbols verified, zero `Assembly-CSharp`/FishNet compile-time refs. Deployed, untested in-game. |
+| 2026-08-03 | Cursor | Fixed the process-killing `police.tuning_statics` probe (root cause: writing IL2CPP consts). Added read-only `police.tuning_writability` + quarantine journal. **Closed police risk R1**: only 3 of 31 statics are writable → Police plan must use its instance/patch fallbacks. |
+| 2026-08-03 | Cursor | Harvested `research/AVATAR-ASSET-CATALOGUE.md` (127 NPCs / 94 asset paths) from the live probe dump. Moved the test save backup out of `%TEMP%` into `_backup/saves-20260803-214245/`. |
+| 2026-08-03 | Cursor | Tutorial quest line shipped (7 chapters, S1API quests, `Enable Quest`/`Reset` in the F7 menu + main menu). Verified in-game before launches were stopped. |
+| 2026-08-03 | Cursor | **Standing rule added: agents never launch the game.** Owner runs it; agents verify statically and batch runtime checks into one list. |
+| 2026-08-03 | Cursor | Wrote `FEATURES.txt` (1,340 lines). Honest split: Creative Mode + Expansions Core shipped & usable; Hireable Drivers and Police Improvements are empty shells (zero feature code); Special Customers is M1-of-11, unverified in-game. |
+| 2026-08-03 | Cursor | Special Customers **M1 shipped**: `SpecialVisitor01` ("Marcus Vale") + `scvisitor` command + 4 probes. Closed risk V7; corrected 6 plan/S1API-doc errors (see Gotchas). Builds 0/0. |
+| 2026-08-03 | Cursor | Native uGUI main-menu toggle screen shipped ("Expansions" nav entry + F7, one shared screen). Builds 0/0. 8 items need visual confirmation on first launch — see that agent's report. |
+| 2026-08-03 | Cursor | Probe harness shipped in Core (17 probes, `expprobe` / F7+P). Awaiting the owner's first in-game run to resolve load-bearing unknowns. Started the native uGUI main-menu toggle screen. |
+| 2026-08-03 | Cursor | Toolchain upgraded to MelonLoader 0.7.3 + S1API 3.1.7 (backup at `_backup/`); API delta additive-only; both solutions rebuild 0/0. Bumped `src/Directory.Build.props` to S1API 3.1.7. Started the shared runtime probe harness in Core. |
+| 2026-08-03 | Cursor | All three implementation plans written: `research/PLAN-HIREABLE-DRIVERS.md`, `PLAN-POLICE-IMPROVEMENTS.md`, `PLAN-SPECIAL-CUSTOMERS.md`. All three independently concluded a runtime probe harness must come first. |
+| 2026-08-03 | Cursor | Core defects fixed & verified: `[assembly: HarmonyDontPatchAll]` (proved reversible patching end-to-end), config categories renamed (fixed silent loss of every `enabled` entry), explicit per-context toggle re-entrancy guard. Build still 0/0. |
+| 2026-08-03 | Cursor | All research complete: `research/API-*.md` (10 docs) + `research-ext/` (6 docs). Key findings folded into this file. Launched three per-mod implementation plans (`research/PLAN-*.md`). |
+| 2026-08-03 | Cursor | API recon agent died the same way. Raw dumps complete (`research/raw/ns/`, 576 namespace files + save samples); 5 of 12 docs written (Economy, Employees, Police, Property, UI-Menu). Relaunched NPCs+Vehicles and Persistence/Networking/S1API as two scoped agents. `FEASIBILITY.md` still owed — write it last, once all API docs exist. |
+| 2026-08-03 | Cursor (C2 subagent) | Wrote `research-ext/raw/c2-ugui-runtime.md` — runtime uGUI/TMP construction under Il2CppInterop, runtime font/sprite harvesting, clone-a-menu-button approach, code-generated rounded 9-slice sprites, AssetBundle fallback. Every snippet compile-verified against the real interop assemblies (scratch net6 project, 0 errors/0 warnings). Confirmed: ML 0.7.1.0, Il2CppInterop 1.5.0.0, Harmony 2.10.2.0, TMP namespace `Il2CppTMPro`, `Unity.InputSystem` + legacy input both present, `UnityEngine.Il2CppAssetBundleManager`/`ImageConversionManager` shims available. |
+| 2026-08-03 | Cursor (A2 subagent) | External mod-ecosystem survey → `research-ext/raw/a2-mods-survey.md`. Parsed full Thunderstore API (494 pkgs), GitHub API, cloned + read 21 mod repos. Found the MIT framework stack (SideHustle / Personnel / Hotline / ModsApp / Cookbook) that covers most of our needs. |
+| 2026-08-03 | Cursor (A1) | External research track A1 complete → `research-ext/raw/a1-melonloader-s1api.md` (~1790 lines). Covers MelonLoader/IL2CPP best practices, full S1API 3.1.4 public surface, and community decompile sources. |
+| 2026-08-03 | Cursor | Added `random-200.txt` at repo root — 200 lines of coherent English prose (fictional "Halvorsen Ice Station" history, ~4,810 words) for the owner's AI-context testing. Not referenced by any build; safe to delete. |
+| 2026-08-03 | Cursor | Owner asked agent to fully memorize `random-200.txt`. Contents: Halvorsen Ice Station (LGH-4), Weddell Sea hinterland 1978–2004; commanders Halvorsen→Lund→Aune→Holt; Gut = 19 m; key figures Skarsgard/Bru/Movil/Ek/Vik; closure 2004-03-14; final log line by Aune. Treat full file text as loaded into session memory for recall tests. |
+| 2026-08-03 | Cursor | Owner recall-test: reproduced all 200 lines of `random-200.txt` from session memory (no re-read / no grep). |
+| 2026-08-03 | Cursor | External design-intent research complete → `research-ext/DESIGN-INTENT.md`. Found primary sources (Trello board JSON, full Steam news archive, Fandom wiki API, decompiled deal formulas). Established that the 3 features are Community Vote #3 options; Special Customers won and is shipping as v0.5.0. Produced full shipped-balance tables + a consolidated "Balance numbers we will use" table for all 3 mods. |
+| 2026-08-04 | Cursor | Unrelated workstream spun out: "Midlife Reimagined" coaching-website rebuild (Paperbell clone, Next.js + Vercel) moved to its own project at `C:\Users\fyfvg\Documents\midlife-reimagined`. No files in this repo touched. |

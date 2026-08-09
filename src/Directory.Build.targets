@@ -1,0 +1,14 @@
+<Project>
+  <!-- Don't copy the S1API NuGet into the game — S1APILoader provides the runtime DLL. -->
+  <Target Name="PreventS1APICopy" AfterTargets="ResolvePackageAssets">
+    <ItemGroup>
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)' == 'S1API'" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="DeployToGame" AfterTargets="Build"
+          Condition="'$(ExpansionsDeployDir)' != '' And Exists('$(ExpansionsDeployDir)')">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ExpansionsDeployDir)" SkipUnchangedFiles="true" ContinueOnError="true" />
+    <Message Importance="high" Text="Deployed $(TargetFileName) → $(ExpansionsDeployDir) (close the game if copy was skipped)" />
+  </Target>
+</Project>

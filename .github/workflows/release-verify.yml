@@ -1,0 +1,148 @@
+# Verifies a published release actually contains what it claims to.
+#
+# Releases are built and uploaded from the owner's machine by
+# scripts/publish.ps1 (the runner cannot compile this suite - see
+# docs/RELEASING.md). This workflow is the independent check on that: it pulls
+# the published assets back down and proves the manifest, the zip and the
+# schema all agree. It fails loudly on an empty, partial or inconsistent
+# release.
+name: release-verify
+
+on:
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to verify (e.g. v1.2.2)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release assets
+        run: |
+          set -euo pipefail
+          echo "Verifying release $TAG"
+          mkdir -p _verify
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir _verify --clobber
+          ls -la _verify
+
+      - name: Both required assets are present and non-empty
+        run: |
+          set -euo pipefail
+          test -s _verify/update-manifest.json || { echo "::error::update-manifest.json missing or empty"; exit 1; }
+          zip=$(find _verify -maxdepth 1 -name 'ScheduleI-Expansions-*.zip' | head -n1)
+          test -n "$zip" || { echo "::error::no ScheduleI-Expansions-*.zip asset in the release"; exit 1; }
+          test -s "$zip" || { echo "::error::zip asset is empty"; exit 1; }
+          echo "zip=$zip" >> "$GITHUB_ENV"
+
+      - name: Manifest conforms to the published schema
+        run: |
+          npx --yes -p ajv-cli@5 -p ajv-formats@2 \
+            ajv validate --spec=draft2020 -c ajv-formats \
+            -s docs/update-manifest.schema.json \
+            -d _verify/update-manifest.json
+
+      - name: Manifest agrees with the zip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $problems = New-Object System.Collections.Generic.List[string]
+
+          $manifest = Get-Content -LiteralPath _verify/update-manifest.json -Raw | ConvertFrom-Json
+          $zipPath  = (Resolve-Path $env:zip).Path
+
+          # 1. Version, tag and file name must all line up.
+          if ($manifest.tag -ne $env:TAG) { $problems.Add("manifest.tag '$($manifest.tag)' != release tag '$env:TAG'") }
+          if ("v$($manifest.version)" -ne $manifest.tag) { $problems.Add("manifest.version '$($manifest.version)' does not match tag '$($manifest.tag)'") }
+          $zipName = Split-Path -Leaf $zipPath
+          if ($manifest.package.fileName -ne $zipName) { $problems.Add("manifest.package.fileName '$($manifest.package.fileName)' != uploaded asset '$zipName'") }
+
+          # 2. The zip's own hash and size.
+          $actualHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -ne $manifest.package.sha256) { $problems.Add("zip sha256 mismatch: manifest $($manifest.package.sha256), actual $actualHash") }
+          $actualSize = (Get-Item -LiteralPath $zipPath).Length
+          if ($actualSize -ne $manifest.package.sizeBytes) { $problems.Add("zip size mismatch: manifest $($manifest.package.sizeBytes), actual $actualSize") }
+
+          # 3. The download URL the client will actually hit.
+          $expectedUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:TAG/$zipName"
+          if ($manifest.package.url -ne $expectedUrl) { $problems.Add("manifest.package.url '$($manifest.package.url)' != expected '$expectedUrl'") }
+
+          # 4. Every declared file must exist inside the zip, at the declared
+          #    path, with the declared size and hash.
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+          try {
+            $entries = @{}
+            foreach ($e in $archive.Entries) { $entries[$e.FullName] = $e }
+
+            $declared = @($manifest.mods) + @($manifest.bundledDependencies) + @($manifest.documents)
+            $expectedPaths = New-Object System.Collections.Generic.List[string]
+
+            foreach ($d in $declared) {
+              $path = if ($d.installDir) { "$($d.installDir)/$($d.fileName)" } else { $d.fileName }
+              $expectedPaths.Add($path)
+
+              if (-not $entries.ContainsKey($path)) { $problems.Add("declared file not in zip: $path"); continue }
+              $entry = $entries[$path]
+
+              if ($entry.Length -eq 0) { $problems.Add("zip entry is empty: $path"); continue }
+              if ($entry.Length -ne $d.sizeBytes) { $problems.Add("size mismatch for ${path}: manifest $($d.sizeBytes), actual $($entry.Length)") }
+
+              $sha = [System.Security.Cryptography.SHA256]::Create()
+              try {
+                $stream = $entry.Open()
+                try { $hash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+                finally { $stream.Dispose() }
+              } finally { $sha.Dispose() }
+
+              if ($hash -ne $d.sha256) { $problems.Add("sha256 mismatch for ${path}: manifest $($d.sha256), actual $hash") }
+            }
+
+            # 5. Nothing undeclared, and above all no Creative Mode - the owner
+            #    excludes it from anything shared.
+            foreach ($e in $archive.Entries) {
+              if ($expectedPaths -notcontains $e.FullName) { $problems.Add("undeclared file in zip: $($e.FullName)") }
+              if ($e.FullName -match '(?i)creativemode') { $problems.Add("Creative Mode must never ship: $($e.FullName)") }
+            }
+          } finally { $archive.Dispose() }
+
+          # 6. A release with no mods is a failed release.
+          if (@($manifest.mods).Count -lt 1) { $problems.Add('manifest declares zero mods') }
+
+          if ($problems.Count -gt 0) {
+            Write-Host "::error::Release $env:TAG failed verification"
+            $problems | ForEach-Object { Write-Host "  - $_" }
+            exit 1
+          }
+
+          Write-Host "Release $env:TAG verified."
+          Write-Host ("  package  {0} ({1:N0} bytes)" -f $manifest.package.fileName, $manifest.package.sizeBytes)
+          Write-Host ("  sha256   {0}" -f $manifest.package.sha256)
+          foreach ($m in $manifest.mods) { Write-Host ("  mod      {0,-20} {1}" -f $m.id, $m.version) }
+
+      - name: The stable 'latest' manifest URL resolves
+        if: github.event_name == 'release' && github.event.action == 'published'
+        run: |
+          set -euo pipefail
+          # This is the URL the in-game updater hits. If it does not resolve,
+          # clients silently never see the update.
+          url="https://github.com/$GITHUB_REPOSITORY/releases/latest/download/update-manifest.json"
+          echo "GET $url"
+          code=$(curl -sSL -o _verify/latest-manifest.json -w '%{http_code}' "$url" || true)
+          if [ "$code" != "200" ]; then
+            echo "::warning::$url returned HTTP $code. Expected for a draft or prerelease; a problem otherwise."
+            exit 0
+          fi
+          python3 -c "import json;d=json.load(open('_verify/latest-manifest.json'));print('latest =', d['tag'])"

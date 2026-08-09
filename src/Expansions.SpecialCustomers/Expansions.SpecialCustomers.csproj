@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Expansions.SpecialCustomers</RootNamespace>
+    <AssemblyName>Expansions.SpecialCustomers</AssemblyName>
+    <Version>1.0.0</Version>
+    <Description>Special customer groups (bikers, hippies, businessmen, etc.) who periodically visit town and buy large quantities of product.</Description>
+    <ExpansionsDeployDir>$(GameDir)\Mods</ExpansionsDeployDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Private=false: Core ships once, to UserLibs. A copy next to the mod would shadow it. -->
+    <ProjectReference Include="..\Expansions.Core\Expansions.Core.csproj" Private="false" />
+  </ItemGroup>
+</Project>

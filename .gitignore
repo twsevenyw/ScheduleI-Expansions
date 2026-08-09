@@ -1,0 +1,44 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# ---------------------------------------------------------------------------
+# Nothing bulk-extracted from the game may be published.
+#
+# Everything below is either the game's copyrighted content, a third-party
+# binary, or a machine-generated dump. All of it is regenerable — see
+# research-ext/ASSETS-TOOLCHAIN.md and research/probe/. The hand-written
+# analysis (research/*.md, research-ext/*.md) is kept; it is original work.
+# ---------------------------------------------------------------------------
+
+# Third-party extraction tools, downloaded not authored (~232 MB).
+tools/
+
+# IL2CPP metadata dumps, the runtime avatar dump, and real save-file samples.
+# Save samples are the owner's own game saves — personal data, never publish.
+research/raw/
+
+# Raw research captures. Whitelist our own written analysis and the
+# measurement tables that research-ext/UI-STYLE.md cites; drop everything
+# else — extracted sprites/fonts/palettes (game art), asset-dump logs,
+# scraped Trello/Steam/Fandom JSON, and vendored third-party source.
+research-ext/raw/*
+!research-ext/raw/a1-melonloader-s1api.md
+!research-ext/raw/a2-mods-survey.md
+!research-ext/raw/c2-ugui-runtime.md
+!research-ext/raw/sprite-9slice.tsv
+!research-ext/raw/sprite-inventory.tsv
+!research-ext/raw/palette-samples.txt
+!research-ext/raw/refscreenshot-measurements.txt
+
+# Scratch compile-check project and an unrelated AI-context test fixture.
+_probe/
+random-200.txt
+
+# Pre-upgrade snapshots of the game's MelonLoader/Mods/Plugins/UserLibs/UserData
+_backup/
+
+# Built distributable archives (regenerable from a Release build of both solutions)
+dist/

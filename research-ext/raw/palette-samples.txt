@@ -1,0 +1,128 @@
+Schedule I - dominant colours of coloured UI sprites (alpha>200, sampled <=96x96 grid)
+Generated 2026-08-03 from sharedassets0.assets via AssetStudioModCLI v0.19.0
+
+16-tacoticklers                1920x1080  ->  #FFFFFF(68)  #ADDDFF(13)  #FFC501(13)  #A7A7A7(12)  #A49688(12)  #434A31(11)  #FFC201(10)  #ABDBFF(10)
+Addiction band flipped         128x16  ->  #F1F0F1(48)  #9C393F(45)  #BD7573(41)  #DEBEBD(36)  #C38081(36)  #ECDFDB(35)  #EFE4E4(32)  #B76B6D(32)
+appicon_contacts               512x512  ->  #5D92FF(7788)  #FFFFFF(2592)  #5A92FF(107)  #6396FF(20)  #FFFBFF(12)  #F7FBFF(12)  #C8DAFF(11)  #6392FF(9)
+appicon_dealers                512x512  ->  #242046(8288)  #FFFFFF(1905)  #21204A(100)  #29244A(57)  #212042(56)  #FFFBFF(50)  #F7F7F7(14)  #F7FBF7(10)
+appicon_deliveries             512x512  ->  #974D9A(8371)  #FFFFFF(1993)  #944D9C(75)  #D6BAD6(39)  #F7F7FF(25)  #FFFBFF(24)  #94519C(16)  #DBC3DE(9)
+appicon_journal                512x512  ->  #E9923F(7908)  #FFFFFF(2305)  #E79242(112)  #FFFBF7(65)  #EFB684(48)  #F7D6B7(47)  #F7DAC0(45)  #E7964A(11)
+appicon_map                    512x512  ->  #26873E(7739)  #FFFFFF(2518)  #298642(55)  #F7FBFF(45)  #318E4A(45)  #EFF7EF(44)  #298A42(41)  #218639(39)
+appicon_messages               512x512  ->  #54C61E(7459)  #FFFFFF(2996)  #52C721(75)  #F7FFF7(13)  #5AC721(10)  #F7FBEF(7)  #52C718(6)  #FFFFF7(4)
+appicon_productmanager         512x512  ->  #AD4747(8196)  #FFFFFF(1932)  #AD494A(132)  #AD4D4A(34)  #FFFBFF(33)  #AD454A(28)  #FFF7F7(27)  #AD5152(25)
+cash_front                     458x196  ->  #EFF9CB(2943)  #4A4E47(660)  #4A4D4A(469)  #EFFBCE(371)  #9FA791(331)  #EFF7CE(309)  #EFF7C6(175)  #4A4D47(122)
+Cross                          512x512  ->  #FFFFFF(4110)
+ExclamationMark                133x497  ->  #FFFFFF(8314)
+fire-flame                     394x512  ->  #FFFFFF(4411)
+handshake                      512x366  ->  #FFFFFF(5319)
+information                    512x512  ->  #FFFFFF(3137)
+Money pattern                  1024x683  ->  #F4F2DD(3118)  #F5F2DD(385)  #F6F3DD(244)  #F5F2DC(235)  #F6F3DE(204)  #F7F3DD(128)  #F6F2DD(116)  #F7F3DE(114)
+Money                          303x501  ->  #FFFFFF(5177)
+Plus                           512x512  ->  #FFFFFF(3720)
+QuestionMark                   279x505  ->  #FFFFFF(3808)
+RelationCircle                 512x512  ->  #414141(5849)  #282828(914)  #A73536(168)  #57A2D8(167)  #D6894A(164)  #B2B3B2(163)  #5DD547(160)  #424142(101)
+Relationship band              128x16  ->  #B2B3B2(384)  #A73536(384)  #5DD547(384)  #D6894A(320)  #57A2D8(320)  #D68A4A(96)  #5AA2D6(96)  #B5B2B5(32)
+secured-lock                   378x512  ->  #FFFFFF(6822)
+star                           502x478  ->  #FFFFFF(4669)
+Tick circle                    512x512  ->  #FFFFFF(6927)  #FFFBFF(8)  #D3D3D3(5)  #D9D7D9(2)  #F7F3F7(2)  #F7FBF7(2)  #E9EBE9(2)  #E6E8E6(1)
+Tick                           512x430  ->  #FFFFFF(2891)
+
+== Relationship band per-column colour at mid-height (128x16) ==
+  x=   0  #A73536
+  x=  24  #A53431
+  x=  25  #D68A4A
+  x=  28  #D6894A
+  x=  48  #D68A4A
+  x=  51  #B5B2B5
+  x=  52  #B2B3B2
+  x=  76  #B5B2B5
+  x=  77  #5AA2D6
+  x=  80  #57A2D8
+  x= 100  #5AA2D6
+  x= 103  #5AD74A
+  x= 104  #5DD547
+
+== Addiction band flipped per-column colour at mid-height (128x16) ==
+  x=   0  #F4F1F4
+  x=   1  #F1F0F1
+  x=   4  #EFEFEF
+  x=   5  #EFEDEC
+  x=   7  #EFECE9
+  x=   8  #EFE9E7
+  x=   9  #EFE8E7
+  x=  11  #EFE7E7
+  x=  12  #EFE4E4
+  x=  14  #EFE1E1
+  x=  16  #ECDFDB
+  x=  19  #E9DBD8
+  x=  20  #E7DBD6
+  x=  21  #E7D8D6
+  x=  22  #E7D5D6
+  x=  24  #E7D4D3
+  x=  25  #E7D1D0
+  x=  27  #E7CFCE
+  x=  29  #E4CCCB
+  x=  30  #E1C9C8
+  x=  32  #DEC7C6
+  x=  33  #DEC4C3
+  x=  35  #DEC1C0
+  x=  36  #DEBEBD
+  x=  39  #DEBCBA
+  x=  40  #DEBAB5
+  x=  41  #DEB8B5
+  x=  42  #DEB7B5
+  x=  43  #DEB6B5
+  x=  44  #DBB3B2
+  x=  45  #D8B0AF
+  x=  47  #D6AEAD
+  x=  49  #D6ACAA
+  x=  50  #D6ABA7
+  x=  51  #D6AAA5
+  x=  52  #D6A6A5
+  x=  54  #D3A3A2
+  x=  56  #D09F9F
+  x=  59  #CE9E9C
+  x=  60  #CE9B99
+  x=  61  #CE9896
+  x=  63  #CE9694
+  x=  65  #CE9391
+  x=  66  #CE908E
+  x=  68  #C68E8C
+  x=  70  #C68C89
+  x=  72  #C68884
+  x=  73  #C68784
+  x=  74  #C68684
+  x=  76  #C38081
+  x=  79  #C07E7E
+  x=  80  #BD7D7B
+  x=  82  #BD7A78
+  x=  83  #BD7775
+  x=  84  #BD7573
+  x=  86  #BD7373
+  x=  87  #BD7273
+  x=  88  #BA6E70
+  x=  90  #B76B6D
+  x=  92  #B5696B
+  x=  93  #B56768
+  x=  94  #B56665
+  x=  96  #B56563
+  x=  97  #B26260
+  x=  99  #AF5F5D
+  x= 100  #AD5D5A
+  x= 101  #AD5B5A
+  x= 102  #AD5A5A
+  x= 104  #AD555A
+  x= 105  #AD5357
+  x= 106  #AD5254
+  x= 108  #AD5152
+  x= 109  #AA4E4F
+  x= 111  #A74B4C
+  x= 112  #A54A4A
+  x= 114  #A5474A
+  x= 116  #A5454A
+  x= 117  #A54347
+  x= 118  #A54244
+  x= 120  #A23E42
+  x= 123  #9F3B42
+  x= 124  #9C393F
+  x= 127  #9C363C

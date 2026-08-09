@@ -1,0 +1,106 @@
+# Static checks that do not need the game installed.
+#
+# This repository's mod projects cannot be compiled on a GitHub runner: they
+# reference the Il2Cpp interop assemblies MelonLoader generates from an
+# installed copy of Schedule I, which are neither redistributable nor small.
+# See docs/RELEASING.md. So there is deliberately no build job here - only
+# checks that genuinely run and genuinely pass.
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PowerShell scripts parse
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem -Path scripts -Filter *.ps1 -Recurse | ForEach-Object {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors) | Out-Null
+            if ($errors) {
+              $failed = $true
+              Write-Host "::error file=$($_.FullName)::$($errors.Count) parse error(s)"
+              $errors | ForEach-Object { Write-Host "  line $($_.Extent.StartLineNumber): $($_.Message)" }
+            } else {
+              Write-Host "ok  $($_.FullName)"
+            }
+          }
+          if ($failed) { exit 1 }
+
+      - name: JSON files parse
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem -Path . -Filter *.json -Recurse -File |
+            Where-Object { $_.FullName -notmatch '[/\\](bin|obj|node_modules)[/\\]' } |
+            ForEach-Object {
+              try {
+                Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json | Out-Null
+                Write-Host "ok  $($_.FullName)"
+              } catch {
+                $failed = $true
+                Write-Host "::error file=$($_.FullName)::invalid JSON - $($_.Exception.Message)"
+              }
+            }
+          if ($failed) { exit 1 }
+
+      - name: Update manifest schema is a valid JSON Schema
+        run: |
+          npx --yes -p ajv-cli@5 -p ajv-formats@2 \
+            ajv compile --spec=draft2020 -c ajv-formats \
+            -s docs/update-manifest.schema.json
+
+      - name: Workflow YAML is well formed
+        shell: pwsh
+        run: |
+          python3 -c "
+          import sys, glob, yaml
+          bad = False
+          for f in sorted(glob.glob('.github/workflows/*.yml')):
+              try:
+                  yaml.safe_load(open(f))
+                  print('ok  ' + f)
+              except Exception as e:
+                  bad = True
+                  print('::error file=%s::%s' % (f, e))
+          sys.exit(1 if bad else 0)
+          "
+
+      - name: No bulk game content committed
+        shell: pwsh
+        run: |
+          # The repo must stay text-only. Extracted game art, IL2CPP dumps and
+          # downloaded tool binaries are all gitignored; this is the tripwire.
+          $blocked = git ls-files |
+            Where-Object { $_ -match '\.(png|jpg|jpeg|gif|bmp|zip|7z|rar|dll|exe|pdb|so|dylib|ttf|otf|asset|bundle|resS|dat)$' }
+          if ($blocked) {
+            Write-Host "::error::Binary or asset files are tracked in git:"
+            $blocked | ForEach-Object { Write-Host "  $_" }
+            exit 1
+          }
+          $big = git ls-files | ForEach-Object {
+            $i = Get-Item -LiteralPath $_ -ErrorAction SilentlyContinue
+            if ($i -and $i.Length -gt 1MB) { "{0,10:N0}  {1}" -f $i.Length, $_ }
+          }
+          if ($big) {
+            Write-Host "::error::Tracked files larger than 1 MB:"
+            $big | ForEach-Object { Write-Host "  $_" }
+            exit 1
+          }
+          $total = (git ls-files | ForEach-Object {
+            (Get-Item -LiteralPath $_ -ErrorAction SilentlyContinue).Length
+          } | Measure-Object -Sum).Sum
+          Write-Host ("Tracked working tree: {0:N2} MB across {1} files" -f ($total / 1MB), (git ls-files).Count)

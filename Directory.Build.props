@@ -1,0 +1,16 @@
+<Project>
+  <PropertyGroup>
+    <!--
+      CreativeMode.csproj sits at the repo root and globs **/*.cs, so every folder added here gets
+      swept into it. src/ holds its own solution and research*/ holds loose .cs dumps and probe
+      projects from other work; neither belongs in the mod. Excluded here rather than in
+      CreativeMode.csproj so that project stays untouched.
+
+      _backup/ must be excluded for a second reason: the default None glob feeds RAR's
+      {CandidateAssemblyFiles} search path, which outranks {HintPathFromItem}. A backup contains
+      Cpp2IL's dummy Assembly-CSharp.dll, so leaving it globbed makes every Il2CppScheduleOne.*
+      using fail to resolve.
+    -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);src\**;research\**;research-ext\**;_backup\**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

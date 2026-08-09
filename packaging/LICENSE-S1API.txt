@@ -1,0 +1,54 @@
+==================================================================================================
+ THIRD-PARTY COMPONENT NOTICE -- S1API (Forked)
+==================================================================================================
+
+  Two files in this package are not ours. They are redistributed unmodified under the MIT
+  licence, which permits redistribution provided this notice travels with them.
+
+     Mods\S1API.Il2Cpp.MelonLoader.dll
+     Plugins\S1APILoader.MelonLoader.dll
+
+  Project ....... S1API.Forked
+  Version ....... 3.1.7
+  Author ........ ifBars  (forked from the original S1API by KaBooMa)
+  Source ........ https://github.com/ifBars/S1API
+  Release ....... https://github.com/ifBars/S1API/releases/tag/v3.1.7
+  Commit ........ db421c99bed764855449979b1866b8d209ca5383
+  Licence ....... MIT
+
+  Both files are byte-for-byte identical to the official release archive
+  S1API-Forked-3.1.7.zip. SHA-256:
+
+     S1API.Il2Cpp.MelonLoader.dll
+        ACC37BA790942415BEACE4177B317B5185BE7341ED8A6D4DBCA19300F32494FF
+     S1APILoader.MelonLoader.dll
+        142DBF9A5AF2B45631753FAB4DA0A2A99125D76C6F80292F363EE2684F9B96A5
+
+  Nothing else in this package is third-party. MelonLoader is deliberately NOT bundled -- it
+  must be installed by its own installer. See INSTALL.txt, section 4, step 2.
+
+==================================================================================================
+ MIT LICENCE -- verbatim, as published at https://github.com/ifBars/S1API/blob/stable/LICENSE
+==================================================================================================
+
+MIT License
+
+Copyright (c) 2025 S1API Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

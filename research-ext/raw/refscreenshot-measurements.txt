@@ -1,0 +1,68 @@
+Reference screenshot pixel measurements
+Source: C:\Users\fyfvg\.cursor\projects\c-Users-fyfvg-Documents-ScheduleI-CreativeMode\assets\c__Users_fyfvg_AppData_Roaming_Cursor_User_workspaceStorage_empty-window_images_image-13d3b82a-7703-40b9-94c3-1cd5d390c005.png
+Image size: 327 x 285
+Measured 2026-08-03 with System.Drawing GetPixel (no resampling)
+
+== GLOBAL COLOUR HISTOGRAM (top 24) ==
+  #454749    29500   31.65%
+  #359A38    16350   17.54%
+  #010101     4547    4.88%
+  #020202     4230    4.54%
+  #FFFFFF     2136    2.29%
+  #414345     1160    1.24%
+  #030303      696    0.75%
+  #329335      640    0.69%
+  #434547      422    0.45%
+  #060606      403    0.43%
+  #040404      389    0.42%
+  #0B0B0B      350    0.38%
+  #0C0C0C      348    0.37%
+  #0F0F0F      343    0.37%
+  #0D0D0D      341    0.37%
+  #050505      309    0.33%
+  #3F4143      300    0.32%
+  #3A3C3E      300    0.32%
+  #0E0E0E      299    0.32%
+  #3D3F41      291    0.31%
+  #3C3E40      286    0.31%
+  #3B3D3F      281    0.30%
+  #0A0A0A      279    0.30%
+  #090909      275    0.30%
+
+== CARD GEOMETRY (vertical probe at x=163) ==
+  card1 fill      y=023..093   height=71
+  gap             y=094..103   height=10
+  card2 fill      y=104..174   height=71
+  gap             y=175..184   height=10
+  card3 border    y=185..186   (2px)
+  card3 fill      y=187..270
+  card3 border    y=271..272   (2px)  -> total card3 height=88
+  card left edge  x=010        card right edge x=319   -> width=310
+  green border    x=010..011 and x=318..319 = #FFFFFF (2px, all four sides)
+
+== CORNER RADIUS PROBE (grey card 2 top-left; first card-coloured x per row) ==
+  y= 104  firstCardX= 18  inset=8
+  y= 105  firstCardX= 15  inset=5
+  y= 106  firstCardX= 14  inset=4
+  y= 107  firstCardX= 13  inset=3
+  y= 108  firstCardX= 12  inset=2
+  y= 109  firstCardX= 11  inset=1
+  y= 110  firstCardX= 11  inset=1
+  y= 111  firstCardX= 10  inset=0
+  y= 112  firstCardX= 10  inset=0
+  y= 113  firstCardX= 10  inset=0
+  y= 114  firstCardX= 10  inset=0
+  y= 115  firstCardX= 10  inset=0
+  y= 116  firstCardX= 10  inset=0
+  -> inset falls 8 -> 0 over ~7 rows  => corner radius ~= 8 px at this render scale
+
+== TEXT COLOUR PEAKS ==
+  card titles      : #FFFFFF (pure white, 201-227 exact-white pixels per title band)
+  card descriptions: peak #F5F5F5 / #F2F2F2 / #EDEDED, NO exact #FFFFFF present
+  trophy icon      : #FFC04B (214 px) on #359A38
+
+== VERIFIED FILL COLOURS ==
+  unselected card fill : #454749   (31.65% of all pixels)
+  selected card fill   : #359A38   (17.54% of all pixels)
+  selected card border : #FFFFFF   2 px
+  page background      : #010101 / #020202 (near-black, faint darker curved line pattern)

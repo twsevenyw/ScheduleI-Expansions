@@ -1,0 +1,15 @@
+Background	32.0x32.0	(10.0,10.0,10.0,10.0)	ppu=200.0
+CustomUI_Spritesheet_64px_0	120.0x120.0	(20.0,20.0,20.0,20.0)	ppu=500.0
+CustomUI_Spritesheet_64px_2	120.0x120.0	(48.0,48.0,48.0,48.0)	ppu=500.0
+CustomUI_Spritesheet_64px_3	248.0x248.0	(92.0,92.0,92.0,92.0)	ppu=500.0
+InputFieldBackground	32.0x32.0	(10.0,10.0,10.0,10.0)	ppu=200.0
+Outline_RoundedEdges	512.0x512.0	(255.0,255.0,255.0,255.0)	ppu=100.0
+Outline_RoundedEdges 1	512.0x512.0	(255.0,255.0,255.0,255.0)	ppu=100.0
+property_outline	32.0x32.0	(8.0,8.0,8.0,8.0)	ppu=150.0
+Rect shade	256.0x256.0	(122.0,122.0,122.0,122.0)	ppu=100.0
+Rectangle_RoundedEdges	512.0x512.0	(255.0,255.0,255.0,255.0)	ppu=100.0
+Rectangle_RoundedEdges_Bottom	512.0x512.0	(255.0,255.0,255.0,255.0)	ppu=100.0
+Rectangle_RoundedEdges_Top	512.0x512.0	(255.0,255.0,255.0,255.0)	ppu=100.0
+UIMask	32.0x32.0	(10.0,10.0,10.0,10.0)	ppu=200.0
+UISprite	32.0x32.0	(10.0,10.0,10.0,10.0)	ppu=200.0
+WhiteFrame_4px	64.0x64.0	(8.0,8.0,8.0,8.0)	ppu=100.0

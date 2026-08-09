@@ -1,0 +1,428 @@
+10-dealership	1920.0x1080.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=10-dealership	pathID=4800
+13-facility	1920.0x1080.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=13-facility	pathID=4826
+15-warehouse	1920.0x1080.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=15-warehouse	pathID=4929
+16-tacoticklers	1920.0x1080.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=16-tacoticklers	pathID=5004
+18-rvinterior	1920.0x1080.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=18-rvinterior	pathID=4872
+1-weed	1920.0x1080.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=1-weed	pathID=5120
+22-barnproduction	1920.0x1080.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=22-barnproduction	pathID=4839
+23-northtown	2048.0x1152.0	border=(0.0,0.0,0.0,0.0)	ppu=53.33334	tex=23-northtown	pathID=4950
+2-Tier Wall Shelf_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=2-Tier Wall Shelf_Icon	pathID=4979
+3-city	1920.0x1080.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=3-city	pathID=4757
+4-driving	1920.0x1080.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=4-driving	pathID=5008
+7-motel	1920.0x1080.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=7-motel	pathID=4766
+AC Unit Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=AC Unit Icon	pathID=4925
+Acid_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Acid_Icon	pathID=4881
+Addiction band flipped	128.0x16.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Addiction band flipped	pathID=4740
+Addy__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Addy__Icon	pathID=4749
+AirPot_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=AirPot_Built_Icon	pathID=5134
+Albert_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Albert_Mugshot	pathID=4735
+Alison_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Alison_Mugshot	pathID=4886
+Andy_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Andy_Mugshot	pathID=4981
+Anna_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Anna_Mugshot	pathID=4937
+AntiqueWallLamp_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=AntiqueWallLamp_Built_Icon	pathID=5070
+appicon_contacts	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=appicon_contacts	pathID=4995
+appicon_dealers	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=appicon_dealers	pathID=4871
+appicon_deliveries	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=appicon_deliveries	pathID=4896
+appicon_journal	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=appicon_journal	pathID=4863
+appicon_map	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=appicon_map	pathID=4973
+appicon_messages	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=appicon_messages	pathID=4851
+appicon_productmanager	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=appicon_productmanager	pathID=4868
+Apron(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Apron(Clone)_Icon	pathID=5061
+arrow	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=arrow	pathID=5076
+arrow 1	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=arrow 1	pathID=4939
+arrow 2	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=arrow 2	pathID=5102
+Austin _Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Austin _Mugshot	pathID=5129
+Avatar_Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Avatar_Icon	pathID=5072
+Background	32.0x32.0	border=(10.0,10.0,10.0,10.0)	ppu=200.0	tex=Background	pathID=4728
+Baggie_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Baggie_Icon	pathID=4970
+Banana__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Banana__Icon	pathID=5116
+BaseballBat_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=BaseballBat_Icon	pathID=4812
+Battery__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Battery__Icon	pathID=4799
+Beanie_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Beanie_Icon	pathID=5115
+Belt(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Belt(Clone)_Icon	pathID=4976
+Benji_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Benji_Mugshot	pathID=5143
+Beth_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Beth_Mugshot	pathID=4792
+Billy_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Billy_Mugshot	pathID=4926
+black-brick	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=black-brick	pathID=4764
+Blank_Avatar_Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Blank_Avatar_Icon	pathID=4805
+Blazer_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Blazer_Icon	pathID=5079
+Bomb_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Bomb_Icon	pathID=5126
+Box in hand	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Box in hand	pathID=5127
+Brad_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Brad_Mugshot	pathID=4915
+BrickPress_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=BrickPress_Icon	pathID=5053
+Bruce_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Bruce_Mugshot	pathID=4882
+BucketHat(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=BucketHat(Clone)_Icon	pathID=5090
+ButtonUp_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=ButtonUp_Icon	pathID=5051
+ButtonUp_RolledIcon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=ButtonUp_RolledIcon	pathID=4857
+Cactus 1	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Cactus 1	pathID=5087
+Cactus 2	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Cactus 2	pathID=5145
+Cactus 3	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Cactus 3	pathID=4938
+Cap(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Cap(Clone)_Icon	pathID=5001
+cardinal-point	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=cardinal-point	pathID=5031
+CargoPants_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=CargoPants_Icon	pathID=4967
+Carl_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Carl_Mugshot	pathID=5046
+cash_front	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=cash_front	pathID=5050
+cauldron	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=cauldron	pathID=5137
+Cauldron_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Cauldron_Icon	pathID=4845
+Champagne Bottle_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Champagne Bottle_Icon	pathID=4951
+Charles_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Charles_Mugshot	pathID=5064
+ChateauLaPeepee__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=ChateauLaPeepee__Icon	pathID=4790
+CheapPlasticPot_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=CheapPlasticPot_Built_Icon	pathID=5009
+CheapSkateboardVisual_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=CheapSkateboardVisual_Icon	pathID=4966
+ChefHat_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=ChefHat_Icon	pathID=4919
+ChemistryStation_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=ChemistryStation_Built_Icon	pathID=5017
+Chili__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Chili__Icon	pathID=4848
+Chloe_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Chloe_Mugshot	pathID=5122
+Chris_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Chris_Mugshot	pathID=4841
+Circle	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Circle	pathID=4945
+Circle shade	128.0x128.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Circle shade	pathID=4932
+cleaner	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=cleaner	pathID=5147
+clock	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=clock	pathID=5111
+Cloud 1	64.0x64.0	border=(0.0,0.0,0.0,0.0)	ppu=12.5	tex=Cloud 1	pathID=5130
+Cloud 2	64.0x64.0	border=(0.0,0.0,0.0,0.0)	ppu=12.5	tex=Cloud 2	pathID=4794
+Cloud 3	64.0x64.0	border=(0.0,0.0,0.0,0.0)	ppu=12.5	tex=Cloud 3	pathID=5058
+cocaine icon (none)	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=cocaine icon (none)	pathID=4953
+cocaine icon (none)	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=cocaine icon (none)	pathID=4894
+CocaineBase__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=CocaineBase__Icon	pathID=5140
+CocaLeaf_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=CocaLeaf_Icon	pathID=4824
+CocaSeed_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=CocaSeed_Icon	pathID=4902
+CoffeeTable_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=CoffeeTable_Built_Icon	pathID=4829
+CollarJacket_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=CollarJacket_Icon	pathID=4991
+CombatBoots(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=CombatBoots(Clone)_Icon	pathID=4889
+CowboyHat(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=CowboyHat(Clone)_Icon	pathID=4782
+Cross	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Cross	pathID=4922
+CruiserVisual_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=CruiserVisual_Icon	pathID=5007
+Cuke_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Cuke_Icon	pathID=4994
+CustomUI_Spritesheet_64px_0	120.0x120.0	border=(20.0,20.0,20.0,20.0)	ppu=500.0	tex=CustomUI_Spritesheet_64px	pathID=5149
+CustomUI_Spritesheet_64px_2	120.0x120.0	border=(48.0,48.0,48.0,48.0)	ppu=500.0	tex=CustomUI_Spritesheet_64px	pathID=5150
+CustomUI_Spritesheet_64px_3	248.0x248.0	border=(92.0,92.0,92.0,92.0)	ppu=500.0	tex=CustomUI_Spritesheet_64px	pathID=5151
+Dan_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Dan_Mugshot	pathID=4999
+Day night shit	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Day night shit	pathID=4920
+Dean_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Dean_Mugshot	pathID=4956
+Dennis_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Dennis_Mugshot	pathID=5097
+DesertMap	4096.0x4096.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=DesertMap	pathID=5128
+discord	245.0x187.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=discord	pathID=4972
+Display cabinet_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Display cabinet_Icon	pathID=4947
+Donna_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Donna_Mugshot	pathID=4795
+Donut_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Donut_Icon	pathID=4928
+Doris_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Doris_Mugshot	pathID=4855
+Doug_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Doug_Mugshot	pathID=4859
+DressShoes(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=DressShoes(Clone)_Icon	pathID=4873
+DryingRack_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=DryingRack_Built_Icon	pathID=5067
+Dumpster_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Dumpster_Icon	pathID=4783
+edit	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=edit	pathID=5083
+Electric Trimmers Icon	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Electric Trimmers Icon	pathID=4930
+Elizabeth_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Elizabeth_Mugshot	pathID=5003
+EnergyDrink__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=EnergyDrink__Icon	pathID=4844
+Eugene_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Eugene_Mugshot	pathID=5010
+ExclamationMark	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=ExclamationMark	pathID=5135
+Extra wide key background	1024.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Extra wide key background	pathID=4733
+ExtraLongLifeSoil_Stored_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=ExtraLongLifeSoil_Stored_Icon	pathID=4820
+Fertilizer_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Fertilizer_Icon	pathID=4809
+FilingCabinet_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=FilingCabinet_Built_Icon	pathID=4982
+filter	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=filter	pathID=4962
+FingerlessGloves_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=FingerlessGloves_Icon	pathID=5096
+Fiona_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Fiona_Mugshot	pathID=4992
+fire-flame	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=fire-flame	pathID=5118
+Flannel_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Flannel_Icon	pathID=4768
+Flashlight_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Flashlight_Icon	pathID=4898
+Flask	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Flask	pathID=5113
+FlatCap(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=FlatCap(Clone)_Icon	pathID=5108
+Flats(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Flats(Clone)_Icon	pathID=4734
+FloorLamp_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=FloorLamp_Icon	pathID=4745
+FloorRack Icon	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=FloorRack Icon	pathID=4891
+FluMedicine_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=FluMedicine_Icon	pathID=4901
+Frank_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Frank_Mugshot	pathID=4732
+FryingPan__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=FryingPan__Icon	pathID=4832
+FullSpectrumLight_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=FullSpectrumLight_Built_Icon	pathID=5114
+FungalPhil_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=FungalPhil_Mugshot	pathID=4918
+Garbage throne_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Garbage throne_Icon	pathID=4796
+Gas mask	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Gas mask	pathID=4846
+Gasoline_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Gasoline_Icon	pathID=4895
+gear_icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=gear_icon	pathID=5069
+Genghis_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Genghis_Mugshot	pathID=5106
+George_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=George_Mugshot	pathID=5095
+Geraldine_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Geraldine_Mugshot	pathID=5021
+Gloves_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Gloves_Icon	pathID=4830
+GoldBar__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=GoldBar__Icon	pathID=4944
+GoldChain(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=GoldChain(Clone)_Icon	pathID=4946
+GoldenToilet_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=GoldenToilet_Built_Icon	pathID=5132
+GoldSkateboardVisual_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=GoldSkateboardVisual_Icon	pathID=5088
+GraffitiCleaner_Equippable_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=GraffitiCleaner_Equippable_Icon	pathID=5073
+Grain Bag Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Grain Bag Icon	pathID=4984
+granddaddypurple icon (none)	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=granddaddypurple icon (none)	pathID=4858
+GranddaddyPurpleSeed_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=GranddaddyPurpleSeed_Icon	pathID=5018
+GrandfatherClock_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=GrandfatherClock_Built_Icon	pathID=5019
+greencrack icon (none)	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=greencrack icon (none)	pathID=4971
+GreenCrack_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=GreenCrack_Icon	pathID=5025
+Greg_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Greg_Mugshot	pathID=5094
+Ground 1	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Ground 1	pathID=4753
+Ground 2	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Ground 2	pathID=4808
+Ground 3	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Ground 3	pathID=5045
+GrowTent_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=GrowTent_Built_Icon	pathID=5024
+Guilloche	1024.0x683.0	border=(0.0,0.0,0.0,0.0)	ppu=34.13333	tex=Guilloche	pathID=4797
+Guilloche inverted	1024.0x683.0	border=(0.0,0.0,0.0,0.0)	ppu=34.13333	tex=Guilloche inverted	pathID=4748
+HalogenLight_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=HalogenLight_Icon	pathID=4791
+handdrawn_line_horizontal	640.0x32.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=handdrawn_line_horizontal	pathID=4853
+handshake	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=handshake	pathID=4923
+Harold_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Harold_Mugshot	pathID=4814
+Herbert_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Herbert_Mugshot	pathID=4927
+hollowcircle thin	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=hollowcircle thin	pathID=4798
+home	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=home	pathID=4769
+Horizontal gradient	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Horizontal gradient	pathID=4860
+HorseSemen__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=HorseSemen__Icon	pathID=4773
+information	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=information	pathID=5049
+Input_SteamDeck_Spritesheet_2	64.0x64.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Input_SteamDeck_Spritesheet	pathID=5152
+Input_SteamDeck_Spritesheet_31	64.0x64.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Input_SteamDeck_Spritesheet	pathID=4726
+InputFieldBackground	32.0x32.0	border=(10.0,10.0,10.0,10.0)	ppu=200.0	tex=InputFieldBackground	pathID=4729
+Iodine_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Iodine_Icon	pathID=5014
+Irene_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Irene_Mugshot	pathID=4912
+Jack_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Jack_Mugshot	pathID=4961
+Jackie_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Jackie_Mugshot	pathID=5112
+Jane_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Jane_Mugshot	pathID=5048
+Jar_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Jar_Icon	pathID=4908
+Javier_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Javier_Mugshot	pathID=4977
+Jeans_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Jeans_Icon	pathID=4993
+Jeff_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Jeff_Mugshot	pathID=5066
+Jen_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Jen_Mugshot	pathID=4802
+Jennifer_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Jennifer_Mugshot	pathID=4980
+Jeremy_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Jeremy_Mugshot	pathID=5138
+Jerry_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Jerry_Mugshot	pathID=4911
+Jessi_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Jessi_Mugshot	pathID=4997
+Joe_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Joe_Mugshot	pathID=5092
+Jorts_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Jorts_Icon	pathID=4736
+Joyce_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Joyce_Mugshot	pathID=4741
+Jukebox_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Jukebox_Built_Icon	pathID=4943
+Karen_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Karen_Mugshot	pathID=5033
+Kathy_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Kathy_Mugshot	pathID=5063
+Keith_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Keith_Mugshot	pathID=5100
+Kelly_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Kelly_Mugshot	pathID=5020
+Kevin_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Kevin_Mugshot	pathID=4842
+KevlarVest_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=KevlarVest_Icon	pathID=4816
+Key background	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Key background	pathID=5080
+Kim_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Kim_Mugshot	pathID=4823
+Knob	40.0x40.0	border=(0.0,0.0,0.0,0.0)	ppu=200.0	tex=Knob	pathID=4730
+Kyle_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Kyle_Mugshot	pathID=5054
+LabOven_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=LabOven_Built_Icon	pathID=4880
+layer	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=layer	pathID=5091
+LEDLight Icon	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=LEDLight Icon	pathID=4739
+LegendSunglasses(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=LegendSunglasses(Clone)_Icon	pathID=5139
+Leo_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Leo_Mugshot	pathID=5026
+LightweightSkateboardVisual_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=LightweightSkateboardVisual_Icon	pathID=4821
+Lily_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Lily_Mugshot	pathID=5081
+Line tile	32.0x32.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Line tile	pathID=5039
+LiquidBabyBlue_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=LiquidBabyBlue_Icon	pathID=5028
+LiquidBikerCrank_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=LiquidBikerCrank_Icon	pathID=4787
+LiquidGlass_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=LiquidGlass_Icon	pathID=4985
+LiquidMeth_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=LiquidMeth_Icon	pathID=4833
+Lisa_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Lisa_Mugshot	pathID=4933
+Locker_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Locker_Built_Icon	pathID=4834
+LongSkirt(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=LongSkirt(Clone)_Icon	pathID=5117
+Louis_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Louis_Mugshot	pathID=5011
+Lucy_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Lucy_Mugshot	pathID=4746
+Ludwig_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Ludwig_Mugshot	pathID=5144
+M1911 Gold Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=M1911 Gold Icon	pathID=4750
+M1911__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=M1911__Icon	pathID=4781
+Mac_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Mac_Mugshot	pathID=5084
+Machete__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Machete__Icon	pathID=5000
+Magazine__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Magazine__Icon	pathID=4767
+Male1_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Male1_Mugshot	pathID=5099
+ManagementClipboard_Equippable_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=ManagementClipboard_Equippable_Icon	pathID=4876
+Map_Full	4096.0x4096.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Map_Full	pathID=4822
+Mario_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Mario_Mugshot	pathID=4828
+Mayor_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Mayor_Mugshot	pathID=4989
+MediumSkirt(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=MediumSkirt(Clone)_Icon	pathID=4771
+Meg_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Meg_Mugshot	pathID=4756
+MegaBean__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=MegaBean__Icon	pathID=4865
+Melissa_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Melissa_Mugshot	pathID=4959
+MenuTitle	2048.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=MenuTitle	pathID=5032
+MetalSign_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=MetalSign_Built_Icon	pathID=4818
+MetalSquareTable_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=MetalSquareTable_Icon	pathID=4867
+meth icon (none)	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=meth icon (none)	pathID=4754
+Michael_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Michael_Mugshot	pathID=5123
+Mick_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Mick_Mugshot	pathID=4854
+mixed	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=mixed	pathID=5093
+MixingStation_Built (1)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=MixingStation_Built (1)_Icon	pathID=4786
+MixingStation_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=MixingStation_Built_Icon	pathID=5059
+ModernWallLamp_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=ModernWallLamp_Built_Icon	pathID=5040
+MoisturePreservingPot_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=MoisturePreservingPot_Built_Icon	pathID=5146
+Molly_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Molly_Mugshot	pathID=5068
+Money	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Money	pathID=4957
+Money pattern	1024.0x683.0	border=(0.0,0.0,0.0,0.0)	ppu=34.13333	tex=Money pattern	pathID=4836
+Motor Oil_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Motor Oil_Icon	pathID=5125
+Mouse Left Click	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Mouse Left Click	pathID=5062
+Mouse Middle Click	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Mouse Middle Click	pathID=4870
+Mouse Right Click	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Mouse Right Click	pathID=5005
+Mouth wash_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Mouth wash_Icon	pathID=4850
+mushroom bed icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=mushroom bed icon	pathID=5006
+Mushroom Bed_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Mushroom Bed_Icon	pathID=5013
+mushroom spawn station	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=mushroom spawn station	pathID=4738
+Mushroom Spawn Station Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Mushroom Spawn Station Icon	pathID=4775
+MushroomHat Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=MushroomHat Icon	pathID=5043
+No repeat icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=No repeat icon	pathID=4965
+Notch	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Notch	pathID=5034
+Note1_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Note1_Icon	pathID=5052
+Note2_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Note2_Icon	pathID=4958
+Note3_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Note3_Icon	pathID=4817
+Nurse_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Nurse_Mugshot	pathID=4743
+Oakleys(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Oakleys(Clone)_Icon	pathID=4852
+OffroadSkateboardVisual_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=OffroadSkateboardVisual_Icon	pathID=4789
+ogkush icon (none)	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=ogkush icon (none)	pathID=4892
+ogkush icon (none)	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=ogkush icon (none)	pathID=4752
+OGKush_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=OGKush_Icon	pathID=5105
+Old Key_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Old Key_Icon	pathID=4887
+OldManJimmys__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=OldManJimmys__Icon	pathID=4838
+Open box	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Open box	pathID=4917
+Oscar_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Oscar_Mugshot	pathID=5082
+Outline_RoundedEdges	512.0x512.0	border=(255.0,255.0,255.0,255.0)	ppu=100.0	tex=Outline_RoundedEdges	pathID=4888
+Outline_RoundedEdges 1	512.0x512.0	border=(255.0,255.0,255.0,255.0)	ppu=100.0	tex=Outline_RoundedEdges 1	pathID=4758
+oven	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=oven	pathID=4890
+Overalls_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Overalls_Icon	pathID=4810
+PackagingStation_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=PackagingStation_Icon	pathID=4978
+PackagingStation_Mk2_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=PackagingStation_Mk2_Icon	pathID=4737
+Painting_BeachDay_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Painting_BeachDay_Icon	pathID=4875
+Painting_Duck_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Painting_Duck_Icon	pathID=5098
+Painting_Lines_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Painting_Lines_Icon	pathID=4900
+Painting_Millie_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Painting_Millie_Icon	pathID=4906
+Painting_Offer_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Painting_Offer_Icon	pathID=4763
+Painting_Rapscallion_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Painting_Rapscallion_Icon	pathID=4866
+paracetamol_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=paracetamol_Icon	pathID=4760
+Pause	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Pause	pathID=4770
+Pause - Copy	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Pause - Copy	pathID=4914
+Pearl_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Pearl_Mugshot	pathID=4874
+Peggy_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Peggy_Mugshot	pathID=5109
+Peter_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Peter_Mugshot	pathID=4924
+PGR_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=PGR_Icon	pathID=5124
+Philip_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Philip_Mugshot	pathID=5015
+Phone	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Phone	pathID=5037
+Phosphorus_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Phosphorus_Icon	pathID=4877
+PlasticTable_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=PlasticTable_Built_Icon	pathID=4940
+Play	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Play	pathID=4827
+Play - Copy	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Play - Copy	pathID=4952
+Plus	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Plus	pathID=5119
+Polex(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Polex(Clone)_Icon	pathID=5036
+PorkpieHat(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=PorkpieHat(Clone)_Icon	pathID=4755
+Pot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Pot	pathID=5142
+Pot plant	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Pot plant	pathID=4747
+Potato 1	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Potato 1	pathID=4879
+Potato 2	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Potato 2	pathID=4954
+Potato 3	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Potato 3	pathID=5060
+Potato 4	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Potato 4	pathID=4913
+Potato 5	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Potato 5	pathID=4899
+Potato 6	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Potato 6	pathID=4969
+Potato Jump	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Potato Jump	pathID=4815
+Potato run icon	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Potato run icon	pathID=5148
+ProductSlotBackground	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=ProductSlotBackground	pathID=5075
+property_outline	32.0x32.0	border=(8.0,8.0,8.0,8.0)	ppu=150.0	tex=property_outline	pathID=5041
+PumpShotgun__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=PumpShotgun__Icon	pathID=4934
+QuestionMark	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=QuestionMark	pathID=4840
+Randy_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Randy_Mugshot	pathID=5133
+Ray_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Ray_Mugshot	pathID=5104
+RDX_Stored_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=RDX_Stored_Icon	pathID=4772
+Rect shade	256.0x256.0	border=(122.0,122.0,122.0,122.0)	ppu=100.0	tex=Rect shade	pathID=4960
+Rectangle	64.0x64.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Rectangle	pathID=4904
+Rectangle_RoundedEdges	512.0x512.0	border=(255.0,255.0,255.0,255.0)	ppu=100.0	tex=Rectangle_RoundedEdges	pathID=5077
+Rectangle_RoundedEdges_Bottom	512.0x512.0	border=(255.0,255.0,255.0,255.0)	ppu=100.0	tex=Rectangle_RoundedEdges_Bottom	pathID=4788
+Rectangle_RoundedEdges_Top	512.0x512.0	border=(255.0,255.0,255.0,255.0)	ppu=100.0	tex=Rectangle_RoundedEdges_Top	pathID=4955
+RectangleFrameGlasses(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=RectangleFrameGlasses(Clone)_Icon	pathID=5103
+reddit	214.0x187.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=reddit	pathID=5029
+RelationCircle	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=RelationCircle	pathID=4807
+Relationship band	128.0x16.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Relationship band	pathID=4856
+Repeat icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Repeat icon	pathID=4784
+Revolver__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Revolver__Icon	pathID=4843
+RevolverCylinder__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=RevolverCylinder__Icon	pathID=4762
+Round pill pack_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Round pill pack_Icon	pathID=4869
+S1 Logo Whiteout	4096.0x4096.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=S1 Logo Whiteout	pathID=5042
+Safe_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Safe_Icon	pathID=4744
+Salvador_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Salvador_Mugshot	pathID=4974
+Sam_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Sam_Mugshot	pathID=4849
+Sandals(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Sandals(Clone)_Icon	pathID=4776
+Saucepan(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Saucepan(Clone)_Icon	pathID=4893
+Screenshot_21-14-19	1920.0x1080.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Screenshot_21-14-19	pathID=5027
+Screenshot_21-14-39	1920.0x1080.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Screenshot_21-14-39	pathID=5012
+Screenshot_21-16-33	1920.0x1080.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Screenshot_21-16-33	pathID=4847
+secured-lock	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=secured-lock	pathID=4777
+Selection ring quadrant	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Selection ring quadrant	pathID=4761
+Sherman_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Sherman_Mugshot	pathID=4905
+Shirley_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Shirley_Mugshot	pathID=4916
+Shotgun Shell_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Shotgun Shell_Icon	pathID=4990
+shroom icon (none)	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=shroom icon (none)	pathID=5056
+Shuffle	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Shuffle	pathID=4883
+Single repeat icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Single repeat icon	pathID=5078
+SingleBed Icon	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=SingleBed Icon	pathID=5101
+Skateboard_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Skateboard_Icon	pathID=4825
+Skip	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Skip	pathID=5121
+SmallRoundGlasses(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=SmallRoundGlasses(Clone)_Icon	pathID=4765
+SmallTrashCan_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=SmallTrashCan_Built_Icon	pathID=5038
+Snake icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Snake icon	pathID=4831
+Sneakers(Clone)_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Sneakers(Clone)_Icon	pathID=4778
+Soil_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Soil_Icon	pathID=4819
+Soil_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Soil_Icon	pathID=4903
+SoilPourer_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=SoilPourer_Built_Icon	pathID=5044
+sourdiesel icon (none)	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=sourdiesel icon (none)	pathID=4996
+sourdiesel icon (none)	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=sourdiesel icon (none)	pathID=5110
+SourDieselSeed_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=SourDieselSeed_Icon	pathID=5089
+Spawn Bag Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Spawn Bag Icon	pathID=4907
+SpeedGrow_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=SpeedGrow_Icon	pathID=4801
+SporeSyringe_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=SporeSyringe_Icon	pathID=4983
+spray	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=spray	pathID=4986
+Spray Bottle Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Spray Bottle Icon	pathID=5055
+Spray can_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Spray can_Icon	pathID=4864
+Sprinkler_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Sprinkler_Built_Icon	pathID=5136
+Sprinkler_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Sprinkler_Built_Icon	pathID=4885
+Stack	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Stack	pathID=5071
+star	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=star	pathID=4837
+Steve_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Steve_Mugshot	pathID=4942
+Storage Rack Mk2 (Huge) Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Storage Rack Mk2 (Huge) Icon	pathID=4806
+Storage Rack Mk2 (Large) Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Storage Rack Mk2 (Large) Icon	pathID=4964
+Storage Rack Mk2 (Medium) Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Storage Rack Mk2 (Medium) Icon	pathID=4793
+Storage Rack Mk2 (Small) Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Storage Rack Mk2 (Small) Icon	pathID=4998
+StorageRack_1.5x0.5 Icon	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=StorageRack_1.5x0.5 Icon	pathID=4742
+StorageRack_Large Icon	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=StorageRack_Large Icon	pathID=4909
+StorageRack_Small Icon	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=StorageRack_Small Icon	pathID=5065
+Substrate Bag Icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Substrate Bag Icon	pathID=4931
+Sync	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Sync	pathID=4861
+Telephone	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Telephone	pathID=4963
+Temperature boost icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Temperature boost icon	pathID=5074
+thin arrow 2	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=thin arrow 2	pathID=4780
+Tick	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Tick	pathID=4935
+Tick circle	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Tick circle	pathID=5086
+Tile	64.0x64.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Tile	pathID=4878
+Time dial bottom left	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Time dial bottom left	pathID=4884
+Time dial bottom right	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Time dial bottom right	pathID=4948
+Time dial top left	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Time dial top left	pathID=4936
+Time dial top right	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Time dial top right	pathID=5047
+Toilet_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Toilet_Built_Icon	pathID=5002
+Too hot icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Too hot icon	pathID=4941
+trash can	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=trash can	pathID=4751
+Trash Can_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Trash Can_Icon	pathID=5131
+TrashBag__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=TrashBag__Icon	pathID=4949
+TrashCrown_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=TrashCrown_Icon	pathID=5030
+TrashGrabber__Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=TrashGrabber__Icon	pathID=4804
+trello	187.0x187.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=trello	pathID=4975
+Trent_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Trent_Mugshot	pathID=4897
+triangle	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=triangle	pathID=5057
+Trimmers Icon	1024.0x1024.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Trimmers Icon	pathID=4759
+trophy	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=trophy	pathID=4813
+T-Shirt_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=T-Shirt_Icon	pathID=4988
+TV home screen backgrounbd	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=TV home screen backgrounbd	pathID=4785
+TV_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=TV_Built_Icon	pathID=4968
+TVGS wide logo 1	2048.0x435.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=TVGS wide logo 1	pathID=4772
+twitter	192.0x174.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=twitter	pathID=5141
+UIMask	32.0x32.0	border=(10.0,10.0,10.0,10.0)	ppu=200.0	tex=UIMask	pathID=4731
+UISprite	32.0x32.0	border=(10.0,10.0,10.0,10.0)	ppu=200.0	tex=UISprite	pathID=4727
+vehicle_icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=vehicle_icon	pathID=4910
+Vertical gradient	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Vertical gradient	pathID=4774
+Vest_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=Vest_Icon	pathID=5023
+Viagra icon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Viagra icon	pathID=5016
+VNeckIcon	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=VNeckIcon	pathID=4921
+WallClock_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=WallClock_Built_Icon	pathID=5035
+Walter_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Walter_Mugshot	pathID=4779
+WateringCan_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=WateringCan_Icon	pathID=5022
+Wei_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Wei_Mugshot	pathID=5085
+WhiteFrame_4px	64.0x64.0	border=(8.0,8.0,8.0,8.0)	ppu=100.0	tex=WhiteFrame_4px	pathID=4811
+Wide key background	768.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Wide key background	pathID=4987
+wind	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=wind	pathID=4862
+Wong_Mugshot	512.0x512.0	border=(0.0,0.0,0.0,0.0)	ppu=100.0	tex=Wong_Mugshot	pathID=4835
+WoodlSign_Built_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=WoodlSign_Built_Icon	pathID=5107
+WoodSquareTable_Icon	256.0x256.0	border=(0.0,0.0,0.0,0.0)	ppu=50.0	tex=WoodSquareTable_Icon	pathID=4803

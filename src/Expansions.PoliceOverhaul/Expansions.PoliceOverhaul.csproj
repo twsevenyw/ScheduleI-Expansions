@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Expansions.PoliceOverhaul</RootNamespace>
+    <AssemblyName>Expansions.PoliceOverhaul</AssemblyName>
+    <Version>0.2.0</Version>
+    <Description>Dynamic police intensity, federal agents, outlaw status, and heavier consequences when caught.</Description>
+    <ExpansionsDeployDir>$(GameDir)\Mods</ExpansionsDeployDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Private=false: Core ships once, to UserLibs. A copy next to the mod would shadow it. -->
+    <ProjectReference Include="..\Expansions.Core\Expansions.Core.csproj" Private="false" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,123 @@
+using UnityEngine;
+
+namespace Expansions.HireableDrivers.Game;
+
+/// <summary>
+/// Dealers as delivery destinations.
+/// <para>
+/// A <c>Dealer</c> is an <c>NPC</c>, not an <c>ITransitEntity</c>: it has no access points, no
+/// input/output slot split and no slot-reservation API, and it walks around. Every difference from a
+/// storage destination is handled here.
+/// </para>
+/// </summary>
+internal static class DealerApi
+{
+    internal static IReadOnlyList<object?> Recruited()
+    {
+        var dealers = new List<object?>();
+        foreach (var dealer in Gx.List(Gx.GetStatic(GameTypes.Dealer, "AllPlayerDealers")))
+        {
+            if (Gx.Alive(dealer) && Gx.Get(dealer, "IsRecruited") is true)
+                dealers.Add(dealer);
+        }
+
+        return dealers;
+    }
+
+    internal static object? FindById(string id)
+    {
+        if (string.IsNullOrEmpty(id))
+            return null;
+
+        foreach (var dealer in Gx.List(Gx.GetStatic(GameTypes.Dealer, "AllPlayerDealers")))
+        {
+            if (Gx.Alive(dealer) && string.Equals(Gx.Get<string>(dealer, "ID", string.Empty), id, StringComparison.Ordinal))
+                return dealer;
+        }
+
+        return null;
+    }
+
+    internal static string Id(object? dealer) => Gx.Get<string>(dealer, "ID", string.Empty);
+
+    internal static string Name(object? dealer)
+    {
+        var full = Gx.Get<string>(dealer, "FullName", string.Empty);
+        return string.IsNullOrWhiteSpace(full) ? Id(dealer) : full;
+    }
+
+    internal static bool IsRecruited(object? dealer) => Gx.Get(dealer, "IsRecruited") is true;
+
+    internal static int HeldItems(object? dealer) =>
+        Gx.Call(dealer, "GetTotalInventoryItemCount", Array.Empty<string>()) as int? ?? 0;
+
+    internal static Vector3 Position(object? dealer) =>
+        Gx.GetAlive(dealer, "transform") is Transform transform ? transform.position : Vector3.zero;
+
+    /// <summary>
+    /// Where to aim the vehicle. Dealers move, so the parking target is their home building rather
+    /// than wherever they happen to be standing when the trip is planned.
+    /// </summary>
+    internal static Vector3 HomePosition(object? dealer)
+    {
+        var home = Gx.GetAlive(dealer, "Home");
+        if (Gx.GetAlive(home, "transform") is Transform transform)
+            return transform.position;
+
+        return Position(dealer);
+    }
+
+    /// <summary>
+    /// Hands cargo over in one shot. There is no reservation API on a dealer, so the transfer has to
+    /// be atomic within a single tick rather than spread over several like a storage deposit.
+    /// </summary>
+    internal static int StorageToDealer(object? storage, object? dealer, int cap)
+    {
+        if (storage is null || dealer is null)
+            return 0;
+
+        if (Gx.Get(storage, "IsOpened") is true || Gx.GetAlive(storage, "CurrentPlayerAccessor") is not null)
+            return 0;
+
+        var room = cap - HeldItems(dealer);
+        if (room <= 0)
+            return 0;
+
+        var moved = 0;
+
+        foreach (var slot in Gx.List(Gx.Get(storage, "ItemSlots")))
+        {
+            if (room <= 0)
+                break;
+
+            var instance = Gx.Get(slot, "ItemInstance");
+            if (instance is null)
+                continue;
+
+            var held = Gx.Get(slot, "Quantity") as int? ?? 0;
+            if (held <= 0)
+                continue;
+
+            var amount = Math.Min(held, room);
+            var chunk = Gx.Call(instance, "GetCopy", new[] { "Int32" }, amount);
+            if (chunk is null)
+                continue;
+
+            Gx.Call(slot, "ChangeQuantity", new[] { "Int32", "Boolean" }, -amount, false);
+            Gx.Call(dealer, "AddItemToInventory", new[] { "ItemInstance" }, chunk);
+            moved += amount;
+            room -= amount;
+        }
+
+        if (moved > 0)
+        {
+            Gx.Call(storage, "ContentsChanged", Array.Empty<string>());
+
+            // Anything that spilled into the hidden overflow slots is folded back in by the game's own
+            // routine, which is also what makes the dealer start selling it.
+            Gx.Call(dealer, "TryMoveOverflowItems", Array.Empty<string>());
+        }
+
+        return moved;
+    }
+}

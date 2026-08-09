@@ -1,0 +1,2257 @@
+==================================================================================================
+                    S C H E D U L E   I   --   M O D   S U I T E
+                          Complete feature reference
+==================================================================================================
+
+  Repository .... C:\Users\fyfvg\Documents\ScheduleI-CreativeMode
+  Owner ......... Evan Klein
+  Generated ..... 2026-08-06
+  Package ....... ScheduleI-Expansions-1.2.1-2026-08-06.zip
+  Game .......... Schedule I (TVGS), v0.4.6 / build 0.4.6f11, Unity 2022.3.62f2, IL2CPP branch
+  Loader ........ MelonLoader 0.7.3  (Il2CppInterop 1.5.1-ci.845, Cpp2IL .21, 0Harmony 2.10.2)
+  API layer ..... S1API.Forked 3.1.7 (Mods\S1API.*.dll + Plugins\S1APILoader.MelonLoader.dll)
+  Language ...... C# / .NET 6
+
+  ORIENTATION
+  -----------
+  This is ROADMAP EXPANSIONS: a shared framework library (EXPANSIONS CORE, in UserLibs) plus three
+  feature mods (in Mods) that rebuild three announced-but-never-shipped Schedule I roadmap
+  features -- Hireable Drivers, Police Improvements and Special Customers -- as native-feeling
+  additions. Four DLLs, one of which is a library rather than a mod.
+
+  All three feature mods are FULLY IMPLEMENTED. Read the status legend before you read anything
+  else, because "implemented" here means something precise and limited: the source is complete,
+  the solution builds at 0 errors and 0 warnings, every game and S1API symbol was verified
+  against the real IL2CPP assemblies with a MetadataLoadContext harness, and all four DLLs are
+  deployed. NO FEATURE MOD HAS EVER BEEN CONFIRMED WORKING END TO END IN A LIVE GAME. Section 12
+  is the ordered list of things to check first.
+
+  ONE MOD IS DELIBERATELY NOT IN THIS PACKAGE
+  -------------------------------------------
+  The author of this suite also maintains CREATIVE MODE, a standalone sandbox/cheat toolbox with
+  its own hotkey. It is a SEPARATE MOD, it is not part of Expansions, and it is NOT INCLUDED HERE.
+  Nothing in this package depends on it, nothing here will load it, and no instruction anywhere
+  in these documents expects it to be installed.
+
+  Exactly one thing still names it, and it is harmless: the panel_hotkey comment in
+  Expansions.cfg names its hotkey as one to avoid. No part of this package binds that key.
+
+  IT NO LONGER APPEARS IN THE TUTORIAL. Expansions Core used to register a chapter about it
+  unconditionally, so the quest line carried a chapter named after a mod you do not have, which
+  read as a broken install. Core now registers that chapter only when the mod is actually loaded.
+  In this package it does not exist at all: no phantom chapter, no self-completing placeholder,
+  nothing in the journal to explain away. The line is six chapters here. See section 8.
+
+  OWNER NOTE, for the copy of this file in the repository: nothing about Creative Mode changed
+  when it was dropped from the distributable. Its source is still at the repository root
+  (CreativeMode.csproj plus four .cs files), it still builds and deploys with "dotnet build
+  -c Release" from that root, and the copy in your own game folder is untouched. Because you have
+  it installed, YOUR game shows seven chapters and 24 objectives where this package shows six and
+  22 -- both numbers are given wherever they differ.
+
+  WHAT CHANGED SINCE THE 2026-08-04 REVISION. The owner ran the suite in a real game for the first
+  time (playtest round 1). It found six real bugs, all of which are now fixed:
+
+     Menu scrolling did not work anywhere      the ScrollRect viewport had no Graphic, so it was
+                                               not a raycast target and OnScroll never fired
+     Typing in a picker walked the player      the screen now takes the game's own
+                                               StateProperties.UIDefault while it is open
+     The output pane ate the action list       capped at a third of the page and collapsible
+     Police menu actions registered 0 of 8     they bound the action API by reflection against a
+                                               constructor that does not exist; now a typed call
+     Special Customers offers never sent       OfferContract returns void and silently refuses;
+                                               offers are now read back and verified
+     Talking to a visitor opened an empty      real dialogue menus are now appended for the
+       dialogue with no way out but Escape     leader and for every other group member
+
+  On top of those, HIREABLE DRIVERS WAS REWORKED onto the game's own surfaces: hiring moved to the
+  employee-fixer NPC's dialogue and route management to the shipped clipboard. That is a bigger
+  change than any of the six fixes.
+
+  THE FIXES THEMSELVES ARE UNVERIFIED. Round 1 proved the suite loads, the screen opens and the
+  probes run. It did not prove any feature works, and nothing since round 1 has been executed at
+  all. Section 12 is rewritten around that.
+
+  WHAT CHANGED IN PACKAGE 1.2.0 (2026-08-06). Nothing in the code. The separate mod described in
+  the note above was dropped from the distributable, and this document was rewritten around the
+  four remaining DLLs. All feature behaviour, every count and every version is otherwise unchanged
+  from the 2026-08-05 revision.
+
+  WHAT CHANGED IN PACKAGE 1.2.1 (2026-08-06). One line of Expansions Core: the tutorial chapter
+  about that separate mod is now registered only when the mod is actually loaded, instead of
+  always being registered and then reporting itself unavailable. Nothing else in any of the four
+  DLLs changed. The visible effect is entirely in the tutorial line -- six chapters and 22
+  objectives here instead of seven chapters, 24 objectives and a phantom.
+
+  Shape of the suite today: the Expansions screen has an ACTIONS / TUTORIAL / MODS tab strip
+  carrying 47 declared actions across Core and the three mods, with an onscreen output pane -- the
+  in-game console is no longer required for anything. F6 opens a read-only DRIVERS DIAGNOSTIC
+  panel; it is not the driver management UI, the game's own management clipboard is.
+
+  The three expansion features are the three Community Vote #3 ballot options from 2026-04-17.
+  Special Customers won that vote and is being built by TVGS as v0.5.0, so our version of it
+  detects the official feature and stands itself down.
+
+==================================================================================================
+ CONTENTS
+==================================================================================================
+
+   1.  STATUS LEGEND
+   2.  QUICK REFERENCE -- keys, menus, console, file locations
+   3.  EXPANSIONS CORE                          [SHIPPED]                v0.1.0
+   4.  THE ACTIONS SURFACE -- every action, by owning mod
+   5.  HIREABLE DRIVERS                         [SHIPPED, UNVERIFIED]    v0.4.0
+   6.  POLICE IMPROVEMENTS                      [SHIPPED, UNVERIFIED]    v0.2.0
+   7.  SPECIAL CUSTOMERS                        [SHIPPED, UNVERIFIED]    v1.0.0
+   8.  TUTORIAL QUEST LINE -- 6 chapters in this package
+   9.  DIAGNOSTIC PROBES -- all 41
+  10.  CONFIGURATION -- every setting in the suite
+  11.  INSTALL AND FILE LAYOUT
+  12.  WHAT TO TEST FIRST -- the ten checks that matter
+  13.  KNOWN LIMITATIONS AND WARNINGS
+  14.  DEFERRED -- designed but deliberately not built
+  15.  AT A GLANCE
+
+==================================================================================================
+ 1.  STATUS LEGEND
+==================================================================================================
+
+  [SHIPPED]       Implemented in source, builds clean, deploys, and has been observed working in
+                  a running game.
+
+  [SHIPPED,       Implemented in source, builds clean, deploys, and every game symbol it binds was
+   UNVERIFIED]    metadata-verified against the real IL2CPP assemblies -- but the code has NEVER
+                  BEEN EXECUTED IN A LIVE GAME. Not one line of it has run. Everything described
+                  under this marker is what the source does when read; nothing under it is an
+                  observation. A feature can be complete, correct-looking and still wrong the
+                  first time a real save touches it.
+
+  [IN PROGRESS]   Code exists and does something real, but the feature is knowingly incomplete.
+
+  [PLANNED]       Designed only. No implementation. Used in section 14 for the pieces that were
+                  specified and then deliberately not built.
+
+  [UNVERIFIED]    An engineering assumption the implementation leans on that has not been
+                  confirmed against the running game. If it turns out false, that part degrades.
+
+  Rule used throughout: a status marker describes evidence, not effort. "It compiles and every
+  symbol resolved statically" is [SHIPPED, UNVERIFIED]. It is not [SHIPPED].
+
+==================================================================================================
+ 2.  QUICK REFERENCE -- keys, menus, console, file locations
+==================================================================================================
+
+  KEYS
+  ----------------------------------------------------------------------------------------------
+  F7               Open / close the EXPANSIONS screen in-game. Same screen as the
+                   main-menu entry. Configurable via menu_hotkey; "None" disables.  [SHIPPED]
+  F6               Open / close the HIREABLE DRIVERS DIAGNOSTIC panel. READ-ONLY: who
+                   is hired, per-property slot usage, each driver's state and its
+                   no-work reason, the resolved route rows, and any binding failure.
+                   You do not hire or configure anyone here -- hiring is on the
+                   employee-fixer NPC and routes are on the game's own management
+                   clipboard. Configurable via panel_hotkey.             [SHIPPED, UNVERIFIED]
+  P                Runs the full diagnostics suite while the Expansions screen is
+                   open. Works on the native screen and the IMGUI fallback.         [SHIPPED]
+  Escape           Closes whichever of the two surfaces is open. On the Expansions
+                   screen, if a picker is open the first Escape closes the picker
+                   and a second closes the screen. Same on the Drivers panel.       [SHIPPED]
+
+  While the Expansions screen is open the game is held in its own UI state
+  (StateProperties.UIDefault), which suspends movement and camera look and frees the cursor. That
+  is why typing into a picker's search box no longer walks the player. If that state cannot be
+  taken -- on a build where the type moved, or from the main menu where there is nothing to
+  suspend -- the screen logs the reason once and falls back to a per-frame cursor unlock.
+
+  MAIN-MENU NAVIGATION
+  ----------------------------------------------------------------------------------------------
+  "Expansions"     A nav entry in the main-menu column, one slot below Settings. Opens the same
+                   screen as F7. It is a clone of a real nav button, so it inherits the game's
+                   font, hover animation, click sound and gamepad registration.     [SHIPPED]
+
+                   The Actions tab works from the main menu too, but most actions grey themselves
+                   out with the reason "needs a loaded save - you are in the main menu".
+
+  THE IN-GAME CONSOLE IS NO LONGER REQUIRED
+  ----------------------------------------------------------------------------------------------
+  Every verb in this suite is reachable from the Expansions screen. The console is still there and
+  the commands below still work, but nothing depends on them. That matters because the console has
+  two independent gates that are easy to trip:
+
+    Per-save flag    ConsoleUI.IsConsoleEnabled comes from GameManager.Settings.ConsoleEnabled,
+                     persisted in each save's Game.json. On a save where it is false there is no
+                     keypress that opens the console.
+    Binding / scene  The toggle is the BACKQUOTE key (`) through the new Input System, or hold
+                     the left stick and click the right stick on a gamepad. ConsoleUI exists only
+                     in the "Main" gameplay scene -- it never opens from the main menu.
+
+  Both are handled from the Actions tab: "Enable and open the console" writes the per-save flag on
+  the live settings object and opens the window; "Show the console key binding" reads the live
+  binding back out of the game's input asset rather than quoting a constant, so a rebind in the
+  game's own options is reported correctly.
+
+  CONSOLE COMMANDS (still registered, no longer necessary)
+  ----------------------------------------------------------------------------------------------
+  expprobe                     Run every registered probe except the opt-in ones and write a
+                               report.                                              [SHIPPED]
+  expprobe list                List probe ids without running anything. Opt-in probes are
+                               tagged.                                              [SHIPPED]
+  expprobe help                Usage. Also: -h, --help, ?                           [SHIPPED]
+  expprobe quarantine          List probe subjects the game process died on.        [SHIPPED]
+  expprobe quarantine clear    Forget them so they are retested next run.           [SHIPPED]
+  expprobe <id|area> [...]     Run only probes matching those selectors. Case-insensitive, by
+                               exact id, id prefix, or substring of the area name. Selectors are
+                               unioned. An opt-in probe is matched only by its exact id, never by
+                               prefix or area.  Examples:
+                                   expprobe police
+                                   expprobe drivers sc
+                                   expprobe police.penalty_values                   [SHIPPED]
+
+  scvisitor                    Pool status plus whichever group is in
+                               town.                                      [SHIPPED, UNVERIFIED]
+  scvisitor tp                 Teleport to the group, or to the scout when nobody
+                               is visiting. Client-safe.                  [SHIPPED, UNVERIFIED]
+  scvisitor park               Host only. Warp the scout back to his post. [SHIPPED, UNVERIFIED]
+  scvisitor group              Just the group state.                      [SHIPPED, UNVERIFIED]
+  scvisitor visit [id]         Host only. Start a visit now. Ids: bikers, businessmen, hippies,
+                               rock_band.                                 [SHIPPED, UNVERIFIED]
+  scvisitor offer              Host only. Send the bulk offer now.        [SHIPPED, UNVERIFIED]
+  scvisitor home               Host only. End the visit and unwind.       [SHIPPED, UNVERIFIED]
+  scvisitor detect             Why the module is or is not running.       [SHIPPED, UNVERIFIED]
+
+  OUTPUT LOCATIONS
+  ----------------------------------------------------------------------------------------------
+  Settings         <GameDir>\UserData\Expansions.cfg
+  Probe report     <GameDir>\UserData\Expansions-Probe-<yyyy-MM-dd_HH-mm-ss>.md
+  Probe sidecar    <GameDir>\UserData\Expansions-Probe-<timestamp>-avatars.json
+  Probe journal    <GameDir>\UserData\Expansions-Probe-journal.log
+  Probe quarantine <GameDir>\UserData\Expansions-Probe-quarantine.txt
+  Driver roster    <save>\Modded\Saveables\hireable_drivers.json
+                   (the route ROWS themselves live in the vanilla save, not here -- see 5)
+  Police heat      <save>\Modded\Saveables\expansions_police.json
+  Group state      <save>\Modded\Saveables\special_customers.json
+  Tutorial         <save>\Modded\Saveables\ExpansionsTutorial\ (+ TutorialChapter)
+
+  All of the Modded\Saveables\ subtree is written by S1API and is never swept by vanilla's
+  DeleteUnapprovedFiles.
+
+==================================================================================================
+ 3.  EXPANSIONS CORE                                                  [SHIPPED]   v0.1.0
+==================================================================================================
+
+  The shared framework the three expansion mods hang off. Deployed as Expansions.Core.dll into
+  UserLibs (not Mods) -- MelonLoader scans UserLibs first and registers it as a shared assembly
+  resolution directory, so all three mods bind to one copy. It is a plain library, not a MelonMod:
+  each expansion mod forwards its MelonLoader callbacks into Core, the first caller becomes the
+  frame "driver", and the rest are ignored. One fan-out per frame whether you have one mod
+  installed or three.
+
+  Core holds ZERO compile-time references to Assembly-CSharp or FishNet. Every game type is
+  reached by name through GameReflection. A renamed game type produces a logged warning, never a
+  TypeLoadException that would stop Expansions.Core.dll loading and take all three mods with it.
+
+  Core applies NO Harmony patches of its own.
+
+  --------------------------------------------------------------------------------------------
+  3.1  MODULE REGISTRY AND LIVE TOGGLES                                            [SHIPPED]
+  --------------------------------------------------------------------------------------------
+  - Every expansion registers as a module with a stable id, display name, version, description
+    and config category. The menu lists them sorted by display name, so the order is stable
+    regardless of MelonLoader's load order.
+  - Each module gets an "enabled" setting, default on, persisted to Expansions.cfg. Modules never
+    declare it themselves.
+  - Toggling is live and reversible in BOTH directions -- from our menu, from a third-party
+    mod-settings phone app, or by hand-editing the .cfg while the game is running.
+  - Each module gets its own Harmony instance, "com.evan.expansions.<module_id>". Disabling
+    unpatches only that module. Objects and subscriptions registered with the module's Lifetime
+    are disposed in reverse order.
+  - Registration is defensive: duplicate ids, categories containing a dot, categories colliding
+    with the shared one, and already-claimed categories are all rejected with a warning rather
+    than an exception. One bad mod cannot take down the others.
+  - A module that throws 10 times in a frame hook during one enable cycle is switched off for the
+    session. The PERSISTED toggle stays ON, so it retries next launch.
+  - Core warns in the log if an expansion assembly is missing [assembly: HarmonyDontPatchAll],
+    because MelonLoader would then auto-patch it under its own Harmony id and the reversible
+    toggle guarantee would silently break.
+
+  --------------------------------------------------------------------------------------------
+  3.2  THE EXPANSIONS SCREEN                                                       [SHIPPED]
+  --------------------------------------------------------------------------------------------
+  One screen, two entry points: the "Expansions" main-menu nav entry, and F7 in-game.
+
+  Layout:
+      Heading "EXPANSIONS"
+      Tab strip: [ Actions ] [ Tutorial ] [ Mods ]   -- opens on Actions
+      Page area
+      Output pane (Actions tab only)
+      Footer: Diagnostics, Close, hint line
+
+  - Built at runtime in uGUI/TMP by cloning live game GameObjects. No asset bundle, no shipped
+    fonts, no shipped sprites -- this build has no loadable UI asset path, so cloning is the only
+    option, and it also means the screen inherits the exact TMP font asset, SDF material, palette
+    and hover behaviour the game uses.
+  - Lives on its own DontDestroyOnLoad overlay canvas (sorting order 30000), which is why the same
+    code serves the main menu and the in-game hotkey. Rebuilt on scene change; fonts, sprites and
+    sounds re-harvested per scene.
+  - Panel width switches with the tab: 640px for Actions and Tutorial (an action row carries a
+    sentence and a button side by side, and a probe report path is 100 characters that must not
+    truncate), and the measured 374px for the module cards, which are pixel-matched to the game's
+    own and would stretch if widened. Three tabs at 104px plus two 6px gaps is 324, which still
+    clears the narrow panel's inner width.
+  - PANEL HEIGHT DERIVES FROM THE DISPLAY: 90% of Screen.height / canvas.scaleFactor, clamped
+    between 360 and 1000 canvas pixels, and the page budget is the inverse of that. It used to be
+    fixed constants, which on a tall screen wasted the space and on a short one hid the footer.
+  - EVERY LIST SCROLLS -- actions, modules, tutorial chapters, the picker overlay and the output
+    pane all run through one ScrollView: a ScrollRect host, a masked viewport carrying a
+    TRANSPARENT RAYCAST CATCHER, top-anchored self-sizing content, and an auto-hiding scrollbar in
+    a reserved 12px gutter. The wheel is applied by hand from Input.mouseScrollDelta with
+    ScrollRect.scrollSensitivity pinned to 0, so there is exactly one implementation and it cannot
+    double-apply. Dragging and the scrollbar handle stay on the component. PgUp / PgDn / Home /
+    End / arrows work. The raycast catcher is the load-bearing part: Unity dispatches
+    IScrollHandler by walking up from the raycast hit, and a Graphic-less viewport is not a
+    raycast target, so before this fix the wheel silently did nothing anywhere on the screen.
+  - Mods tab: one card per registered module with name, version, description and an
+    Enabled/Disabled toggle, in a scrollable list. With nothing installed it says "No expansion
+    mods are installed."
+  - Tutorial tab: the whole-line controls in a toolbar (Start / Restart, Reset, Enable all,
+    Disable all) over one row per chapter, each with its own on/off switch. See 4.7.
+  - GAMEPLAY INPUT IS SUSPENDED while the screen is open, by reading the game's own
+    StateProperties.UIDefault preset and calling StatePropertiesTransitionHandler.Transition,
+    saving and restoring whatever was previously applied. That is the game's own mechanism for its
+    own UI screens: it locks movement and camera look and frees the cursor. On a scene change the
+    held state is DROPPED rather than restored, so the outgoing scene's properties cannot leak
+    into the incoming one. The whole path is reflective, so a build where the type moved reports
+    itself unavailable and falls back to a per-frame Cursor.lockState write.
+  - Every game lookup degrades gracefully: a missing font falls back down a chain, a missing
+    sprite falls back to a generated rounded rectangle, missing sounds go silent.
+  - The main-menu injector waits 20 frames, then retries to frame 180. If it never injects, the
+    whole menu falls back to the IMGUI surface. If it injected once and fails on a later scene, it
+    keeps the native screen and logs that F7 still works.
+
+  --------------------------------------------------------------------------------------------
+  3.3  THE OUTPUT PANE                                                             [SHIPPED]
+  --------------------------------------------------------------------------------------------
+  Below the action list. Timestamped, colour-coded by outcome, wrapping, auto-scrolled, holding
+  the last 60 lines. Every action result, probe summary, file path and error lands here AND
+  mirrors to the MelonLoader log. Modules push into it with ActionLog.Ok / Note / Fail.
+
+  This exists because the owner cannot rely on the in-game console: an answer that only reaches
+  the MelonLoader window behind the game has, for practical purposes, not been delivered.
+
+  BOUNDED AND COLLAPSIBLE. The pane is capped at 32% of the page and has a Hide / Show control in
+  its header strip, persisted as output_pane_open. Collapsed, it is just the 26px header and the
+  list gets the rest of the page; it keeps recording either way. This was a fixed 168px slice the
+  action list could never reclaim, which with a 372px list cap and about 3,100px of action content
+  left roughly five of the then 46 actions reachable. On a 1080p display it is now about nine
+  action rows expanded and eleven collapsed.
+
+  --------------------------------------------------------------------------------------------
+  3.4  IMGUI FALLBACK MENU                                                         [SHIPPED]
+  --------------------------------------------------------------------------------------------
+  A plain IMGUI window titled "Schedule I Expansions", used only when the native screen cannot be
+  built or the main menu cannot be found. Same surface, paged rather than searchable -- TextField
+  is stripped on this build. Module list with Enabled/Disabled buttons, the action list, the probe
+  runner, a verbose-log toggle, and Close.
+
+  --------------------------------------------------------------------------------------------
+  3.5  ACTION REGISTRY (the API modules use)                                       [SHIPPED]
+  --------------------------------------------------------------------------------------------
+  Process-wide, the third registry a module contributes to alongside ProbeRegistry and
+  TutorialRegistry:
+
+      Lifetime.Add(ActionRegistry.Register(new ExpansionAction(
+          id:          "special_customers.tp_visitor",
+          label:       "Teleport to Marcus Vale",
+          description: "Puts you a step in front of the Northtown motel visitor.",
+          isAvailable: () => VisitorRuntime.StatusOf(slot).WrapperResolved,
+          invoke:      () => Teleport())));
+
+  - ActionAvailability converts implicitly from bool and from string; a string is ALWAYS a
+    refusal, and becomes the greyed-out reason shown beside the button.
+  - ActionResult converts implicitly from string and bool.
+  - Three constructor shapes: plain (Func<ActionResult>), void (Action), and picker
+    (choices: + invokeChoice:), the last of which opens a searchable list.
+  - ExpansionAction.WithDynamicLabel for a button whose verb changes with state.
+  - Group is derived from the id prefix before the first dot, resolved through the module
+    registry, so "police_overhaul.x" heads its section as "Police Improvements". group: and
+    order: override.
+  - Register returns IDisposable; RegisterAll(...) returns one token for the lot.
+  - Duplicate ids are rejected with a warning and an inert token.
+  - Availability predicates are re-read EVERY FRAME the screen is open, so anything expensive
+    sits behind a short-TTL cache: the ConsoleUI heap walk 1s, the NPC registry 2s, session state
+    0.5s, the report directory 2s.
+
+  --------------------------------------------------------------------------------------------
+  3.6  DIAGNOSTICS HARNESS                                                         [SHIPPED]
+  --------------------------------------------------------------------------------------------
+  Read-only runtime interrogation. Full probe list in section 9.
+
+  Running it:      Actions tab ("Run all diagnostics probes" / "Run one area of probes"), the
+                   footer Diagnostics button, P while the screen is open, or "expprobe".
+  Output:          <GameDir>\UserData\Expansions-Probe-<timestamp>.md, plus a sidecar
+                   -avatars.json when the avatar dump runs. The path is written into the output
+                   pane, and "Open the newest probe report" reveals it in Explorer.
+  Grep handle:     every probe emits a line "RESULT:<probe_id>:<status>".
+  Report tail:     a "Requires a mutating test" section listing the questions no read-only probe
+                   can answer -- 20 from Core plus 4 registered by Hireable Drivers -- each with a
+                   step-by-step recipe.
+  Safety:          each probe is isolated; one throwing is recorded FAILED and the run continues.
+                   The report is written even if every probe fails. Probes needing a loaded save
+                   report INCONCLUSIVE on the main menu. Every lookup is late-bound.
+  Opt-in probes:   a probe that can end the PROCESS rather than merely fail is marked explicit-
+                   only. It is skipped by bare "expprobe", by the Diagnostics button, by the
+                   Actions-tab runners and by any area or prefix selector, and additionally needs
+                   allow_mutating_probes = true and a loaded save.
+  Crash journal:   every native step of an opt-in probe writes BEGIN/END through an unbuffered
+                   write-through FileStream and flushes to disk before acting. A BEGIN with no END
+                   is promoted to Expansions-Probe-quarantine.txt on the next run, reported, and
+                   skipped from then on. Converges a bisect in about two runs instead of 31.
+
+  --------------------------------------------------------------------------------------------
+  3.7  TUTORIAL DIRECTOR                                                           [SHIPPED]
+  --------------------------------------------------------------------------------------------
+  Runs the quest line as real S1API quests, 50 XP per chapter via LevelManager.AddXPLocal.
+  Progress persists per save. Core ships every chapter as a placeholder and each feature mod
+  replaces its own with real objectives on enable -- and puts the placeholder back on disable, so
+  toggling a mod off degrades its chapter to "coming soon" rather than leaving a hole. Six
+  chapters register in this package. Full content in section 8.
+
+  IT HAS ITS OWN TAB. With 47 actions, three module cards and six chapters, one scrolling column
+  would bury all three, so the Tutorial tab carries:
+
+      Toolbar        Start / Restart (dynamic label), Reset, Enable all, Disable all
+      One row        per chapter: title, description, current state, and an on/off switch
+                     per chapter
+
+  Start / Restart and Reset are still registered as Core actions too, so nothing that used to work
+  by action id stopped working. From the main menu the line arms itself and begins on load.
+
+  PER-CHAPTER ON/OFF. A switched-off chapter shows "Skipped", the director steps over it, and it
+  contributes no journal objectives. It is deliberately NOT marked complete, so switching it back
+  on replays it rather than skipping it forever.
+
+  The switches persist as ONE comma-separated list, tutorial_disabled_chapters, under the shared
+  [Expansions] category -- not one entry per chapter. Chapters arrive at runtime from whichever
+  mods happen to be loaded, so an id belonging to a mod that is not installed has to survive the
+  round trip rather than be dropped on write.
+
+  Core's chapters were verified end-to-end in a live game (2026-08-03) -- four of them on the
+  owner's machine, three of which are the three that register here. The three feature chapters
+  have not been verified.
+
+==================================================================================================
+ 4.  THE ACTIONS SURFACE -- every action, by owning mod
+==================================================================================================
+
+  47 actions are declared across the four projects, and all 47 are expected to reach the screen.
+
+      Expansions Core .......... 16
+      Hireable Drivers ......... 13
+      Special Customers ........ 10
+      Police Improvements ....... 8
+
+  The Police group used to declare 8 and register 0. It bound Core's action API by reflection
+  against a five-argument constructor that does not exist, so every registration threw
+  MissingMethodException and the log read "Registered 0/8 police menu action(s) with Core." It now
+  calls ActionRegistry.Register with the typed API -- every mod has a ProjectReference to Core, so
+  the call is compile-checked -- and the ids were re-prefixed from police.* to police_overhaul.*
+  so the group derives the heading "Police Improvements" from the module id. Fixed in source,
+  builds clean, NOT yet seen on a screen.
+
+  Groups are sorted with Core first, then feature modules alphabetically by display name. Within a
+  group, by the action's own order value, then label.
+
+  A row marked "picker" opens a searchable overlay list instead of running immediately. The search
+  box reads Input.inputString; the screen now holds the game in its UI state, so typing no longer
+  moves the player.
+
+  --------------------------------------------------------------------------------------------
+  EXPANSIONS CORE (16)                                                             [SHIPPED]
+  --------------------------------------------------------------------------------------------
+   Enable and open the console        Turns the per-save console flag on if it is off, then opens
+                                      the window. The flag is written to the live GameSettings
+                                      immediately and reaches Game.json on the next save.
+   Enable the console                 Sets the flag without putting the window on screen.
+   Show the console key binding       Reads the live toggle binding out of the game's input asset
+                                      and reports whether the console is enabled on this save.
+   Teleport to an NPC        picker   Searchable over the live NPCManager.NPCRegistry -- reaches
+                                      every NPC including the ones our mods add. Each row shows
+                                      region, distance and save id.
+   Teleport to Marcus Vale            Direct row for expansions_sc_visitor_01. Lives in Core
+                                      rather than in Special Customers so he is reachable whether
+                                      or not that module registered anything.
+   Run all diagnostics probes         The full read-only suite. Summarises counts, prints the
+                                      report path, then lists every non-OK result.
+   Run one area of probes    picker   Areas are read off the registered probes, so a module that
+                                      adds an area gets a picker entry for free.
+   Open the newest probe report       Prints the full path, size and timestamp, then reveals it
+                                      in Explorer.
+   Show quarantined probes            Probe subjects a previous run killed the process on.
+   Clear the probe quarantine         Forgets them so the next run attempts them again.
+   Enable / Restart the tutorial      Dynamic label: "Enable the tutorial quest line" until it
+                                      has been started, then "Restart".
+   Reset tutorial progress            Cancels the live chapter quest and wipes recorded progress
+                                      for this save.
+   Show tutorial status               Which chapter is live and which objective you are on.
+   Reveal Expansions.cfg              Explorer, on the settings file.
+   Reveal the UserData folder         Where every report, journal and quarantine list is written.
+   Clear the output below             Empties the output pane. The MelonLoader log keeps
+                                      everything.
+
+  --------------------------------------------------------------------------------------------
+  HIREABLE DRIVERS (13)                                                  [SHIPPED, UNVERIFIED]
+  --------------------------------------------------------------------------------------------
+  This list is deliberately short. Hiring is on the employee-fixer NPC's own dialogue and route
+  editing is on the shipped management clipboard; what is left here is what those two surfaces
+  cannot express.
+
+   Open the drivers
+     diagnostic panel                 The F6 panel. READ-ONLY. Also reachable from here so it is
+                                      not hostage to a hotkey.
+   Hire a driver (fallback)  picker   GREYED OUT with the reason "hire drivers at <the fixer>,
+                                      with the rest of your staff" whenever the dialogue hook
+                                      took. Only offered if the mod could not add its choices to
+                                      the hiring NPC on this build. Host only.
+   Choose which driver these
+     actions apply to        picker   The clipboard always edits whoever you pointed it at; this
+                                      only scopes the rows below.
+   Choose which route row
+     to edit                 picker   The same five rows the clipboard shows, each showing its
+                                      current setup or "empty".
+   Set the route's pickup    picker   Only storage at the property the driver was hired to --
+                                      the same constraint the game's own picker now enforces.
+   Set the route's drop-off  picker   Anywhere you own, or a recruited dealer. THIS is the reason
+                                      the action survives: the clipboard's worldspace picker is
+                                      range-limited, so a cross-town warehouse or a dealer cannot
+                                      be clicked.
+   Set the departure
+     threshold               picker   Automatic (a percentage of the trunk), 5, 10, 20, 40, 80.
+                                      No vanilla field carries this, so it lives here.
+   Assign a vehicle          picker   Everything you own, plus a "No vehicle" row. Each row shows
+                                      trunk slots, the vehicle code, and whether it "drives
+                                      itself" or is "relay only".
+   Assign a route
+     automatically                    Fills route 1 from the fullest store at the driver's own
+                                      property and sends it somewhere sensible, then writes it
+                                      onto the clipboard. Host only.
+   Start a run now                    Drops the retry cooldown on every driver so they re-plan on
+                                      the next tick rather than waiting out a threshold.
+   Clear every route                  Blanks all route rows on every driver, on the clipboard
+                                      too. Cargo already in a trunk is delivered first.
+   Show the driver roster             Who is hired, what they are doing, which transport path is
+                                      in use, and whether any of it is persisting.
+   Fire a driver             picker   Ends the contract through the vanilla path. Trunk contents
+                                      stay in the trunk. Host only.
+
+  --------------------------------------------------------------------------------------------
+  SPECIAL CUSTOMERS (10)                                                 [SHIPPED, UNVERIFIED]
+  --------------------------------------------------------------------------------------------
+   Teleport to Marcus Vale            The group's advance scout, on the Northtown motel
+                                      forecourt. He is also the leader when a group is in town.
+   Teleport to the visiting
+     group                            The meeting point of whichever group is in town.
+   Send the scout back to
+     his post                         Warps him back onto the forecourt if he wandered or stuck.
+                                      Host only. See section 13 -- he has been seen off-post.
+   Bring a group into
+     town now                picker   Skips the countdown. Rows: "Whoever is due next", then each
+                                      archetype with its drugs, standards and order time --
+                                      archetypes switched off in the config say so. Host only.
+   Make the group offer now           Sends the bulk contract to your phone without waiting for
+                                      their order time. Host only.
+   Clear the group's stuck
+     order                            Drops every offer and contract the eight-visitor pool is
+                                      holding, through the shipped ExpireOffer / Expire path. The
+                                      answer to "the leader keeps saying they already have an
+                                      order pending". An accepted contract you were still working
+                                      on is expired too. Host only.
+   Why can't I sell to them?          Walks the sale from the leader's contract state through to
+                                      the phone and back -- unlocked, outstanding offer, accepted
+                                      contract, live phone responses, delivery location,
+                                      completed handovers -- and ends with one sentence saying
+                                      what to do next. Same six stages as the sc.sale_loop probe,
+                                      without writing a report.
+   Send the group home                Ends the visit early and runs the full departure unwind:
+                                      undressed, re-parked, hidden, every tuned value restored.
+                                      Host only.
+   Show group status                  Who is in town, where, when they order, when they leave,
+                                      when the next group is due, and how much of the pool is
+                                      actually in the world.
+   Show detection score               Whether the module has stood itself down because the game
+                                      looks like it ships Special Customers natively, with the
+                                      score and the full evidence list.
+
+  --------------------------------------------------------------------------------------------
+  POLICE IMPROVEMENTS (8)                                                [SHIPPED, UNVERIFIED]
+  --------------------------------------------------------------------------------------------
+   Police: show heat                  Heat, tier, outlaw status, the driven law intensity against
+                                      the vanilla baseline, and the officers-per-post band.
+   Police: heat +25                   Raise heat by 25, for walking the tier ladder without
+                                      committing 25 crimes.
+   Police: set heat to 100            Straight to the Federal band.
+   Police: clear heat                 Drop to zero. The world returns to exactly vanilla within
+                                      one game minute.
+   Police: next outlaw tier           Force Clean to Marked, or Marked to Hunted.
+   Police: clear outlaw status        Drop one tier and pull heat back under the latch threshold.
+   Police: spawn federal agent        Dispatch a plain-clothes team to your position now, or say
+                                      why this build cannot.
+   Police: reset all police state     Wipe every heat record, clear outlaw, withdraw agents, put
+                                      the world back to vanilla.
+
+  All eight grey themselves out with "needs a loaded save with the module running" until the
+  module has wired into a game.
+
+  THE REGISTRATION BUG IS FIXED. Round 1 of playtesting confirmed the predicted failure: the log
+  read "Registered 0/8 police menu action(s) with Core" and there was no Police heading on the
+  Actions tab. The cause was that this module reached Core's action API by reflection --
+  Activator.CreateInstance with (string, string, string, Func<bool>, Action) -- and
+  ExpansionAction has no constructor of that shape, because its availability parameter is
+  Func<ActionAvailability>. Every call threw MissingMethodException, caught per action, so nothing
+  crashed and everything else in the module kept running.
+
+  It now calls ActionRegistry.Register directly with the typed API. The module has a
+  ProjectReference to Core, so there was never a reason to go through reflection and the call is
+  now compile-checked. The ids also moved from police.* to police_overhaul.*, because the group
+  heading is derived from the id prefix and resolved against the module id -- "police" did not
+  match module id "police_overhaul", so even a successful registration would have produced an
+  untitled section.
+
+  Check 1 in section 12 confirms it.
+
+==================================================================================================
+ 5.  HIREABLE DRIVERS                                       [SHIPPED, UNVERIFIED]   v0.4.0
+==================================================================================================
+
+  Module id:        hireable_drivers
+  DLL:              Expansions.HireableDrivers.dll  -->  Mods\
+  Config category:  HireableDrivers_01_Main
+  Size:             34 source files, ~5,970 lines
+  Contributes:      13 actions, 9 probes, 4 mutating-test notes, 7 Harmony patches, 24 settings,
+                    a 6-objective tutorial chapter, one save blob
+
+  v0.4.0 REWORKED THE ENTIRE SURFACE. In v0.3.0 you hired a driver from a menu action and edited
+  routes in a custom IMGUI panel on F6. Both are gone. You now hire a driver from the
+  employee-fixer NPC's own conversation, and you edit routes on the game's own management
+  clipboard -- the same clipboard, the same five rows, the same worldspace endpoint picker every
+  other employee uses. F6 is now a read-only diagnostic view. If you are reading an older revision
+  of this document, the F6 panel and the route-editing actions it describes no longer exist.
+
+  WHAT IT IS
+  --------------------------------------------------------------------------------------------
+  You already have Handlers who shuffle items around inside one property. A Driver does the same
+  job BETWEEN properties, businesses and dealers, using one of your cars. Same hiring, same wages,
+  same bed requirement, same five-route grammar. The only new verbs are "assign a vehicle" and
+  "depart when the trunk holds N items" -- which is the dev's own wording from Community Vote #2.
+
+  A driver is a real vanilla Packager (EEmployeeType.Handler) whose packaging brain is suppressed
+  during a trip and whose movement a managed state machine owns. It is NOT a new Employee
+  subclass: FishNet's weaver runs at build time only, so an injected subclass would get no RPCs,
+  no SyncVars and no spawnable prefabId, and Employee.Initialize would never replicate its name,
+  appearance or assignment.
+
+  HIRING -- ON THE FIXER'S OWN DIALOGUE, WITH ZERO HARMONY PATCHES
+  --------------------------------------------------------------------------------------------
+  The employee-hiring NPC's DialogueController_Fixer gets ONE EXTRA INTERACTION CHOICE PER
+  PROPERTY, added through the game's public DialogueController.AddDialogueChoice -- the same
+  extension point the shipped controllers use for "Give them product".
+
+      Hire a driver for the Barn ($1,800)
+      Hire a driver for the Docks Warehouse ($1,800, 2 slots)
+
+  The game draws them in its own list with its own font, sounds and gamepad handling, re-runs each
+  entry's visibility check every time you open the conversation, and fires the choice through its
+  own click path. Selection works because it is the game's selection. Consequences:
+
+     - A property with no free driver slot IS NOT OFFERED. The fee and the free-slot count are
+       recomputed by the visibility check every time the conversation opens, so the label is never
+       stale.
+     - Nothing is grafted onto the dialogue GRAPH. Node links live in ScriptableObject data the
+       mod cannot author, so a choice that routed into a new conversation branch would dead-end.
+       These are action-only choices: Conversation is left null and the choice simply runs its
+       onChoosen event.
+     - The attach is retried from the tick pump for 40 attempts, because the Fixer is a scene
+       object that is not guaranteed to be awake when the scene-loaded event fires. If it never
+       takes, the log says so and the Expansions menu's "Hire a driver (fallback)" action ungreys
+       itself. That action is greyed out with a pointer to the fixer whenever the hook DID take,
+       deliberately: an always-available menu shortcut would quietly become the path everyone
+       uses and the native surface would rot.
+
+  DRIVER SLOTS ARE A SEPARATE BUDGET FROM EMPLOYEE CAPACITY
+  --------------------------------------------------------------------------------------------
+  One driver per property regardless of how many botanists, handlers, chemists and cleaners are
+  already there; two at the docks warehouse, because that is the freight property.
+
+     driver_slots_per_property = "*=1,dockswarehouse=2"
+     drivers_use_employee_capacity = false      (default -- flip it to spend real employee slots)
+
+  Keys are real Property.propertyCode values, read out of shipped save data rather than guessed
+  from display names: barn, bungalow, dockswarehouse, manor, motelroom, rv, seweroffice,
+  storageunit, sweatshop, and the businesses carwash, laundromat, postoffice, tacoticklers. "*"
+  is the fallback for anything unlisted, and a value is clamped 0-16.
+
+  UPKEEP
+  --------------------------------------------------------------------------------------------
+     Signing fee        $1,500 base, plus $100 for every employee you already own, counted across
+                        ALL your properties -- the same escalation the shipped employees use.
+                        Between the shipped Handler ($1,000) and Chemist ($2,000).
+     Daily wage         $250/day, drawn from the bed's locker by the vanilla wage pipeline. There
+                        is no separate driver economy.
+     Bed                Required by default. Without one the driver refuses to work and says so
+                        on the clipboard. require_bed_and_wage = false lifts it.
+     Working hours      07:00 to 04:00, the shipped day window.
+     Curfew             Ignored by default, matching the shipped rule that dealers cannot be
+                        arrested. respect_curfew = true makes them stop.
+     Vehicle            A new driver auto-claims the first unclaimed vehicle you own, so a route
+                        works straight away. A driver whose van was sold picks up another as soon
+                        as one is free. A vehicle is claimed for the duration of a trip, so two
+                        drivers cannot fight over one van.
+
+  ROUTES -- EDITED ON THE SHIPPED CLIPBOARD
+  --------------------------------------------------------------------------------------------
+  A driver is a Packager, so the shipped PackagerConfigPanel already binds five RouteEntryUI rows
+  to PackagerConfiguration.Routes. The mod lets that field own the routes, which buys the real
+  in-world source/destination picker, the transit-line preview, the item-filter screen, FishNet
+  replication and vanilla save/load for free, rather than a mod list that only looks like one.
+
+  Point the clipboard at a driver and you get Bed, Stations and Routes. Stations is refused with
+  a reason ("Drivers run transit routes, not stations.") because a station assigned to a driver
+  would silently never be worked. The five Route rows are the editor:
+
+     From          Storage at THE PROPERTY THE DRIVER WAS HIRED TO. Shelves, racks, packaging
+                   stations, presses, pots, mushroom beds, drying racks, ovens, cauldrons, mixing
+                   and chemistry stations, loading docks.
+     To            Any of the above ANYWHERE YOU OWN, or a recruited dealer.
+     What          The vanilla item filter, or blank for "anything the source holds".
+     Depart at     Item count. Not a vanilla field, so it lives on the Expansions menu.
+                   0 means automatic: default_depart_threshold_percent of the trunk's capacity.
+     On / off      Per row.
+
+  PICKUP IS PINNED TO THE HIRING PROPERTY, ENFORCED IN THREE PLACES: inside the game's own
+  worldspace picker (a postfix on RouteEntryUI.ObjectValid, so hovering an invalid container shows
+  "Driver X only collects from the Barn" and clicking it does nothing), on every pull from the
+  clipboard, and on load, where a violating route from an older save or a co-op peer is rejected
+  and logged. That is the whole point of hiring at a property.
+
+  DESTINATIONS ARE WIDENED, not narrowed: the same postfix OVERTURNS vanilla refusals for any
+  entity that accepts items, because a Handler may only route within its own property and a driver
+  crossing town is the entire feature. It only overturns refusals about REACH -- a destination
+  that is already this route's own pickup is still nonsense and keeps the vanilla message.
+
+  The clipboard's picker is range-limited, so a warehouse on the other side of town cannot be
+  clicked and a dealer is not an ITransitEntity at all. Those two cases are why the Expansions
+  menu keeps a drop-off picker.
+
+  MIRRORING. The transport loop reads DriverRecord.Routes, so the vanilla field is mirrored into
+  it once per tick by POLLING, not by subscribing to RouteListField.onListChanged -- that event is
+  a UnityEvent<T> over a game generic, and a collected interop delegate fails silently, which is
+  the one failure mode this module refuses to ship. A record written before v0.4.0 pushes its
+  routes onto the clipboard once (RoutesOnClipboard), and after that the clipboard is the record
+  of truth: deleting a row there deletes it.
+
+  A row also times out: depart_after_game_hours (default 4) sends a partly-loaded van rather than
+  letting a slow source deadlock the route. 0 waits forever.
+
+  A route is skipped, not failed, when the source has nothing matching, the destination is not
+  accepting items, or a dealer destination is already stocked to the cap.
+
+  THE TRANSPORT DECISION -- the load-bearing part                                  [UNVERIFIED]
+  --------------------------------------------------------------------------------------------
+  The whole feature turned on one fact nobody could settle from metadata: whether civilian vehicle
+  prefabs actually carry a VehicleAgent. It is inspector-wired, only police consumers appear in
+  the dumps, and it cannot be added at runtime. Rather than bet on it, the mod decides PER TRIP,
+  PER VEHICLE and carries both paths:
+
+     DRIVE   The game's own autonomous stack. Navigate on the A* road graph, DriveFlags for
+             per-trip style, a reverse-then-teleport stuck ladder, Park at the far end.
+     RELAY   The van and driver relay to the far end after a travel-time delay derived from
+             straight-line distance -- the same abstraction the game already uses for its own
+             supplier deliveries.
+
+  VehicleApi.CanSelfDrive requires a VehicleAgent AND both Seekers AND a VehicleTeleporter. A
+  non-null Agent alone is not trusted, because a half-wired one would fail mid-road.
+
+     transport_mode = auto     drive when the vehicle qualifies, otherwise relay  (default)
+     transport_mode = drive    driving only; a trip refuses if the vehicle cannot
+     transport_mode = relay    always relay, skipping the per-trip check
+
+  BOTH PATHS DELIVER. Only the cross-town leg differs. Collection, deposit, slot locking, capacity
+  checks, wages, persistence and the time-skip snap are shared code.
+
+  THE TRIP STATE MACHINE
+  --------------------------------------------------------------------------------------------
+     Idle -> ToSource -> AtSource -> Loading -> ToDestination -> AtDestination -> Unloading
+          -> GoingHome -> Idle,  with Recovering as the failure exit
+
+  Notes on the ones that are not obvious:
+
+     AtSource /       Walks to the entity's reachable access point. After 20 in-game minutes of
+     AtDestination    not arriving it warps the last stretch, because storage behind a door the
+                      NavMesh will not path through is otherwise a permanently dead route.
+     Loading          Moves a batch every LoadMinutesPerStop/6 in-game minutes. Departs when the
+                      threshold is met, the source runs dry, patience runs out, or three
+                      consecutive transfers move nothing.
+     Unloading        Anything that will not fit at the far end STAYS IN THE TRUNK, which is a
+                      real container you can open. Nothing is destroyed or dropped. The driver
+                      files a clipboard issue naming what is stuck.
+     Recovering       Files a clipboard issue with a reason and a fix, releases the vehicle claim
+                      and any slot locks, hands movement back to vanilla, and cools down 60
+                      in-game minutes.
+
+  Every refusal writes a one-line status the panel and the roster action show verbatim: "No
+  vehicle assigned.", "Needs a bed and a day's wage in it.", "Off shift. Drivers work 07:00 to
+  04:00.", "Nothing to move -- the source is empty or the destination is full."
+
+  DEALERS AS DESTINATIONS
+  --------------------------------------------------------------------------------------------
+  A recruited dealer can be a route destination. Delivery is a single atomic tick through
+  AddItemToInventory, capped at dealer_topup_cap (10, matching the dealer's ten inventory slots).
+  The dealer's home building is the parking anchor. No slot reservation is taken, because a dealer
+  inventory is not a TransitEntity.
+
+  SLEEP AND TIME SKIPS
+  --------------------------------------------------------------------------------------------
+  A trip in flight when the clock jumps is collapsed to its end state in one pass -- collect to
+  threshold, snap the outbound leg, deposit, snap the homeward leg -- exactly as the game's own
+  NPCSignal_DriveToCarPark.JumpTo does. You wake up to "Delivery completed while you slept", not
+  a van abandoned mid-junction. If anything in that resolution throws, the driver is parked at
+  home instead and the trip is reset.
+
+  THE F6 PANEL -- READ-ONLY DIAGNOSTICS
+  --------------------------------------------------------------------------------------------
+  This used to be the route editor. It is not any more. What a clipboard cannot show is WHY a
+  driver is standing still, so that is all this is:
+
+     - Per-property driver slot usage.
+     - Each driver's state and, if it is not working, the reason in its own words.
+     - The route rows exactly as the transport loop currently reads them, flagging any endpoint
+       that no longer resolves.
+     - Binding failures.
+
+  Still IMGUI and still absolute-rect GUI.Box / GUI.Label / GUI.Button, because this build strips
+  TextField and breaks DrawTexture, and a diagnostic view has no business owning a canvas. 720 x
+  520, Escape or F6 closes it.
+
+  HARMONY PATCHES (7)
+  --------------------------------------------------------------------------------------------
+     Packager.UpdateBehaviour            prefix, SKIPPING -- the only skipping prefix in the mod.
+                                         It is the per-tick work dispatcher, and there is no other
+                                         way to stop the packaging brain issuing its own movement.
+                                         Suppressed ONLY DURING A TRIP: the vanilla dispatcher
+                                         also carries bed-and-wage bookkeeping, and a permanently
+                                         suppressed driver is never marked paid, so CanWork()
+                                         stays false forever.
+     Packager.ShouldIdle                 postfix -- never idle mid-trip
+     Packager.IsAnyWorkInProgress        postfix -- report busy mid-trip
+     Packager.Fire                       postfix -- tear the driver down when fired by vanilla
+     Packager.GetTransitRouteReady       postfix -- returns null for a driver, so the packaging
+                                         brain never sees one of our routes as ready. Without it
+                                         the Handler would walk a same-property route on foot
+                                         while the driver was planning the same trip by road. A
+                                         postfix rather than a skipping prefix because the
+                                         original still has to assign its out parameter.
+     PackagerConfiguration.IsStationValid  postfix -- drivers have no stations, with a reason
+     RouteEntryUI.ObjectValid            postfix -- the endpoint rule, applied inside the game's
+                                         own worldspace picker: pickup pinned to the hiring
+                                         property with a refusal message, destinations widened to
+                                         anything that accepts items
+
+  There are NO Harmony patches for hiring. That is entirely the game's public
+  AddDialogueChoice API.
+
+  A patch that fails to apply is survivable: with no stations and no vanilla routes assigned, an
+  unsuppressed Handler brain finds nothing to do and idles. The drivers.bindings probe reports
+  which applied and which were skipped.
+
+  PERSISTENCE
+  --------------------------------------------------------------------------------------------
+  Split, deliberately:
+
+     Routes                 in vanilla PackagerConfiguration.Routes, saved and replicated by the
+                            game. That is what buys the real clipboard UI.
+     Everything else        in the mod's own blob at
+                            <save>\Modded\Saveables\hireable_drivers.json: which employees are
+                            drivers, which property each was hired to, the assigned vehicle GUID,
+                            the departure thresholds and dealer destinations the vanilla row
+                            cannot express, and the trip counters.
+
+  The v0.3.0 design put routes in the private blob too, to keep the Handler brain from finding
+  real work to fight the state machine over. That risk is now retired by the
+  GetTransitRouteReady postfix instead, which is a better trade: the blob bought nothing a player
+  could see, and the vanilla field buys the whole editor.
+
+  The roster is rebuilt from scratch on load rather than merged, because the deserialised records
+  are new objects and a stale brain would keep editing the previous save's copy.
+
+  INTEROP DISCIPLINE
+  --------------------------------------------------------------------------------------------
+  No cached interop delegates anywhere. The mod polls AutoDriving,
+  NavigationCalculationInProgress, distance and GetIsStuck() rather than subscribing a
+  NavigationCallback -- a collected interop callback silently never fires, and a delivery that
+  never completes is worse than one that takes a polling tick longer. The clock is derived from
+  two integer reads per tick instead of subscribing to onSleepStart / onTimeSkip.
+
+  PROBES (9, report area "9. Hireable Drivers")
+  --------------------------------------------------------------------------------------------
+     drivers.vehicle_agent    Do the vehicles you own carry a usable VehicleAgent? Tables every
+                              owned vehicle AND every prefab with a yes/no and a reason.
+     drivers.transport_path   Which path is active, why, and at what relay pace.
+     drivers.roster           Who is hired, state, vehicle, trips, items, and whether the save
+                              store was ever built by S1API.
+     drivers.routes           Does every assigned route still resolve? Per row: ok / waiting /
+                              broken, with the reason.
+     drivers.endpoints        What a route can point at, how much stock each source holds, and
+                              whether there is anywhere to park.
+     drivers.bindings         Did all 27 tracked game types resolve, did the 7 patches apply, and
+                              did the 13 menu actions register? Lists every member that would not
+                              bind.
+     drivers.wages            What the shipped Handler prefab charges against what drivers charge.
+     drivers.hiring_desk      Did "Hire a driver" reach the employee-hiring NPC, and how many
+                              slots are free? Fails if no DialogueController_Fixer is in the
+                              scene; inconclusive if the NPC exists but would not take a choice.
+     drivers.clipboard        Are the management clipboard's route rows really driving this mod?
+                              Reports whether the ObjectValid patch landed, so you know the source
+                              constraint is showing in the game's own picker.
+
+  Plus 4 mutating-test notes appended to the report: HD-P2 (does EnterVehicle seat an employee),
+  HD-P3 (does Navigate drive with no player nearby), HD-P4 (cross-property reachability), HD-P7
+  (does a checkpoint stop an NPC-driven van).
+
+  NOTE ON THE REPORT: both this area and Police Improvements are titled "9." in source, so the two
+  headings sort adjacently rather than as 9 and 10. Cosmetic; it does not affect any probe.
+
+==================================================================================================
+ 6.  POLICE IMPROVEMENTS                                    [SHIPPED, UNVERIFIED]   v0.2.0
+==================================================================================================
+
+  Module id:        police_overhaul
+  DLL:              Expansions.PoliceOverhaul.dll  -->  Mods\
+  Config category:  PoliceImprovements_01_Main
+  Size:             27 source files, ~3,900 lines
+  Contributes:      8 actions, 5 probes, 18 Harmony patch targets, 23 settings, a 5-objective
+                    tutorial chapter, one save blob
+
+  The menu-action registration bug found in playtest round 1 is FIXED -- see the end of section 4.
+  All 8 actions now register through Core's typed API under ids prefixed police_overhaul.*, which
+  is also what gives the group its "Police Improvements" heading. Fixed in source; not yet seen on
+  a screen.
+
+  THE CORE IDEA
+  --------------------------------------------------------------------------------------------
+  The game has no heat system, no persistent law reputation and no jail. What it DOES have is a
+  complete, designer-authored, minute-ticked law scheduler covering patrols, checkpoints,
+  sentries, vehicle patrols and curfew -- every entry of which gates itself on one integer,
+  LawController.LE_Intensity.
+
+  So this mod does not build a parallel police spawner. It keeps a persistent per-player HEAT
+  scalar, maps it onto that integer and the schedule data behind it, and lets the game's own
+  scheduler put the officers out. Every write is RAISE-ONLY against the designer's own numbers, so
+  AT HEAT 0 THE WORLD IS EXACTLY VANILLA. internalLawIntensity is never written, so Law.json stays
+  byte-identical and disabling the module leaves the save unchanged.
+
+  --------------------------------------------------------------------------------------------
+  PILLAR 1 -- HEAT                                                    enable_dynamic_intensity
+  --------------------------------------------------------------------------------------------
+  A 0-100 float per player, persisted to <save>\Modded\Saveables\expansions_police.json. It
+  deliberately survives sleeping -- otherwise it would be a rename of the shipped wanted level,
+  which sleeping wipes.
+
+  WHAT RAISES IT
+     Committing a crime      the game's own fine for that crime x 0.2, times quantity. The fine
+                             values are read from PenaltyHandler AT RUNTIME, so the mod inherits
+                             the game's own severity ranking and re-calibrates itself to future
+                             balance patches instead of carrying its own opinion.
+     Getting arrested        +15
+     Completing a deal       +1 per $2,000 of contract payment, capped at +15 per in-game day
+     During curfew           crime heat x1.5
+     By district             Uptown / Suburbia x1.25 -- Downtown / Westville x1.0 --
+                             Northtown / Docks x0.85
+
+  With the shipped fine table that works out as: $5 possession -> +1, $50 evading -> +10, $100
+  curfew violation -> +20, $150 attempting to sell -> +30.
+
+  WHAT LOWERS IT
+     Sleeping           heat_decay_per_day (10) per slept day, NET of whatever already drained
+                        live, so a clean day always totals exactly the daily figure
+     Lying low          heat_decay_per_clean_minute (0.004) per clean in-game minute, delivered
+                        live so the read-out visibly rewards keeping your head down
+
+  THE FIVE TIERS
+     Tier              Heat     Officers/post   Checkpoint window   Detection   Search x   Fine x
+     ---------------   ------   -------------   -----------------   ---------   --------   ------
+     T0  Calm           0-19    1 / 1           shipped               1.00        1.00      1.00
+     T1  Alert         20-39    1 / 2           shipped               1.10        1.25      1.25
+     T2  Crackdown     40-59    2 / 3           +/- 2 h               1.25        1.50      1.50
+     T3  Task Force    60-79    2 / 4           +/- 6 h               1.50        2.00      1.75
+     T4  Federal      80-100    3 / 4           +/- 12 h              1.75        2.50      2.00
+                                                                     (memory 2.0 at T4)
+
+  The officer bands are a FLOOR, never a ceiling: callers take the larger of the band and the
+  designer's own number for that post. A mod called "police improvements" must never quietly staff
+  a checkpoint more thinly than the base game did. T1 is exactly vanilla -- v0.4.6 shipped "1-2
+  officers instead of 2 all the time". 4 is the game's own hard dispatch cap and is never
+  exceeded.
+
+  Heat adds heat/12.5 x intensity_scalar (capped at +8) to the vanilla intensity baseline, clamped
+  into the game's own 1-10 range.
+
+  --------------------------------------------------------------------------------------------
+  PILLAR 2 -- WHICH LEVERS ACTUALLY GET PULLED
+  --------------------------------------------------------------------------------------------
+  This is where the design met reality. Of the 31 police tuning statics the plan wanted to
+  modulate, 28 turned out to be C# consts that IL2CPP inlined -- writing one is not just useless,
+  it can kill the process (see section 13). Only three are real writable statics:
+  VisionCone.UniversalAttentivenessScale, VisionCone.UniversalMemoryScale, and
+  LawManager.DISPATCH_VEHICLE_USE_THRESHOLD.
+
+  So the module drives the world through instance-level and patch-level twins instead:
+
+     Officers per post    the schedule data's own MinMembers / MaxMembers, plus a raise-only
+                          clamp on PoliceStation.Dispatch          (enable_schedule_tuning)
+     Checkpoint hours     widening the shipped windows on the same schedule data
+     Detection            per-officer VisionCone.RangeMultiplier and BodySearchChance -- these
+                          are INSTANCE fields and cannot be const-inlined
+     Everything else      18 Harmony patch targets on the decision methods themselves
+
+  The module is built so the writable-static count can be ZERO and every pillar still works. The
+  police.levers probe reports which statics were writable on your build and which fallbacks are
+  carrying the load. Both the schedule numbers and the per-officer values are snapshotted on
+  enable and written back on disable, and the restore ends in CurrentSettings.Evaluate() so the
+  game re-derives the whole world once from fully vanilla data.
+
+  --------------------------------------------------------------------------------------------
+  PILLAR 3 -- CONSEQUENCES                                                   enable_consequences
+  --------------------------------------------------------------------------------------------
+  The shipped arrest is nearly free: $5-$150 per charge, cash only, no debt if you cannot pay, and
+  vehicle cargo untouched entirely. This closes that.
+
+     Fine multiplier        the tier multiplier above, times outlaw_fine_multiplier (2.0) while
+                            outlawed
+     Notice honesty         the surcharge is added to the arrest notice's own penalty list, so
+                            the number you read is the number you pay
+     Confiscation scope     the stealth argument on RecordPossession and ConfiscateItems is
+                            widened, so Advanced packaging stops being a get-out-of-jail card
+     Vehicle cargo          contraband in the vehicle you were arrested next to is seized, with a
+                            notification naming how many stacks   (confiscate_vehicle_cargo)
+     Cash, THEN DEBT        the fine takes your cash; anything you cannot cover is taken out of
+                            your ONLINE balance                    (enable_debt)
+
+  THE DEBT LEVER IS THE REAL DIFFICULTY KNOB. Everything else is texture. The shipped economy
+  makes cash abundant and online balance scarce -- $10,000/week of ATM deposits, $20,000/24h of
+  laundering. A $300 cash fine against a $50,000 pile is nothing; $300 off the online balance is
+  the only currency you cannot simply go and earn faster.
+
+  Self-calibrating charge: the module measures your cash across the arrest notice opening and
+  closing, and charges only the shortfall. If vanilla already charged, it tops up; if vanilla
+  charged nothing, it charges in full. It logs which it learned, and the police.world_state probe
+  reports it as "Base game charges its own fine: yes / no / unknown until the first arrest". This
+  retired an open risk without needing a probe.
+
+  --------------------------------------------------------------------------------------------
+  PILLAR 4 -- OUTLAW STATUS                                                        enable_outlaw
+  --------------------------------------------------------------------------------------------
+  Heat is the pressure; Outlaw is the phase change. A latched three-state ladder that changes
+  RULES rather than the world.
+
+     CLEAN  -> MARKED     heat reaches outlaw_heat_threshold (90)
+     MARKED -> HUNTED     a second federal encounter, or a second arrest while outlawed
+     Down one tier        outlaw_clear_days (3) consecutive in-game days with no crimes and no
+                          arrests, or the "clear outlaw status" action
+
+  Dropping a tier also pulls heat back below the latch threshold so you do not instantly re-latch.
+
+  While outlawed: every officer is permanently flagged as knowing you on sight (a visibility label
+  the module applies and removes by name), body searches always find something, vehicle searches
+  always find something, pursuits do not evaporate on a brief loss of line of sight, and fines are
+  doubled. All of it is snapshot-and-restore from a single Revert() call.
+
+  --------------------------------------------------------------------------------------------
+  PILLAR 5 -- FEDERAL AGENTS                                              enable_federal_agents
+  --------------------------------------------------------------------------------------------
+  Mechanically the game's own PoliceOfficer type, spawned and owned by the mod. What makes them
+  different is the per-officer tuning: always search, much better eyes and memory, and they do not
+  give up.
+
+  RUNTIME VIABILITY CHECK, RUN BEFORE ANYTHING IS SPAWNED
+     1. Is "PoliceNPC" a registered FishNet spawnable? If yes, instantiate from the network
+        prefab.
+     2. Otherwise, is there a live officer to clone? If yes, clone it and re-run the FishNet
+        initialisation trio.
+     3. If neither, Spawn returns 0, the reason is logged and reported by the probe, and NO OTHER
+        PILLAR IS AFFECTED. Heat, intensity, consequences and outlaw do not depend on this.
+
+  Whether either path works on this build is genuinely unknown. The police.federal_agents probe
+  answers it read-only, but note that the clone path needs at least one live officer to exist, so
+  running it from the main menu will report "no" for the wrong reason.
+
+  SAFETY: agents are never added to PoliceStation.OfficerPool (so the vanilla dispatcher cannot
+  send a federal agent to a jaywalking call), ShouldSave is forced false for them, and they are
+  removed from both registries on despawn. They cannot reach your save.
+
+  LOOK: built by SUBTRACTION from a real officer. Drop the police cap and the marked bulletproof
+  vest, keep a plain navy vest, swap the duty belt for an ordinary belt, add a charcoal blazer,
+  Oakleys and dress shoes. Local PD reads black plus duty-belt clutter; federal reads
+  navy/charcoal. Charcoal blazers are reserved for federal agents across the whole suite -- the
+  Special Customers businessmen deliberately use navy and brown.
+
+  WHEN THEY TURN UP: heat at or above federal_heat_threshold (80) held for a full in-game day,
+  checked hourly, two agents per event, six in-game hours, two in-game days of cooldown. Or
+  immediately from the menu action.
+
+  PROBES (5, report area "9. Police Improvements")
+  --------------------------------------------------------------------------------------------
+     police.heat_state        Every player's heat, tier, outlaw status, clean-day streak, police
+                              take and minutes at federal heat. Also whether the save state is
+                              live and how many fine values were read from the running game.
+     police.levers            Which of the tuning statics are writable on this build, and which
+                              fallbacks are carrying the load.
+     police.patches           Did every one of the 18 Harmony targets resolve? Lists the misses.
+     police.federal_agents    Can this build spawn an agent, by which strategy, and why not.
+     police.world_state       What the mod is doing to the world right now: driven intensity
+                              against the vanilla baseline, officers per post, how many schedule
+                              posts and officers are snapshotted, and whether the base game
+                              charges its own fine.
+
+==================================================================================================
+ 7.  SPECIAL CUSTOMERS                                      [SHIPPED, UNVERIFIED]   v1.0.0
+==================================================================================================
+
+  Module id:        special_customers
+  DLL:              Expansions.SpecialCustomers.dll  -->  Mods\
+  Config category:  SpecialCustomers_01_Main
+  Size:             50 source files, ~7,400 lines
+  Contributes:      10 actions, 9 probes, 1 Harmony patch, 31 settings, a 5-objective tutorial
+                    chapter, one save blob (schema 2), 8 custom NPCs
+
+  ONE THING IS CONFIRMED IN A LIVE GAME AND THE REST IS NOT. Marcus Vale (slot 01) was verified as
+  a fully registered NPC on 2026-08-03: S1API wrapper, game-side NPCManager entry, GUID, mugshot,
+  world position 1 m from spawn, region Northtown. Everything built on top of him since -- the
+  seven other pool members, the archetypes, the arrival loop, the offers, the detector -- has
+  never completed a run.
+
+  Playtest round 1 got a group into town and then stuck. Two bugs, one root cause: the mod trusted
+  return values that prove nothing. Both are fixed and neither fix has run. See "THE INTERACTION
+  FIX" below.
+
+  SAVE SCHEMA WENT 1 -> 2. Old saves load fine. A save written by this build and then opened by an
+  older build of the mod drops whatever visit was in progress; a payload from a NEWER schema is
+  discarded wholesale rather than half-read, because a partially deserialised group would leave
+  visitors dressed, tuned and unreachable.
+
+  THE POOL
+  --------------------------------------------------------------------------------------------
+  Eight reusable NPC bodies (expansions_sc_visitor_01 .. _08), re-dressed per archetype rather
+  than one NPC type per archetype. Eight is about a 10% increase over the game's ~80 NPCs; thirty
+  would be 37%, and every one of them streams to every client on join. It is also exactly how the
+  game builds its own cartel goons.
+
+  Marcus Vale is the group's ADVANCE SCOUT and the only pool member visible between visits -- he
+  stands on the Northtown motel forecourt, and he is the leader when a group is in town. Slots
+  02-08 sit hidden, parked and zeroed so they generate nothing.
+
+  A Customer component is attached at PREFAB time, not after spawn. That deliberately sidesteps
+  the module's single biggest unknown -- whether a Customer added after the NetworkObject spawns
+  replicates at all -- by putting it on before S1API network-spawns the prefab.
+
+  THE VISIT LOOP
+  --------------------------------------------------------------------------------------------
+     Cadence        Every visit_interval_days_min..max (2-3) in-game days. One group at a time,
+                    ever. Weighted archetype pick, never the same group twice running while an
+                    alternative exists.
+     07:00          Region chosen by the archetype's own weights, restricted to unlocked regions
+                    (falling back to whatever IS unlocked rather than silently never visiting).
+                    Members warp in HIDDEN, then are revealed one every stagger_frames (6) --
+                    warping first means NavMesh work never lands on the same frame as avatar
+                    compositing.
+     Arrival        The leader texts the player and a map marker drops. Each archetype has its
+                    own arrival line.
+     Order time     The leader texts the bulk contract. Businessmen 14:00, hippies 11:00, bikers
+                    21:00, rock band 23:00. The offer is built with ContractInfoBuilder and handed
+                    to NPCCustomer.OfferContract -- and then the SHIPPED pipeline runs: phone
+                    accept, deal-window picker, CustomerAttendDealBehaviour, HandoverScreen,
+                    EvaluateDelivery, Contract.SubmitPayment. Real money, real quality matching,
+                    real XP, real analytics receipt.
+     While in town  Non-leader members can be approached directly for smaller walk-up deals.
+                    (allow_walkup_sales)
+     04:00          Departure. Full unwind: untuned, undressed, re-parked, hidden, marker removed,
+                    next visit scheduled.
+
+  ZERO HARMONY PATCHES IN THE CORE LOOP. The only patch in the whole mod is a prefix on
+  NPCsLoader.Load that pre-registers the visitor prefabs by explicit type name just before the
+  game reconstructs a save's NPCs. That is what makes the visitors appear in a save written BEFORE
+  the mod was installed, and it avoids S1API's blanket assembly scan, which swallows
+  Assembly.GetTypes() failures and would silently drop every visitor if any type in the DLL failed
+  to load.
+
+  THE MARGIN. The below-market rate is expressed as a smaller ContractInfo.Payment, never as a
+  patched price formula. You experience it as "they pay less per unit but they will take
+  everything". Quantities respect the shipped rounding rule (orders of 14+ snap to a multiple of
+  five) and the shipped 1,000-unit hard clamp.
+
+  THE INTERACTION FIX (2026-08-04, after playtest round 1)             [SHIPPED, UNVERIFIED]
+  --------------------------------------------------------------------------------------------
+  BUG 1 -- THE OFFER SILENTLY DID NOT SEND.  Customer.OfferContract(ContractInfo) returns VOID and
+  walks away doing nothing if that customer already holds an unanswered OfferedContractInfo or a
+  CurrentContract. The game's own string table carries the refusals: " already offered contract",
+  " already has a contract", "Customer already has a pending offer". S1API's NPCCustomer wrapper
+  around it returns TRUE whenever it does not throw, so the success value is meaningless -- and
+  the mod was latching OfferSent = true on it.
+
+  Worse, OfferedContractInfo survives save and load, so one unanswered offer wedges that customer
+  permanently until something clears it.
+
+  Now:
+     - The leader is PRE-FLIGHTED before the call, and OfferedContractInfo is READ BACK
+       afterwards. The flavour text only sends once that read confirms an offer is really there.
+     - Stale offers and contracts are cleared across the whole eight-visitor pool on group
+       ARRIVAL and on DEPARTURE, using the shipped Customer.ExpireOffer and Contract.Expire first
+       and only nulling the field as a fallback.
+     - A failed offer RETRIES up to three times per visit instead of latching.
+     - "Clear the group's stuck order" is the manual escape hatch, and "Why can't I sell to them?"
+       reports which of the six stages the sale is stalled at.
+
+  BUG 2 -- TALKING TO A VISITOR OPENED AN EMPTY DIALOGUE.  Customer.SetUpDialogue is private and
+  runs once in Customer.Start, which is BEFORE the mod writes CustomerData -- so the shipped
+  sample / deal / complete-contract choices were built against zero spend and no direct approach,
+  and a group member had a greeting and nothing else. The canvas opened on a node with no choices
+  and Escape was the only way out.
+
+  Now every member of a visiting group gets a real menu, APPENDED with AddDialogueChoice and never
+  by overriding the container -- overriding hides the shipped "complete contract" choice, which is
+  how a delivery is actually handed over.
+
+     Leader        "About the <group> order" -> send it to my phone / status / something's stuck,
+                   start over / later. Outcomes come back as an NPC line, because dialogue node
+                   text is baked at build time and cannot be written at runtime.
+     Non-leaders   "Talk business" -> "You buying?" hands off to the shipped street-deal flow
+                   (handover, real money) plus "Who's running this?". With allow_walkup_sales =
+                   false they keep the menu but only point at the leader.
+
+  Either way the conversation exits cleanly. S1API's SetupDialog() is called to re-run the
+  shipped dialogue build after customer data is written.
+
+  THE FOUR ARCHETYPES
+  --------------------------------------------------------------------------------------------
+     Name                Members  Orders  Wants               Standards  Rate   Quantity
+     -----------------   -------  ------  -----------------   ---------  -----  --------
+     The Ashfall MC          5    21:00   Meth, weed          Very low   0.80   60-90
+     The Wexler Group        5    14:00   Cocaine             High       0.92   40-60
+     The Longhaul Caravan    6    11:00   Weed AND shrooms    Low        0.85   50-80
+     Static Sermon           4    23:00   Cocaine, shrooms    Moderate   0.88   45-70
+
+     BIKERS -- The Ashfall MC.  The inventory sink: take anything, pay the least, order the most,
+        at night. Regions Northtown/Docks 3, Westville 2, Downtown 1. Charcoal open vests, combat
+        boots, sunglasses, tattoos, jeans; 35% chance shirtless so the tattoo layers read, 40%
+        chance of a gold chain. Beer in hand, loose 3 m cluster, aggressiveness 0.7.
+        "Rolled into {0}. We're only here till sunup -- you got crank or not?"
+
+     BUSINESSMEN -- The Wexler Group.  Pay closest to market, reject anything below Premium.
+        Uptown 4, Downtown 3, Suburbia 1. Button-ups, NAVY OR BROWN blazers (never charcoal --
+        reserved for federal agents), dress shoes, gold watch, 60% chance of rectangle glasses.
+        Coffee in hand, tight 1.8 m cluster, aggressiveness 0.1.
+        "We're in {0} through tonight. In the market for premium inventory."
+
+     HIPPIES -- The Longhaul Caravan.  The only mixed two-line order. Westville 3,
+        Northtown/Docks 2, Suburbia 1. Saturated lime/orange/purple V-necks -- the only brightly
+        coloured people on the street -- peace and weed tattoos, jorts, sandals, 50% round orange
+        glasses, 40% bucket hat. Joint in hand, widest 3.5 m scatter, 0.8x walk speed,
+        aggressiveness 0. Skirt variants were dropped: the wiki documents skirts clipping through
+        tucked shirts.
+        "Hey -- caravan's parked up in {0} for the day."
+
+     ROCK BAND -- Static Sermon.  Smallest group, latest order, careless with money. Downtown 3,
+        Uptown/Docks 2. Black everything, fingerless gloves, combat boots, Oakleys, chains, eye
+        shadow, one saturated hair colour per member; exactly one teardrop tattoo, assigned by
+        member index rather than by chance so the band never arrives with four or none.
+        "Two nights off in {0}. We need enough to get through both."
+
+  Each archetype's look is checked against the game's slot budget (6 face / 8 body / 9 accessory)
+  by the sc.archetypes probe, which reports how many layers each recipe uses and whether any are
+  being silently dropped.
+
+  OFFICIAL-FEATURE DETECTION AND SELF-DISABLE
+  --------------------------------------------------------------------------------------------
+  TVGS is actively building their own Special Customers as v0.5.0 and called it "not far off now"
+  in the v0.4.6 notes. Evaluated once per session on the first gameplay scene:
+
+     Game version >= disable_at_game_version (0.5.0), via the game's own parser    100 points
+     Name-substring scan of the game assembly for likely official type names        60 points
+     Structural fingerprinting of the Economy namespace against 0.4.6 baselines     40 points
+
+  Measured 0.4.6 baselines, all config-editable: Economy type count 20, CustomerData properties
+  17, ECustomerStandard members 5.
+
+  FAILS CLOSED. 100+ disables. 50-99 also disables, as ambiguous. An unresolvable version
+  disables. A false positive costs you a mod feature you can turn back on with one config line; a
+  false negative gives you two systems mutating the same Customer objects.
+
+  Self-disable is INERT: it never touches the persisted module toggle, silently unwinds any group
+  in town, and records a sticky flag in that save's blob. The reason surfaces three ways -- a
+  MelonLoader banner, the read-only detection_status config entry (which mod-settings phone apps
+  show for free), and the module card's name becoming "Special Customers (standing down -- see
+  Show detection score)". detection_mode = always_on overrides it and clears the sticky flag; a
+  save that recorded a self-disable re-checks it on load, so switching back to auto works.
+
+  PROBES (9, report area "8. Special Customers")
+  --------------------------------------------------------------------------------------------
+     sc.visitor_prefab      Did all eight prefabs register, at which FishNet ordinals? Dumps every
+                            S1API-generated spawnable in registration order -- two co-op peers
+                            must produce that list identically or their prefab ids mean different
+                            things.
+     sc.visitor_runtime     The whole pool: name, role, position, visible, mugshot. Plus the
+                            scout's GUID and BakedGUID from the game-side registry.
+     sc.visitor_impostor    Did the distance impostor bake, or is he a blank billboard past 50 m?
+     sc.visitor_appearance  Face/body/accessory layer counts against the 6/8/9 caps.
+     sc.archetypes          Can a look actually be built and applied? All four recipes against the
+                            slot budget, plus whether the AvatarSettings types resolve at all.
+     sc.group_state         Who is in town, where, and does every member have a reachable
+                            Customer component. Now per-member columns rather than a summary.
+     sc.sale_loop           THE ONE TO READ WHEN A SALE WILL NOT HAPPEN. Walks all six stages --
+                            1 customer unlocked, 2 outstanding offer, 3 accepted contract,
+                            4 offer reached the phone with live responses, 5 delivery location,
+                            6 handovers completed -- and ends with one sentence saying what to do
+                            next. Stage 4 is the definitive one: an offer message with no response
+                            buttons cannot be accepted, so it checks the leader's
+                            MSGConversation.AreResponsesActive and its response count rather than
+                            trusting that the message was sent.
+     sc.schedule            When the next group is due, and whether every unlocked region has a
+                            delivery location to meet at.
+     sc.detection           The detector's outcome, score, resolved game version and evidence.
+
+==================================================================================================
+ 8.  TUTORIAL QUEST LINE -- 6 chapters, 22 objectives in this package
+==================================================================================================
+
+  Real S1API quests, not a text file. 50 XP per chapter. Progress persists per save. Started from
+  the TUTORIAL TAB on the Expansions screen, or from the main menu (where it arms itself and
+  begins on load). Start / Restart and Reset are also still Core actions on the Actions tab.
+
+  SIX CHAPTERS, 22 OBJECTIVES, ALL OF THEM REACHABLE. Nothing in the line self-completes and
+  nothing is there to be explained away. On a machine that also has the separate mod named in the
+  orientation note, one more chapter of two more objectives slots in between Diagnostics and
+  Hireable Drivers -- seven chapters and 24 objectives there. Both numbers are given below
+  wherever they differ; this package is the six-chapter case.
+
+  HOW THE CHAPTERS ARE NUMBERED. They are not, in the code. Each chapter declares an integer
+  Order and the registry sorts on it (ties broken by chapter id), so a chapter's number is purely
+  its POSITION in that sorted list -- there is no "Chapter N" string anywhere in the suite. The
+  Order values are 100 / 200 / 300 / 400 / 500 / 600 / 700, and 400 belongs to the chapter that
+  does not register here, so the list simply closes up: Hireable Drivers, Police Improvements and
+  Special Customers are positions 4, 5 and 6 in this package and positions 5, 6 and 7 on a machine
+  with that mod. The only number the game ever shows you is the progress counter in the menu
+  footer -- "Tutorial 3/6 - <objective>" -- and its denominator counts chapters you have left
+  SWITCHED ON, so switching one off renumbers everything after it too. Do not treat the numbers
+  below as identities; the Order value and the title are the stable things.
+
+  Chapters 1-3 are Core's and were VERIFIED END-TO-END IN A LIVE GAME on 2026-08-03. So was the
+  order-400 chapter, on the machine that has its mod, where it sits fourth. Chapters 4-6 here
+  used to be placeholders reading "this chapter fills itself in as soon as the mod ships its
+  objectives"; all three now have real objectives, and none of those have run.
+
+  A chapter that cannot currently be attempted reports "coming soon" with the reason rather than
+  blocking the line -- not installed, switched off, host-only and you are a guest, the module has
+  not wired into a loaded game yet, or the mod the chapter is about is absent. The director turns
+  such a chapter into ONE objective whose title is "<chapter title>: <reason>", and that objective
+  completes itself about three seconds later so the line moves on.
+
+  EVERY CHAPTER HAS AN ON/OFF SWITCH on the Tutorial tab, plus Enable all and Disable all. A
+  switched-off chapter shows "Skipped", is stepped over by the director, and contributes no
+  journal objectives. It is deliberately NOT marked complete, so switching it back on replays it.
+  The set persists as one comma-separated list, tutorial_disabled_chapters, under [Expansions].
+
+  --------------------------------------------------------------------------------------------
+  1.  EXPANSIONS: THE MENU                                  order 100, 2 steps      [SHIPPED]
+      Close the Expansions screen  /  Reopen it with F7
+      The two objectives tick off in listed order however the screen happened to be sitting when
+      the chapter started.
+
+  2.  EXPANSIONS: MODULES                                   order 200, 2 steps      [SHIPPED]
+      Turn a module off from the screen  /  Turn the same module back on
+      Coming soon if no expansion modules are installed.
+
+  3.  EXPANSIONS: DIAGNOSTICS                               order 300, 2 steps      [SHIPPED]
+      Run the probes  /  Run them a second time
+      Two reports diff cleanly, which is how the suite settles what one read-only pass cannot.
+      The report count is baselined at chapter build time, so reports left by earlier sessions do
+      not tick objectives off before you have done anything.
+
+      Order 400 is unused in this package. It belongs to a chapter about the separate mod named
+      in the orientation note; Core registers that chapter only when the mod is actually loaded,
+      so here there is no gap, no placeholder and nothing in the journal. Install the mod and the
+      chapter appears in this slot with two real steps, pushing the three below down by one.
+
+  4.  HIREABLE DRIVERS                            order 500, 6 steps  [SHIPPED, UNVERIFIED]
+      Hire a driver from the employee fixer
+      Give the driver a bed              (on the management clipboard)
+      Give the driver a vehicle
+      Assign a route on the clipboard
+      Watch the driver set off
+      See the delivery land
+      Coming soon on a co-op guest -- drivers are host-managed.
+      The old "Open the Drivers panel with F6" objective is gone with the panel's demotion to
+      diagnostics; hiring is the first thing you do now.
+
+  5.  POLICE IMPROVEMENTS                         order 600, 5 steps  [SHIPPED, UNVERIFIED]
+      Check your heat
+      Commit a crime and watch heat climb
+      Sleep on it, and see that it does not reset
+      Push into a higher tier and feel the street change
+      Meet a federal agent
+      Coming soon until the module wires into a loaded game.
+      Step 1 completes only when the "Police: show heat" action is invoked. That action did not
+      reach the screen in playtest round 1, which stalled this chapter at objective 1; the
+      registration bug is fixed (section 4) but the fix has not been seen working.
+
+  6.  SPECIAL CUSTOMERS                           order 700, 5 steps  [SHIPPED, UNVERIFIED]
+      Wait for a group to arrive in town
+      Go and find them (within 12 m of the meeting point)
+      Receive their bulk offer
+      Accept it and pick a deal window
+      Hand the product over and get paid
+      Every step POLLS -- including reading the leader's live CurrentContract and the pool's
+      CompletedDeliveries -- so the whole shipped pipeline is observed with no Harmony patch.
+      Coming soon if the module is off, has stood itself down, or the NPCs are not in the world.
+
+==================================================================================================
+ 9.  DIAGNOSTIC PROBES -- all 41
+==================================================================================================
+
+  41 probes when all three feature mods are enabled: 18 in Core (17 always-on plus 1 opt-in), and
+  9 + 9 + 5 from Special Customers, Hireable Drivers and Police Improvements. Modules add and drop
+  their own probes through their Lifetime, so the registered set tracks which modules are on.
+
+  Per-mod probes are described in sections 5, 6 and 7. Core's 18, by report area:
+
+    1. Vehicles, drivers and employees
+       vehicles.agent_presence    Do civilian vehicle prefabs and live vehicles carry a
+                                  VehicleAgent?
+       vehicles.agent_surface     VehicleAgent's real runtime surface and kinematic threshold.
+       employees.prefab_wages     What the four employee prefabs really cost to hire and keep.
+
+    2. Police
+       police.penalty_values      The real fine and penalty values.
+       police.tuning_writability  Which of the 31 police tuning statics are real mutable fields
+                                  and which did IL2CPP inline as consts? Read-only: it reads each
+                                  field's IL2CPP attribute flags, which is the runtime's own
+                                  answer, so no write is needed.
+       police.tuning_statics      *** THE ONE OPT-IN PROBE. IT CAN END THE GAME PROCESS. ***
+                                  Confirms the above by sentinel-writing only the fields proved
+                                  writable and restoring each in a finally, inside one frame.
+                                  Needs its exact id on the command line, allow_mutating_probes =
+                                  true, and a loaded save. Journalled, so a hard crash is
+                                  attributed to one field and that field is skipped from then on.
+       police.type_surface        Does PoliceOfficer declare what the patches target, and do
+                                  LE_Intensity / Evaluate() exist?
+       police.vms_board           Can VMSBoard text be set, or is the curfew-sign idea decoration
+                                  only?
+
+    3. NPCs, spawning and appearance
+       net.spawnable_prefabs      What is in FishNet's SpawnablePrefabs, and is "PoliceNPC" one?
+       npc.avatar_dump            Dump every shipped NPC's AvatarSettings to disk (sidecar).
+       npc.asset_catalogue        Which clothing and accessory asset paths does the game use?
+       npc.avatar_shape_keys      How many arguments does Avatar.ApplyShapeKeys take here?
+       npc.customer_census        How many Customers and NPCs exist, so the visitor-pool overhead
+                                  claim can be honest?
+
+    4. Version and detection baselines
+       version.sources            Which version source is readable, and which one does
+                                  SaveManager.GetVersionNumber parse?
+       version.detection_baselines  Today's structural fingerprints for the official-feature
+                                  detector.
+
+    5. Persistence and identity
+       identity.player_code       What identifies this player and this save on disk?
+
+    6. Runtime constants
+       runtime.constants          Shipped values of the statics the plans read at runtime rather
+                                  than hard-code.
+
+    7. Environment
+       env.runtime                Which loader, API and interop assembly versions produced this
+                                  report?
+
+  RECOMMENDED FIRST RUN: load a save, run everything, then quit, relaunch, load the same save and
+  run it again. Diffing the two reports is what settles whether Player.PlayerCode is stable for
+  the same human across sessions -- an open question that decides how per-player heat is keyed.
+
+==================================================================================================
+ 10.  CONFIGURATION -- every setting in the suite
+==================================================================================================
+
+  EXPANSIONS uses one file: <GameDir>\UserData\Expansions.cfg (TOML, via MelonPreferences). Safe
+  to hand-edit while the game is running -- module toggles apply live. 86 keys across four sibling
+  top-level tables. The "_01_Main" suffix is the Schedule I community convention that third-party
+  in-game mod-settings apps (ModsApp, Prowiler's Mod Manager) key off, so following it gets these
+  an in-game settings UI for free.
+
+  The Police module's id is "police_overhaul" but its category is PoliceImprovements_01_Main --
+  the id predates the display name, and the category was overridden so it matches how the mod
+  presents itself everywhere else.
+
+  Every module automatically gets an "enabled" key (bool, default true). Modules never declare it.
+
+  ----------------------------------------------------------------------------------------------
+  [Expansions]  -- shared, 5 keys                                                    [SHIPPED]
+  ----------------------------------------------------------------------------------------------
+     KEY                        TYPE    DEFAULT  WHAT IT DOES
+     verbose_logging            bool    false    Write module debug output to the MelonLoader
+                                                 console.
+     menu_hotkey                string  "F7"     A UnityEngine.KeyCode name that opens the
+                                                 Expansions screen. "None" disables the hotkey
+                                                 entirely; an unrecognised name silently falls
+                                                 back to F7.
+     allow_mutating_probes      bool    false    Lets the diagnostics suite write native game
+                                                 memory to answer questions a read cannot. One of
+                                                 those writes can end the game process outright,
+                                                 with no managed exception and no crash log.
+                                                 Leave it off unless you are deliberately running
+                                                 a named probe on a throwaway save.
+     output_pane_open           bool    true     Whether the Actions tab shows its output pane
+                                                 expanded. Collapsed gives the whole page to the
+                                                 action list; the pane keeps recording either way.
+                                                 Written by the Hide / Show control in the pane's
+                                                 own header.
+     tutorial_disabled_chapters string  ""       Comma-separated tutorial chapter ids the line
+                                                 skips. Edited from the Tutorial tab. Ids
+                                                 belonging to mods that are not installed are kept
+                                                 verbatim, which is why this is one list rather
+                                                 than an entry per chapter. The six ids in this
+                                                 package: expansions.menu, expansions.modules,
+                                                 expansions.diagnostics, hireable_drivers,
+                                                 police_overhaul, special_customers. A seventh
+                                                 appears if the separate mod named in the
+                                                 orientation note is installed too.
+
+  ----------------------------------------------------------------------------------------------
+  [HireableDrivers_01_Main]  -- 24 keys + enabled                        [SHIPPED, UNVERIFIED]
+  ----------------------------------------------------------------------------------------------
+     KEY                               TYPE    DEFAULT  WHAT IT DOES
+     enabled                           bool    true     Load the module.
+     signing_fee                       float   1500     One-off hire cost, in cash. Vanilla
+                                                        Handler is 1000, Chemist 2000.
+     signing_fee_per_employee          float   100      Added per employee you already have,
+                                                        matching the shipped employee rule.
+     daily_wage                        float   250      Drawn from the bed locker by the vanilla
+                                                        wage pipeline, like any employee.
+     driver_slots_per_property         string  "*=1,dockswarehouse=2"
+                                                        Comma-separated <propertyCode>=<slots>;
+                                                        "*" is the default for anything unlisted,
+                                                        and each value is clamped 0-16. Real
+                                                        codes: barn, bungalow, dockswarehouse,
+                                                        manor, motelroom, rv, seweroffice,
+                                                        storageunit, sweatshop, carwash,
+                                                        laundromat, postoffice, tacoticklers.
+     drivers_use_employee_capacity     bool    false    Off: a driver slot is its own budget, so
+                                                        every property can take one however many
+                                                        other staff it already has. On: drivers
+                                                        compete for Property.EmployeeCapacity
+                                                        like everyone else.
+     max_routes_per_driver             int     5        Parity with the Handler clipboard.
+                                                        Clamped 1-10.
+     default_depart_threshold_percent  int     50       Percent of the trunk that must be loaded
+                                                        before it leaves. Used when a route row's
+                                                        own threshold is 0. Clamped 1-100.
+     depart_after_game_hours           int     4        Depart part-loaded after this long, so a
+                                                        slow source cannot deadlock a route.
+                                                        0 waits forever. Clamped 0-24.
+     load_minutes_per_stop             int     30       Load/unload time. 30 matches the shipped
+                                                        supplier logistics quantum. Transfers
+                                                        happen every sixth of this.
+     dealer_topup_cap                  int     10       Items per dealer visit. Dealers hold 10
+                                                        inventory slots. Clamped 1-50.
+     allow_dealer_destinations         bool    true     Let a route target a recruited dealer.
+     allow_spawned_vans                bool    false    Spawn a van if none is available. Off by
+                                                        default so drivers use cars you bought.
+     auto_assign_vehicle               bool    true     Give a new driver the first unclaimed
+                                                        vehicle you own, so a route works at once.
+                                                        Also self-heals a driver whose van was
+                                                        sold.
+     require_bed_and_wage              bool    true     On: a driver refuses to work unhoused or
+                                                        unpaid, exactly like other employees.
+                                                        Off: it works regardless.
+     respect_curfew                    bool    false    On: drivers start nothing new once curfew
+                                                        begins. Off matches the shipped rule that
+                                                        dealers cannot be arrested.
+     transport_mode                    string  "auto"   auto = drive when the vehicle has a usable
+                                                        VehicleAgent, else a timed relay;
+                                                        drive = driving only, refuse otherwise;
+                                                        relay = always relay.
+     relay_minutes_per_100m            float   2.5      In-game minutes per 100 m of straight-line
+                                                        distance, relay path only. Clamped
+                                                        0.1-60.
+     relay_min_minutes                 int     10       Floor on relay travel time.
+     relay_max_minutes                 int     120      Ceiling on relay travel time.
+     tick_interval_seconds             float   1.0      State machine tick rate, in real seconds.
+                                                        Clamped 0.1-10.
+     max_parking_search_radius         float   60       Metres. Clamped 5-500.
+     drive_timeout_minutes             int     90       Give up on a drive leg after this many
+                                                        in-game minutes. Clamped 5-1440.
+     panel_hotkey                      string  "F6"     Any UnityEngine.KeyCode name. Avoid F7,
+                                                        which opens the Expansions screen. The
+                                                        comment written into the .cfg also names
+                                                        a second key belonging to a mod that is
+                                                        not in this package -- see the note at
+                                                        the top of this file.
+     debug_logging                     bool    false    Logs every state transition. Useful once,
+                                                        noisy forever after.
+
+  ----------------------------------------------------------------------------------------------
+  [PoliceImprovements_01_Main]  -- 23 keys + enabled                     [SHIPPED, UNVERIFIED]
+  ----------------------------------------------------------------------------------------------
+     KEY                          TYPE    DEFAULT  WHAT IT DOES
+     enabled                      bool    true     Load the module.
+     intensity_scalar             float   1.0      MASTER SCALAR. Multiplies every heat-driven
+                                                   world effect: law intensity, officers per post,
+                                                   detection and search rates. 0 tracks heat
+                                                   without changing anything (pure telemetry
+                                                   mode). 2 is brutal. Hot-reloadable.
+     heat_gain_scalar             float   1.0      Multiplies every heat input. Heat per crime
+                                                   comes from the game's own fine table at
+                                                   runtime, so this is the only place to make
+                                                   crimes cheaper or dearer. Hot-reloadable.
+     heat_decay_per_day           float   10.0     Heat shed across one full day of lying low.
+     heat_decay_per_clean_minute  float   0.004    Live drain while you have no crimes on record
+                                                   and nobody is pursuing you. Subtracted from the
+                                                   daily amount, so a clean day still totals the
+                                                   daily figure exactly.
+     heat_from_deals              bool    true     Adds 1 heat per $2,000 of contract payment,
+                                                   capped at 15/day. Off means only crimes matter.
+     enable_dynamic_intensity     bool    true     PILLAR. Drive the game's own law scheduler from
+                                                   your heat.
+     enable_schedule_tuning       bool    true     PILLAR. Also widen the officers-per-post bands
+                                                   and checkpoint hours on the schedule data.
+                                                   Snapshotted on enable, written back on disable.
+     enable_consequences          bool    true     PILLAR. Heat- and outlaw-scaled fines, wider
+                                                   confiscation, vehicle cargo seizure, debt.
+     enable_outlaw                bool    true     PILLAR. The latched Clean/Marked/Hunted status.
+     enable_federal_agents        bool    true     PILLAR. Plain-clothes agents at very high heat.
+                                                   Viability is detected at runtime; if this build
+                                                   cannot spawn them the rest carries on.
+     max_officers_per_post        int     4        Upper bound for patrol, sentry and checkpoint
+                                                   member counts. The game refuses more than 4
+                                                   whatever this says.
+     federal_heat_threshold       int     80       Heat at which a federal event becomes eligible.
+                                                   Also has to be held for a full in-game day.
+     federal_agents_per_event     int     2        Two is a team; four is the game's dispatch cap
+                                                   and would leave no room for local police.
+     federal_event_hours          int     6        How long agents stay out. One in-game hour is
+                                                   roughly one real minute.
+     federal_cooldown_days        int     2        Minimum gap between events, so they stay an
+                                                   event rather than a permanent tax.
+     outlaw_heat_threshold        int     90       Heat at which outlaw status latches on.
+     outlaw_clear_days            int     3        Consecutive in-game days with no crimes and no
+                                                   arrests needed to drop one outlaw tier.
+     outlaw_legal_fee             int     25000    Cash cost of buying down one tier. Priced at
+                                                   the Barn, so it is a real mid-game decision.
+                                                   NOTE: bound and read, but no menu action or
+                                                   in-world surface currently spends it.
+     outlaw_fine_multiplier       float   2.0      Multiplies the fine while outlawed, on top of
+                                                   the heat-tier multiplier.
+     enable_debt                  bool    true     Any part of a fine you cannot cover in cash is
+                                                   taken out of your online balance instead. The
+                                                   single biggest difficulty change in the mod.
+     confiscate_vehicle_cargo     bool    true     Contraband in the vehicle you were arrested
+                                                   next to is taken too. Vanilla leaves vehicle
+                                                   storage untouched.
+     show_heat_hud                bool    true     Notify on every heat-tier change, outlaw
+                                                   transition and fine. Off gives a silent run;
+                                                   the menu still reports the numbers.
+     debug_logging                bool    false    Log every heat change, intensity write and
+                                                   lever decision.
+
+     The scalars are hot: intensity_scalar and heat_gain_scalar are read on every tick, so editing
+     them in the .cfg changes the game immediately. The five enable_* pillar switches are
+     structural -- they are read at wiring time, because turning a pillar off has to run its
+     snapshot restore rather than merely stop writing.
+
+  ----------------------------------------------------------------------------------------------
+  [SpecialCustomers_01_Main]  -- 31 keys + enabled                       [SHIPPED, UNVERIFIED]
+  ----------------------------------------------------------------------------------------------
+     KEY                                       TYPE    DEFAULT     WHAT IT DOES
+     enabled                                   bool    true        Load the module.
+     visitor_01_spawn_x                        float   -53.5701    Visitor pool home X. Northtown
+                                                                   motel forecourt.
+     visitor_01_spawn_y                        float   1.065       Pool home Y.
+     visitor_01_spawn_z                        float   67.7955     Pool home Z.
+     announce_visitor_on_load                  bool    true        Log the scout's name and
+                                                                   coordinates once per save load.
+     visit_interval_days_min                   int     2           Gap between visits, low end.
+                                                                   Clamped 1-60.
+     visit_interval_days_max                   int     3           Gap, high end.
+     arrival_time                              int     700         HHMM. 700 is the start of the
+                                                                   game's day. Snapped to a legal
+                                                                   time.
+     departure_time                            int     400         HHMM on the morning after
+                                                                   arrival. 400 is the game's
+                                                                   end-of-day pause.
+     max_group_size                            int     6           Hard cap on simultaneously
+                                                                   visible visitors. Clamped to
+                                                                   the 8-NPC pool; drop it to 3 on
+                                                                   a slow machine.
+     group_size_jitter                         int     1           Actual size is the archetype's
+                                                                   default +/- this. Clamped 0-4.
+     stagger_frames                            int     6           Frames between revealing one
+                                                                   member and the next. Higher
+                                                                   spreads the avatar-compositing
+                                                                   cost further. Clamped 1-120.
+     quantity_multiplier                       float   1.0         Scales every group order. 2.0
+                                                                   doubles what they ask for and
+                                                                   what they pay. Clamped 0.1-10.
+     quantity_min                              int     40          Floor, before the archetype
+                                                                   band is applied.
+     quantity_max                              int     80          Ceiling. The game's own hard
+                                                                   clamp is 1000.
+     global_price_multiplier                   float   1.0         Multiplies each archetype's own
+                                                                   0.80-0.92 rate. Clamped 0.1-5.
+     offer_expiry_minutes                      int     120         How long an unanswered offer
+                                                                   stays on the phone. 120 matches
+                                                                   the shipped two-hour window.
+     allow_walkup_sales                        bool    true        Let non-leader members be
+                                                                   approached directly for smaller
+                                                                   deals while in town.
+     archetype_bikers_enabled                  bool    true        The Ashfall MC.
+     archetype_businessmen_enabled             bool    true        The Wexler Group.
+     archetype_hippies_enabled                 bool    true        The Longhaul Caravan.
+     archetype_rock_band_enabled               bool    true        Static Sermon.
+     archetype_hippies_drugs                   string  "Marijuana,Shrooms"
+                                                                   Comma-separated. Inferred
+                                                                   rather than sourced, so it is
+                                                                   exposed. Valid: Marijuana,
+                                                                   Methamphetamine, Cocaine, MDMA,
+                                                                   Shrooms, Heroin.
+     archetype_rock_band_drugs                 string  "Cocaine,Shrooms"   Same.
+     detection_mode                            string  "auto"      auto (recommended), always_on
+                                                                   (only if you have verified the
+                                                                   official feature is absent), or
+                                                                   always_off.
+     disable_at_game_version                   string  "0.5.0"     Compared with the game's own
+                                                                   version parser. At or above,
+                                                                   the module assumes TVGS shipped
+                                                                   the feature.
+     detection_name_fragments                  string  (9 names)   Comma-separated type-name
+                                                                   fragments scanned for in the
+                                                                   game assembly. Editable without
+                                                                   a rebuild when the official
+                                                                   feature ships under a name we
+                                                                   did not guess. Defaults:
+                                                                   CustomerGroup, SpecialCustomer,
+                                                                   TravellingCustomer,
+                                                                   TravelingCustomer,
+                                                                   VisitingCustomer,
+                                                                   CustomerVisit, CustomerCrew,
+                                                                   CustomerParty,
+                                                                   CustomerConvoy.
+     detection_status                          string  ""          READ-ONLY. Written by the mod
+                                                                   after every detection pass so
+                                                                   settings apps can show it.
+     detection_economy_type_baseline           int     20          Top-level types in the game's
+                                                                   Economy namespace on 0.4.6.
+     detection_customerdata_property_baseline  int     17          Public instance properties on
+                                                                   CustomerData on 0.4.6. More
+                                                                   suggests the official feature
+                                                                   extended it.
+     detection_customer_standard_baseline      int     5           Members in ECustomerStandard on
+                                                                   0.4.6.
+     announce_arrivals                         bool    true        Send the leader's phone message
+                                                                   and drop a map marker on
+                                                                   arrival.
+
+     Spawn coordinates are read when the NPC prefabs are BUILT, so editing them moves visitors
+     only in new saves and in saves that have never seen them. An already-saved visitor keeps
+     whatever position the game persisted.
+
+  ----------------------------------------------------------------------------------------------
+  NEVER PUT A DOT IN A CONFIG CATEGORY NAME
+  ----------------------------------------------------------------------------------------------
+  MelonPreferences hands the identifier to its TOML writer unquoted, a dot is read as a table
+  path, the module gets nested inside the parent table, and every entry it tries to write is
+  SILENTLY DISCARDED. This was a real bug in this project: every module's "enabled" entry was
+  never reaching disk, so disabling a module was lost on restart. Core now refuses to register a
+  module whose category contains a dot.
+
+==================================================================================================
+ 11.  INSTALL AND FILE LAYOUT
+==================================================================================================
+
+  GAME PATH USED THROUGHOUT
+     C:\Program Files (x86)\Steam\steamapps\common\Schedule I
+
+  PREREQUISITES  (all already installed on this machine)
+     1. MelonLoader 0.7.3 for Schedule I  -- provides MelonLoader\ and version.dll
+     2. S1API (Forked) 3.1.7              -- Mods\S1API.Il2Cpp.MelonLoader.dll
+                                             Plugins\S1APILoader.MelonLoader.dll
+        The S1APILoader plugin is still required; it selects the IL2CPP-vs-Mono flavour.
+     3. The IL2CPP (default Steam) branch. Mono is not supported.
+
+  WHERE EACH DLL GOES
+  ----------------------------------------------------------------------------------------------
+     <GameDir>\UserLibs\
+         Expansions.Core.dll               shared library, NOT a MelonMod        v0.1.0
+
+     <GameDir>\Mods\
+         Expansions.HireableDrivers.dll    expansion mod                         v0.4.0
+         Expansions.PoliceOverhaul.dll     expansion mod                         v0.2.0
+         Expansions.SpecialCustomers.dll   expansion mod                         v1.0.0
+         S1API.Il2Cpp.MelonLoader.dll      third-party API layer                 v3.1.7
+
+     <GameDir>\Plugins\
+         S1APILoader.MelonLoader.dll       third-party loader plugin             v3.1.7
+
+  Expansions.Core.dll MUST be in UserLibs, not Mods. MelonLoader scans UserLibs before Plugins and
+  Mods and registers it as a shared assembly search directory, so all three mods bind to a single
+  copy. A copy sitting next to a mod in Mods\ would shadow it.
+
+  The three expansion mods are independent. Install one, two, or all three -- Core handles any
+  combination and produces exactly one per-frame fan-out regardless. Core alone still gives you
+  the Expansions screen, the 16 Core actions, the 18-probe harness and three Core tutorial
+  chapters -- six in total, because Core also registers a placeholder for each absent feature mod.
+
+  Every project's <Version> matches the version its MelonInfo attribute declares:
+  Expansions.HireableDrivers 0.4.0, Expansions.PoliceOverhaul 0.2.0,
+  Expansions.SpecialCustomers 1.0.0. Expansions.Core is 0.1.0 and has no MelonInfo, because it is
+  a library rather than a mod. An earlier revision documented a 0.3.0 / 0.4.0 disagreement on
+  Hireable Drivers; there is no longer any mismatch anywhere in the suite.
+
+  BUILDING FROM SOURCE
+  ----------------------------------------------------------------------------------------------
+         dotnet build src\Expansions.sln -c Release
+
+     Auto-copies Expansions.Core.dll into <GameDir>\UserLibs and the three mod DLLs into
+     <GameDir>\Mods on success.
+
+     It builds with 0 errors and 0 warnings. The deploy target uses ContinueOnError, so a
+     file-lock warning while the game is running is expected and harmless -- the copy is simply
+     skipped. Pass -p:ExpansionsDeployDir= to skip the copy entirely and get a silent build.
+
+     Target framework is net6.0. References resolve against
+     <GameDir>\MelonLoader\Il2CppAssemblies and <GameDir>\MelonLoader\net6, plus the S1API.Forked
+     3.1.7 NuGet package. Nothing is copied local: the S1API NuGet is explicitly excluded from the
+     output because S1APILoader provides the runtime DLL.
+
+     If you change the game path, edit the GameDir property in src\Directory.Build.props.
+
+  REPOSITORY LAYOUT
+  ----------------------------------------------------------------------------------------------
+     src\Expansions.sln       the expansion suite: Core plus three mods -- everything this
+                              document describes
+     research\                IL2CPP API reference docs, the three implementation plans, and the
+                              raw metadata dumps that back them
+     research-ext\            external research: design intent, mod-ecosystem survey, UI style
+     tools\                   asset-extraction tooling (AssetStudio, AssetRipper). Not shipped.
+     CONTEXT.md               the project's shared working memory -- decisions, gotchas, state
+
+     The repo root also holds a second, separate mod that is NOT part of this package and is not
+     described here -- see the orientation note at the top of this file. It has its own project
+     file and its own build command; nothing in src\ references it and nothing in it references
+     src\.
+
+     A root Directory.Build.props excludes src\, research\, research-ext\ and _backup\ from that
+     root project's source glob. Do not remove it: the root project globs **/*.cs from the repo
+     root, and a stray Cpp2IL dummy Assembly-CSharp.dll in a backup folder will silently hijack
+     the real reference and break every game-type import.
+
+==================================================================================================
+ 12.  WHAT TO TEST FIRST -- the ten checks that matter
+==================================================================================================
+
+  Playtest round 1 established that the suite loads, the native screen opens and the probes run.
+  It also found six real bugs. Everything below round 1 is either a fix that has never executed
+  or a feature that has never executed. These ten are ordered so that an early failure saves you
+  the later ones, and the first three are the round-1 fixes -- if those are still broken, nothing
+  after them is worth your time.
+
+  Do them on a save you are willing to lose. SaveGame_3 has already been mutated by testing, and
+  there is a full pre-test backup of the entire Saves folder at _backup\saves-20260803-214245\.
+
+   1. Load a save, press F7, and SCROLL THE ACTION LIST WITH THE MOUSE WHEEL.
+      This is check number one because in round 1 the wheel did nothing anywhere on the screen and
+      only about five of the actions could be reached at all.
+      PASS: the list scrolls, a thin scrollbar appears in the right-hand gutter, and PgUp / PgDn /
+      Home / End / arrows work too. Then confirm the three counts: an ACTIONS / TUTORIAL / MODS
+      tab strip, 47 action rows in FOUR groups -- and one of those groups must be headed "Police
+      Improvements" with eight rows starting "Police:".
+      FAIL, no scrolling: the transparent raycast catcher on the ScrollRect viewport is not doing
+      its job. FAIL, no Police heading: the log will say "Registered 0/8"; the typed-call fix did
+      not take.
+
+   2. On the same screen, collapse the output pane with its Hide control, then press Escape,
+      reopen with F7, and check it is still collapsed. Then open any picker and TYPE INTO IT.
+      PASS: the collapsed state survived (output_pane_open persisted), and typing filters the list
+      WITHOUT walking your character around the world.
+      FAIL on the typing: the screen could not take StateProperties.UIDefault. The log carries the
+      reason once, and the workaround is to scroll rather than type.
+
+   3. Run "Run all diagnostics probes" from the Actions tab.
+      PASS: 41 results and a report path in the output pane.
+      FAIL: the plain IMGUI "Schedule I Expansions" window instead of the native screen (the
+      injector never landed), or far fewer than 41 results (a module did not enable).
+      While you are in the report, read drivers.vehicle_agent. At least one owned vehicle listed
+      as "self-drives: yes" means you get the real driving path; all "no" is not a bug, but every
+      trip will relay, so ignore anything in section 5 about roads and judge the feature purely on
+      whether goods arrive.
+
+   4. THE NEW HIRING FLOW. Walk up to the employee fixer you normally buy botanists from.
+      PASS: their conversation carries one extra line per owned property with a free driver slot,
+      reading like "Hire a driver for the Barn ($1,800)". Pick one; you are charged and a driver
+      appears.
+      FAIL: no such line. Read drivers.hiring_desk -- it distinguishes "no
+      DialogueController_Fixer in the scene" from "the NPC exists but would not take a choice".
+      Either way the Expansions menu's "Hire a driver (fallback)" action ungreys itself, so you
+      can still get a driver and continue with check 5.
+
+   5. THE CLIPBOARD. Point the management clipboard at that driver.
+      PASS: you get Bed, Stations and five Route rows. Stations refuses with "Drivers run transit
+      routes, not stations." Set the Bed. Then set a route's pickup with the worldspace picker --
+      hovering a container at a DIFFERENT property must refuse with "Driver X only collects from
+      the Barn", and a container at the hiring property must accept. Set a drop-off at another
+      property you own; the vanilla out-of-range refusal must be overturned.
+      FAIL: the rows are absent or the constraint does not show. drivers.clipboard reports whether
+      the RouteEntryUI.ObjectValid patch landed.
+      Then "Start a run now" and watch. PASS: the driver leaves and the destination stock goes up.
+      FAIL: it stays Idle -- press F6 and read the no-work reason, which is the diagnosis.
+
+   6. Start a trip and then sleep through it.
+      PASS: you wake to "Delivery completed while you slept" and the cargo is at the far end.
+      FAIL: a van parked mid-junction, a driver stuck in a non-Idle state, or cargo that vanished
+      -- the time-skip collapse is the least testable path in the mod and the most likely to be
+      wrong.
+
+   7. THE UNWEDGED SALE LOOP. "Bring a group into town now", then "Make the group offer now",
+      accept on the phone, and complete the handover.
+      PASS: an offer message arrives WITH RESPONSE BUTTONS, you accept, the leader walks to the
+      meeting point, and the shipped handover screen pays you with real XP and an analytics
+      receipt.
+      FAIL at the offer: run "Why can't I sell to them?" and read which of the six stages it stops
+      at. A stop at stage 2 with a "leader already holds an offer" note is the round-1 bug not
+      fixed; use "Clear the group's stuck order" and try again. A stop at stage 4 means the
+      message reached the phone with no response buttons, which cannot be accepted.
+      Also WALK UP TO A GROUP MEMBER AND TALK TO THEM. In round 1 that opened an empty dialogue
+      with no way out but Escape. The leader must offer "About the <group> order" and non-leaders
+      "Talk business", and the shipped "complete contract" choice must still be in the list.
+
+   8. Use "Police: heat +25" twice, then walk past a patrol.
+      PASS: police.world_state reports a driven intensity above the vanilla baseline and a 2-3
+      officer band, and you can see more officers per post. FAIL: intensity unchanged -- the
+      OnUncappedMinPass postfix did not land, and police.patches names which target missed.
+      Then get arrested while carrying less cash than the fine. PASS: the notice shows the
+      multiplied figure, cash goes to zero, and the shortfall comes off your ONLINE balance with a
+      notification. FAIL: charged twice (the self-calibration read the wrong boundary), or not at
+      all.
+
+   9. Use "Police: spawn federal agent".
+      PASS: agents appear and the log names the strategy (registered prefab, or cloned officer).
+      FAIL: "Federal agents unavailable" -- record the reason; that pillar is simply off on this
+      build and nothing else is affected. Then SAVE, RELOAD, and confirm the NPC set is unchanged:
+      an agent that reached the save is the one genuinely dangerous outcome here.
+
+  10. Save, quit to the main menu, reload the same save, and re-run the whole probe suite.
+      PASS: heat records, the driver roster and trip counters, the clipboard's route rows and the
+      group state all come back identical, and identity.player_code matches the earlier report.
+      FAIL: anything reset -- and note that driver ROUTES now live in the vanilla save, not the
+      mod's blob, so this is the first check that the vanilla round trip actually works. A
+      PlayerCode that changed means heat is keyed to the wrong thing.
+
+  One thing NOT on this list on purpose: do not enable allow_mutating_probes. The read-only
+  police.tuning_writability already answers the question police.tuning_statics exists to confirm,
+  and that probe has killed the game process before.
+
+==================================================================================================
+ 13.  KNOWN LIMITATIONS AND WARNINGS
+==================================================================================================
+
+  --------------------------------------------------------------------------------------------
+  NO FEATURE MOD HAS BEEN CONFIRMED WORKING END TO END                      *** IMPORTANT ***
+  --------------------------------------------------------------------------------------------
+  Every feature in sections 5, 6 and 7 is a reading of source code. The build is clean, every
+  game and S1API symbol was verified against the real IL2CPP assemblies with a MetadataLoadContext
+  harness (280 symbols for Drivers, 192 for Police, 119 for Special Customers, plus 141 / 75 / 230
+  re-verified across the three round-1 fix passes), and every uncertain touch is late-bound so an
+  unverified assumption degrades to a logged warning rather than a load-time exception. None of
+  that is evidence that the features work. Section 12 is how you find out.
+
+  WHAT PLAYTEST ROUND 1 ACTUALLY ESTABLISHED (2026-08-04):
+     Confirmed working    the suite loads; the native Expansions screen opens from both entry
+                          points; the module cards toggle; the probe harness runs and writes a
+                          report; the Core tutorial chapters complete end to end (2026-08-03 --
+                          four on the owner's machine, three of which register in this package)
+     Confirmed broken     menu scrolling, output-pane sizing, picker typing stealing player
+                          movement, Police registering 0 of 8 actions, Special Customers offers
+                          latching without sending, visitor dialogue opening with no choices
+     Still unknown        whether any of the three features completes its own loop
+
+  All six confirmed-broken items are fixed in source and NONE of the fixes has been executed. The
+  Hireable Drivers rework (v0.4.0) that followed round 1 is a larger change than any of them and
+  has likewise never run.
+
+  The only positively confirmed feature-mod fact remains that Marcus Vale exists as a fully
+  registered NPC.
+
+  --------------------------------------------------------------------------------------------
+  DISABLE, DO NOT DELETE                                                    *** IMPORTANT ***
+  --------------------------------------------------------------------------------------------
+  A save-persisted custom NPC cannot be unmade by a toggle. S1API builds the eight Special
+  Customers visitors from the types in that assembly DURING SAVE LOAD, before any module toggle is
+  read. Disabling the module stops everything the mod DOES -- no visits, no offers, no dressing --
+  but the NPCs stay in the world and in the save. Destroying a save-persisted networked NPC
+  mid-session risks corrupting the save, so the module deliberately does not try.
+
+  Removing the DLL is what removes them, and that ORPHANS THEIR FOLDERS in every save that stored
+  them. Whether the vanilla NPC loader tolerates orphaned folders is an open question with a
+  written test recipe (SC-V6) in the probe report, and it is release-blocking.
+
+  Use the toggle on the Mods tab, or set enabled = false in Expansions.cfg. Do not delete the DLL
+  from Mods\.
+
+  The other two mods do not have this problem. Drivers are real vanilla employees created by the
+  game's own factory: disabling reverts them to ordinary Handlers with no stations and no routes,
+  and the save still loads. Federal agents have ShouldSave forced false and are removed from both
+  registries on despawn, so they cannot reach the save at all.
+
+  --------------------------------------------------------------------------------------------
+  MULTIPLAYER AND HOST AUTHORITY
+  --------------------------------------------------------------------------------------------
+  - The expansion mods are HOST-AUTHORITATIVE. All world mutation is gated on
+    InstanceFinder.NetworkManager == null || InstanceFinder.IsServer. The null check is
+    load-bearing: single-player has no NetworkManager at all, so a bare IsServer check would
+    disable the mods outside multiplayer.
+  - A co-op guest gets a read-only surface. Host-only actions grey themselves out naming the
+    reason ("host only - this peer is a client") rather than silently doing nothing. A guest can
+    still teleport to things and read status -- moving your own camera is client-side.
+  - A guest tracks a Special Customers visit so the menu, tutorial and status read correctly, but
+    never re-warps or re-reveals anybody. The host owns the world and the guest receives the group
+    already placed.
+  - ALL PLAYERS SHOULD INSTALL THE SAME MODS. There are no custom network messages: the game runs
+    FishNet v3, and FishNet's code generator never runs against mod assemblies on IL2CPP, so
+    custom RPCs, SyncVars and spawnable prefab ids are simply unavailable.
+  - Custom NPC prefabs are registered by simple type name and the ordering is load-order
+    sensitive, so co-op peers must agree on emission order. sc.visitor_prefab dumps that ordering
+    -- diff it between two machines before trusting co-op.
+
+  --------------------------------------------------------------------------------------------
+  TYPING IN A MENU PICKER USED TO MOVE YOUR CHARACTER               *** FIXED, UNVERIFIED ***
+  --------------------------------------------------------------------------------------------
+  Observed in round 1. The picker's search box reads Input.inputString, and the screen lives on a
+  standalone canvas that was not part of the game's MonoState / StateProperties stack, so
+  keystrokes reached gameplay as well. Typing "marcus" into the NPC teleport search walked you
+  around the world while you typed it.
+
+  The screen now reads StateProperties.UIDefault and calls
+  StatePropertiesTransitionHandler.Transition on open, saving and restoring whatever the game was
+  previously enforcing -- the game's own preset for its own UI, which locks movement and camera
+  look and frees the cursor. The per-frame Cursor.lockState write is kept only as a fallback.
+
+  If the transition cannot be taken, the log says why ONCE and the old behaviour returns. The
+  workaround is unchanged: scroll rather than type, or use the direct rows that need no search.
+  The F6 drivers panel is not part of the state stack at all -- it is read-only, so it has no
+  pickers to type into.
+
+  --------------------------------------------------------------------------------------------
+  THE SPECIAL CUSTOMERS SCOUT HAS BEEN SEEN OFF-POST            *** OUTSTANDING, UNDIAGNOSED ***
+  --------------------------------------------------------------------------------------------
+  Marcus Vale is configured for the Northtown motel forecourt, and a 2026-08-03 probe found him
+  there with about 1 m of drift. During round 1 the owner found him at roughly (-82.3, -3.9, 66.7)
+  -- in WESTVILLE, and about four metres below the expected ground plane. He appears to wander
+  off-post, sink, or both.
+
+  Not investigated. Nothing has been changed to address it. "Send the scout back to his post"
+  warps him to his configured spawn and is the workaround; sc.visitor_runtime reports where he
+  actually is. If he is somewhere else again after a reload, say so, because a pool member that
+  will not stay parked also affects where a group assembles.
+
+  --------------------------------------------------------------------------------------------
+  FEDERAL AGENTS MAY NOT BE SPAWNABLE ON THIS BUILD AT ALL
+  --------------------------------------------------------------------------------------------
+  Both spawn strategies are conditional. "PoliceNPC" may not be a registered FishNet spawnable,
+  and the clone path needs a live officer to exist. If neither works, Spawn returns 0, the reason
+  is logged, and the other four pillars are unaffected -- but the whole federal-agent feature and
+  the last objective of the police tutorial chapter simply do not happen.
+
+  A CLONED AGENT INHERITS THE DONOR OFFICER'S NPC ID. The id lives on a shared asset, and
+  rewriting it would rename every officer in the game. So on the clone path you will have two NPCs
+  answering to the same id. They are distinguished by native pointer, never added to the officer
+  pool, and cannot reach the save -- but anything that looks an officer up by id can find the
+  wrong one.
+
+  --------------------------------------------------------------------------------------------
+  WRITING AN IL2CPP CONST KILLS THE PROCESS
+  --------------------------------------------------------------------------------------------
+  Codebase-wide danger, and the reason allow_mutating_probes exists and defaults off.
+  Il2CppInterop projects a const and a real static as the same read/write property. The setter is
+  a bare il2cpp_field_static_set_value which, unlike Mono's, has NO literal guard: it computes
+  klass->static_fields + offset and memcpys. A const contributes no storage, so on a class whose
+  statics are all const that base pointer is null -- access violation, process gone, nothing
+  catchable, no crash log. Reads are fine.
+
+  28 of the 31 police tuning statics are consts. GameReflection.TryWriteStatic now refuses
+  const-inlined statics, and the crash journal quarantines any subject the process died on. Do
+  not add a static write anywhere without checking il2cpp_field_get_flags for LITERAL first.
+
+  --------------------------------------------------------------------------------------------
+  SPECIAL CUSTOMERS AND THE OFFICIAL FEATURE
+  --------------------------------------------------------------------------------------------
+  TVGS is shipping their own Special Customers as v0.5.0, expected within weeks. The detector
+  described in section 7 is now BUILT and fails closed, so updating past 0.4.6 should stand the
+  module down on its own. That has never been tested against a real 0.5.0 build, and the resolved
+  game version string is itself unconfirmed -- "0.4.6f11" has only ever been observed inside save
+  JSON. If the version cannot be parsed the module disables, which is the safe direction.
+
+  --------------------------------------------------------------------------------------------
+  MODULE ERROR HANDLING
+  --------------------------------------------------------------------------------------------
+  A module that throws 10 times in one frame hook during a single enable cycle is switched off for
+  the rest of the session. The PERSISTED toggle stays on, so it retries on next launch. If a
+  module keeps disappearing from the active set, check the MelonLoader log for the ten error lines
+  that preceded it.
+
+  --------------------------------------------------------------------------------------------
+  FIRST LAUNCH AFTER THE TOOLCHAIN UPGRADE NEEDS INTERNET
+  --------------------------------------------------------------------------------------------
+  MelonLoader 0.7.3 regenerates the Il2CppAssemblies and downloads Cpp2IL .21 on first launch.
+  That launch will not complete offline. Subsequent launches are fine. A backup of the pre-upgrade
+  install exists at _backup\2026-08-03_191117\ (gitignored); rolling back also means restoring
+  S1API.Forked to 3.1.4 in src\Directory.Build.props, and in the root project file if you build
+  that too.
+
+  --------------------------------------------------------------------------------------------
+  REMAINING LOAD-BEARING UNKNOWNS
+  --------------------------------------------------------------------------------------------
+     Do owned vehicles carry a VehicleAgent?    drivers.vehicle_agent answers it. If not, every
+                                                trip relays. Not fatal; a different feature.
+     Do vehicles drive with no player nearby?   Vehicles go kinematic past
+                                                LandVehicle.KINEMATIC_THRESHOLD_DISTANCE.
+     Does EnterVehicle(null, veh) seat an       If not, the van leaves without a visible driver.
+       employee on the server?                  The delivery still completes.
+     Is Player.PlayerCode stable across         If not, heat resets on load or transfers to the
+       sessions?                                wrong player in co-op. Two probe runs settle it.
+     What is the running game version string?   Only observed inside save JSON. The Special
+                                                Customers detector parses it.
+     Does NPCAppearance.Build() append or       If it appends, repeated re-skinning overflows the
+       replace layer lists?                     6/8/9 slot budget and the dresser must clone
+                                                AvatarSettings wholesale instead.
+     Does vanilla NPCsLoader tolerate orphaned  Decides whether "uninstall" is supported at all.
+       NPC folders after the DLL is removed?    Release-blocking.
+     Does a cross-property route survive a      Routes now live in vanilla
+       save/load round trip in the vanilla      PackagerConfiguration.Routes rather than the mod's
+       Routes field?                            own blob, so this is load-bearing in a way it was
+                                                not before. Note HD-P12. Check 10 in section 12.
+     Does the game accept a driver's route      Vanilla Handler routes are property-local; the
+       endpoints once the mod widens them?      widening is a postfix on the picker's validator,
+                                                not on whatever consumes the route afterwards.
+     Why does the Special Customers scout       Observed in Westville and ~4 m low. Undiagnosed.
+       leave his post?
+
+  The probe report ends with 24 further questions that no read-only probe can answer -- 20 from
+  Core plus 4 from Hireable Drivers -- each with a written recipe.
+
+==================================================================================================
+ 14.  DEFERRED -- designed but deliberately not built
+==================================================================================================
+
+  These were specified in the planning documents and are NOT in the source. They are listed so
+  that reading a plan later does not create the impression something is missing or broken.
+
+  HIREABLE DRIVERS                                                                  [PLANNED]
+  ----------------------------------------------------------------------------------------------
+     Dealer cash collection    Whether Dealer.CollectCash() credits the local player directly is
+                               unanswered (note HD-P8), and the leg stays out until it is. There
+                               is no allow_cash_collection setting.
+     Trunk expansion           Not implemented; trunk size is the driver's capacity, full stop.
+     Native panel clone        SUPERSEDED, not deferred. Phase 2 was a runtime clone of the
+                               game's own Packager config panel. v0.4.0 uses the REAL one
+                               instead: routes live in vanilla PackagerConfiguration.Routes, so
+                               the shipped panel binds to them with no clone involved.
+     Path debug drawing        Not implemented.
+
+  POLICE IMPROVEMENTS                                                               [PLANNED]
+  ----------------------------------------------------------------------------------------------
+     Property raids            Agents draining contraband from an unattended property. Not built;
+                               no enable_property_raids, raid_delay_minutes or
+                               raid_confiscation_fraction settings exist.
+     Stakeouts                 Agents posting up at your most recently visited property. Not
+                               built.
+     Jail day                  Losing the rest of the day plus a processing fee on an outlaw
+                               arrest. Not built; no enable_jail_day setting.
+     Equipment loss            Weapons and tools confiscated while outlawed. Not built.
+     Relationship damage       -0.25 with whoever called it in. Not built.
+     Outlaw economic effects   The dealer cut rising 20% -> 25%, +10 points of customer snitch
+                               chance, and Ray's Realty / Hyland Auto refusing card payment. None
+                               of the three is built; there are no outlaw_dealer_cut,
+                               outlaw_snitch_bonus or outlaw_blocks_card_vendors settings.
+     Curfew VMS boards         Swapping roadside message-board text for a wanted notice. Not
+                               built. The police.vms_board probe still exists to answer whether it
+                               would even be possible.
+     Heat HUD line             There is no HUD widget. show_heat_hud controls NOTIFICATIONS on
+                               tier changes, outlaw transitions and fines. Heat is read from the
+                               menu action and the probes.
+     Buying down outlaw status outlaw_legal_fee (25000) is bound and read but nothing currently
+                               spends it -- there is no menu action or in-world surface for it.
+     Agent appearance file     No agent_appearance_file override. The look is hard-coded.
+
+  SPECIAL CUSTOMERS                                                                 [PLANNED]
+  ----------------------------------------------------------------------------------------------
+     Party Bus archetype       Needs a parked bus with six staged passengers. S1API's LandVehicle
+                               exposes spawn, park and colour but no seating or occupancy. Without
+                               the bus it is hippies with a different palette, which is worse than
+                               not shipping it.
+     Per-archetype schedules   NPCPrefabBuilder.WithSchedule is prefab-time and static, so it
+                               cannot vary per archetype on a shared eight-NPC pool.
+     Runtime affinity writes   Drug affinity is set through the customer tuner's own path rather
+                               than by writing affinities at runtime.
+     Optional patches P1-P4    Four Harmony patches the plan listed as optional polish. The core
+                               loop needs none of them and none were written.
+
+==================================================================================================
+ 15.  AT A GLANCE
+==================================================================================================
+
+     COMPONENT                                          STATUS                 EVIDENCE
+     ------------------------------------------------  --------------------  ------------------
+     Expansions Core -- registry and live toggles      [SHIPPED]              Used in-game
+     Expansions Core -- Expansions.cfg, 86 keys        [SHIPPED]              Used in-game
+     Expansions Core -- native screen + F7             [SHIPPED]              Used in-game
+     Expansions Core -- IMGUI fallback                 [SHIPPED]              Used in-game
+     Expansions Core -- Actions tab, 16 actions        [SHIPPED]              Used in-game
+     Expansions Core -- output pane                    [SHIPPED]              Used in-game
+     Expansions Core -- 18-probe harness               [SHIPPED]              Run in-game
+     Tutorial chapters 1-3 (Core)                      [SHIPPED]              Completed in-game
+     Special Customers -- Marcus Vale exists           [SHIPPED]              Confirmed in-game
+     Menu scrolling on every list                      [SHIPPED, UNVERIFIED]  Fix never run
+     Output pane cap + collapse                        [SHIPPED, UNVERIFIED]  Fix never run
+     Gameplay input lock (UIDefault)                   [SHIPPED, UNVERIFIED]  Fix never run
+     Tutorial tab + per-chapter switches               [SHIPPED, UNVERIFIED]  Never run
+     Police menu actions on the Actions tab            [SHIPPED, UNVERIFIED]  Fix never run
+     Hireable Drivers -- everything                    [SHIPPED, UNVERIFIED]  Never run
+     Police Improvements -- everything                 [SHIPPED, UNVERIFIED]  Never run
+     Special Customers -- everything but Marcus        [SHIPPED, UNVERIFIED]  Never completed
+     Tutorial chapters 4-6 (feature mods)              [SHIPPED, UNVERIFIED]  Never run
+     Federal agent spawning                            [UNVERIFIED]           May be impossible
+     The scout leaving his post                        [UNVERIFIED]           Seen, undiagnosed
+     Section 14 items                                  [PLANNED]              Not built
+
+     TOTALS FOUND IN SOURCE                                              (counted 2026-08-05)
+     ------------------------------------------------------------------------------------------
+     Actions          47 declared  (Core 16, Drivers 13, Police 8, Customers 10)
+     Probes           41           (Core 18 incl. 1 opt-in, Customers 9, Drivers 9, Police 5)
+     Config keys      86           (shared 5, Drivers 25, Police 24, Customers 32 -- each module
+                                   count includes its automatic "enabled" key)
+     Harmony patches  26 targets   (Core 0, Police 18, Drivers 7, Customers 1)
+     Mutating notes   24           (Core 20, Drivers 4)
+     Tutorial         6 chapters, 22 objectives in this package
+                                   (Core 3x2, Drivers 6, Police 5, Customers 5), all reachable
+                      7 chapters, 24 objectives with the separate mod from the orientation note
+                                   also installed, which adds a fourth 2-step Core chapter at
+                                   order 400 and renumbers the three feature chapters to 5, 6, 7
+     Custom NPCs      8            (the Special Customers visitor pool)
+     Save blobs       4            (drivers, police, special customers, tutorial)
+     Source           205 files, ~31,300 lines  (Core 94, Customers 50, Drivers 34, Police 27)
+
+     The honest summary: the framework is finished and proven -- round 1 of playtesting proved it
+     specifically, because the owner used it. The three headline features are finished and
+     unproven. Round 1 found six real bugs across the menu and two of the features; all six are
+     fixed, Hireable Drivers was reworked onto the game's own hiring and management surfaces on
+     top of that, and not one line of any of it has executed. "It compiles, every symbol
+     resolves, and the bug we saw is addressed" is not the same thing as working. Section 12 is
+     the shortest path to finding out which it is.
+
+==================================================================================================
+ END OF DOCUMENT
+==================================================================================================

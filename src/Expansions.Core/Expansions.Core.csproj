@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Expansions.Core</RootNamespace>
+    <AssemblyName>Expansions.Core</AssemblyName>
+    <Version>0.1.0</Version>
+    <Description>Shared module registry, lifetime, config, logging and UI seam for the Schedule I expansion mods.</Description>
+    <!-- Not a MelonMod. MelonLoader loads UserLibs as shared assemblies before Plugins and Mods,
+         so all three expansion mods bind against this single copy. -->
+    <ExpansionsDeployDir>$(GameDir)\UserLibs</ExpansionsDeployDir>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,1294 @@
+==================================================================================================
+                 S C H E D U L E   I   --   M O D   S U I T E
+                    Installation runbook  (hand this file to an AI)
+==================================================================================================
+
+  Package ....... ScheduleI-Expansions-1.2.1-2026-08-06.zip
+  Generated ..... 2026-08-06
+  Game .......... Schedule I (TVGS), tested on v0.4.6 / build 0.4.6f11, Unity 2022.3.62f2
+  Branch ........ IL2CPP only  (the DEFAULT Steam branch -- NOT "alternate" / Mono)
+  Loader ........ MelonLoader 0.7.3   -- YOU install this, it is not in the zip
+  API layer ..... S1API.Forked 3.1.7  -- BUNDLED in the zip, nothing to download
+  Platform ...... Windows 10 / 11, 64-bit
+
+  WHAT IS IN THE ZIP  -- nine files
+  ----------------------------------------------------------------------------------------------
+     Mods\Expansions.HireableDrivers.dll       Hireable Drivers                     v0.4.0
+     Mods\Expansions.PoliceOverhaul.dll        Police Improvements                  v0.2.0
+     Mods\Expansions.SpecialCustomers.dll      Special Customers                    v1.0.0
+     Mods\S1API.Il2Cpp.MelonLoader.dll         S1API.Forked, third party            v3.1.7
+     Plugins\S1APILoader.MelonLoader.dll       S1API loader plugin, third party     v3.1.7
+     UserLibs\Expansions.Core.dll              shared library, NOT a mod            v0.1.0
+     INSTALL.txt                               this file
+     FEATURES.txt                              the full 2,257-line feature reference
+     LICENSE-S1API.txt                         MIT licence for the two S1API files
+
+==================================================================================================
+ READ THIS FIRST -- ADDRESSED TO THE AI
+==================================================================================================
+
+  You are being asked to walk a person through installing a set of mods for the PC game
+  Schedule I. Assume the following and behave accordingly.
+
+  WHO YOU ARE TALKING TO
+     The human is not a programmer. They have never modded a game. They may not know what a
+     folder path is, what a DLL is, what PowerShell is, or that file extensions can be hidden.
+     They are on Windows. They will do exactly what you tell them and nothing more, so anything
+     you leave implicit will not happen.
+
+  WHAT THEY ARE TRYING TO ACHIEVE
+     A working install of four mod files plus the loader that runs them, ending in a game where
+     pressing F7 opens a new menu. Nothing here modifies Steam, their account, or any game files
+     that Steam manages. Everything added is removable.
+
+  HOW TO RUN THIS
+     1. Read this entire file before you say anything. In particular read section 5 now --
+        the first launch after installing takes several minutes and looks like a crash, and if
+        you have not warned the human in advance they will close it and break the install.
+     2. Work ONE STEP AT A TIME. Give one instruction, wait, verify, then give the next. Do not
+        paste the whole install as a wall of text.
+     3. VERIFY EVERY STEP BEFORE MOVING ON. Every step below has a check. Run the check. Do not
+        accept "I think it worked" or "yeah ok" as evidence.
+     4. ASK FOR OUTPUT, DO NOT ASSUME. When you give a command, ask the human to paste back
+        exactly what appeared, including errors. When you ask them to look at a folder, ask them
+        to list what is in it. If they say a file is there, ask for the size too.
+     5. NEVER GUESS A PATH. Section 3 establishes the one real game folder path on THIS machine.
+        Use that exact string everywhere afterwards. Do not assume the default.
+     6. If a step fails, stop. Go to section 8, find the symptom, apply the fix, re-verify the
+        failed step, and only then continue. Do not push forward hoping it resolves itself.
+     7. Every path in this document uses <GameDir> to mean the folder you confirm in section 3.
+        Substitute it literally. It contains spaces, so it must be quoted in every command.
+
+  HOW TO GIVE COMMANDS
+     Prefer Windows Explorer for anything a person can do by clicking. Use PowerShell only for
+     checks and for the bulk file copy, because both are much harder to get wrong that way.
+     To open PowerShell: press the Windows key, type  powershell , press Enter. A blue window
+     opens. Commands are pasted with right-click or Ctrl+V, then Enter.
+     Tell the human that a command producing NO output is usually a success, and that red text
+     is the thing you want to see.
+
+  WHAT NOT TO DO
+     Do not tell the human to disable their antivirus. Do not tell them to run anything as
+     Administrator unless Windows itself asks. Do not tell them to edit the registry. Do not
+     invent a download link -- the only two links in this document are in section 4.
+     Do not skip section 10. These mods are new and mostly untested, and the save backup is not
+     optional.
+
+==================================================================================================
+ CONTENTS
+==================================================================================================
+
+   1.  WHAT THIS IS, AND THE SHORT VERSION OF THE PLAN
+   2.  PRECONDITIONS -- confirm all five before touching anything
+   3.  FIND THE GAME FOLDER
+   4.  INSTALL, STEP BY STEP
+   5.  THE FIRST LAUNCH -- read this before starting the game
+   6.  VERIFY IT WORKED
+   7.  CONTROLS, AND WHAT TO TRY FIRST
+   8.  TROUBLESHOOTING -- symptom, cause, fix
+   9.  UNINSTALLING -- and why you should DISABLE instead
+  10.  HONEST STATUS -- back up your saves first
+  11.  REPORTING A PROBLEM
+  APPENDIX A.  EVERY PATH IN ONE PLACE
+  APPENDIX B.  WHAT EACH FILE IS AND WHY IT GOES WHERE IT GOES
+
+==================================================================================================
+ 1.  WHAT THIS IS, AND THE SHORT VERSION OF THE PLAN
+==================================================================================================
+
+  Schedule I does not support mods by itself. Three layers stack up:
+
+     MelonLoader     Patches the game so it can run mod code at all. Installed by its own
+                     installer program, because it modifies the game executable's startup.
+                     THIS IS NOT IN THE ZIP AND MUST NOT BE COPIED BY HAND.
+     S1API           A helper library every one of these mods talks to. Bundled in the zip.
+     The four mods   The actual features. Bundled in the zip.
+
+  What the mods add:
+
+     Expansions Core        The framework the other three hang off. Adds an "Expansions" entry to
+                            the game's main menu and an F7 screen in-game.
+     Hireable Drivers       Driver employees who move goods between your properties, businesses
+                            and dealers on automatic routes.
+     Police Improvements    A persistent heat level, escalating police intensity, outlaw status,
+                            federal agents, and heavier arrest consequences.
+     Special Customers      Groups of out-of-town buyers (bikers, businessmen, hippies, a rock
+                            band) who visit and place bulk orders.
+
+  THE PLAN, IN ORDER
+     1. Confirm five preconditions.                        (section 2)
+     2. Find and confirm the real game folder path.        (section 3)
+     3. Back up the save files.                            (section 10)
+     4. Install MelonLoader 0.7.3 with its installer.      (section 4, step 2)
+     5. Unblock and unzip the mod pack.                    (section 4, step 3)
+     6. Copy files into three folders.                     (section 4, step 4)
+     7. Launch once, with internet, and WAIT.              (section 5)
+     8. Verify.                                            (section 6)
+
+  Total time is about 20 minutes, of which up to 10 is the game sitting there apparently frozen
+  during step 7. That wait is normal and is explained in section 5.
+
+==================================================================================================
+ 2.  PRECONDITIONS -- confirm all five before touching anything
+==================================================================================================
+
+  Confirm each of these with the human before continuing. If any one fails, stop and resolve it.
+
+  --------------------------------------------------------------------------------------------
+  2.1  A Windows PC, 64-bit
+  --------------------------------------------------------------------------------------------
+  Windows 10 or Windows 11. There is no Mac version of this game and the Steam Deck / Linux
+  route is not covered by this document.
+
+  CHECK   Windows key, type "About your PC", press Enter. "System type" must say 64-bit.
+
+  --------------------------------------------------------------------------------------------
+  2.2  Schedule I is owned on Steam and installed
+  --------------------------------------------------------------------------------------------
+  CHECK   Steam is open, Schedule I appears in the Library in white text (not grey), and the
+          big button on its page says PLAY (not INSTALL).
+
+  --------------------------------------------------------------------------------------------
+  2.3  The IL2CPP branch -- the DEFAULT one -- and NOT the "alternate" Mono branch
+  --------------------------------------------------------------------------------------------
+  Schedule I ships two different builds. Steam calls the choice "Beta Participation".
+
+     None  or  beta                 = IL2CPP.   <-- required. This is the default.
+     alternate  or  alternate-beta  = Mono.     <-- these mods will NOT load. Not supported.
+
+  Almost everyone is on the default and has never touched this setting, but confirm it anyway,
+  because on the wrong branch the mods fail silently and you will waste an hour.
+
+  CHECK, IN STEAM
+     Steam -> Library -> right-click Schedule I -> Properties -> Betas.
+     The "Beta Participation" dropdown must read "None" (or "beta"). If it reads "alternate" or
+     "alternate-beta", stop: this package does not work on that branch.
+
+  CHECK, ON DISK -- this is the definitive one, do it after section 3 gives you <GameDir>
+     The folder "<GameDir>\Schedule I_Data\il2cpp_data" must EXIST.
+     The folder "<GameDir>\Schedule I_Data\Managed"    must NOT exist.
+     The file   "<GameDir>\GameAssembly.dll"           must EXIST (it is about 64 MB).
+
+     PowerShell, run after section 3:
+        Test-Path "<GameDir>\Schedule I_Data\il2cpp_data"
+        Test-Path "<GameDir>\Schedule I_Data\Managed"
+
+     Correct answer is  True  then  False . Any other combination means the wrong branch.
+
+  --------------------------------------------------------------------------------------------
+  2.4  The game has been launched at least once, un-modded
+  --------------------------------------------------------------------------------------------
+  This matters because the first clean run finishes Steam's setup and creates the folder where
+  saves live -- which is the folder you are about to back up.
+
+  CHECK   The folder  %USERPROFILE%\AppData\LocalLow\TVGS\Schedule I  exists.
+
+     PowerShell:
+        Test-Path "$env:USERPROFILE\AppData\LocalLow\TVGS\Schedule I"
+
+     Expect  True . If it says False, have the human start the game from Steam, get to the main
+     menu, quit, and check again.
+
+  --------------------------------------------------------------------------------------------
+  2.5  The game is CLOSED, and stays closed, for the whole install
+  --------------------------------------------------------------------------------------------
+  Windows locks files that a running program has open. If the game is running, files will
+  silently fail to copy and the install will look finished but be incomplete.
+
+  CHECK   PowerShell:
+        Get-Process "Schedule I" -ErrorAction SilentlyContinue
+
+     Expect NO output at all. If a table with an Id appears, the game is running -- have the
+     human close it from inside the game (not Task Manager) and check again.
+
+  Steam itself can stay open. Only the game must be closed.
+
+  --------------------------------------------------------------------------------------------
+  ALSO ASK, EVEN THOUGH IT IS NOT A BLOCKER: are there mods installed already?
+  --------------------------------------------------------------------------------------------
+  This document assumes a clean, un-modded game. If the human has installed Schedule I mods
+  before -- from Nexus, Thunderstore, or a friend -- say so now and read section 8.9 before
+  step 4, because another mod may have put a different version of S1API in the same folder.
+
+  CHECK   Test-Path "<GameDir>\Mods"
+          If that is already True before you install anything, list what is in it.
+
+==================================================================================================
+ 3.  FIND THE GAME FOLDER
+==================================================================================================
+
+  Everything after this point is written as <GameDir>. You must replace it with the real path
+  on THIS machine. Do not assume the default -- Steam lets people install games on a second
+  drive, and it is common.
+
+  THE DEFAULT, IF STEAM WAS INSTALLED NORMALLY
+     C:\Program Files (x86)\Steam\steamapps\common\Schedule I
+
+  HOW TO GET THE REAL ONE, THE RELIABLE WAY
+     1. Open Steam.
+     2. Library -> right-click "Schedule I" -> Manage -> Browse local files.
+     3. A File Explorer window opens, already inside the game folder.
+     4. Click once on the white address bar at the top of that window. The friendly breadcrumb
+        turns into a real path, already selected.
+     5. Press Ctrl+C. That is the path. Ask the human to paste it to you.
+
+  HOW TO GET IT WITH POWERSHELL, IF THE ABOVE IS AWKWARD
+     This reads Steam's own library index, so it finds the game on any drive.
+
+        $r = (Get-ItemProperty 'HKCU:\Software\Valve\Steam' -Name SteamPath).SteamPath
+        Get-Content "$r\steamapps\libraryfolders.vdf" |
+          Select-String -Pattern '"path"' |
+          ForEach-Object { ($_ -split '"')[3] -replace '\\\\','\' } |
+          ForEach-Object { Join-Path $_ 'steamapps\common\Schedule I' } |
+          Where-Object { Test-Path $_ }
+
+     It prints the folder, or nothing if the game is not installed.
+
+  CONFIRM IT IS ACTUALLY THE RIGHT FOLDER
+     Do not continue until all four of these exist directly inside it:
+
+        Schedule I.exe          about   0.7 MB
+        GameAssembly.dll        about  64 MB
+        UnityPlayer.dll         about  30 MB
+        Schedule I_Data\        a folder
+
+     PowerShell:
+        Get-ChildItem "<GameDir>" | Select-Object Name, Length
+
+  NOW STATE IT BACK
+     Tell the human, in plain words, the exact path you are going to use, and ask them to
+     confirm it matches what they copied. Use that exact string in every command from here on.
+     Because it contains spaces, it must always be wrapped in double quotes.
+
+==================================================================================================
+ 4.  INSTALL, STEP BY STEP
+==================================================================================================
+
+  --------------------------------------------------------------------------------------------
+  STEP 1 -- BACK UP THE SAVES
+  --------------------------------------------------------------------------------------------
+  Do section 10 now, then come back here. It is one copy-paste command and it is the only thing
+  standing between a bug and a lost playthrough. Do not skip it and do not do it "later".
+
+  --------------------------------------------------------------------------------------------
+  STEP 2 -- INSTALL MELONLOADER 0.7.3
+  --------------------------------------------------------------------------------------------
+  MelonLoader is not in the zip and must never be copied in by hand. It patches the game's
+  startup, and only its own installer does that correctly.
+
+  2a. DOWNLOAD
+      Release page:
+         https://github.com/LavaGang/MelonLoader/releases/tag/v0.7.3
+      Direct file (22.6 MB, "MelonLoader.Installer.exe"):
+        https://github.com/LavaGang/MelonLoader/releases/download/v0.7.3/MelonLoader.Installer.exe
+
+      0.7.3 is the current newest MelonLoader release, so the installer will default to it.
+      If a version dropdown appears and offers anything else, choose 0.7.3.
+
+  2b. RUN IT
+      Windows SmartScreen will probably show a blue "Windows protected your PC" box, because
+      the installer is not code-signed. Click "More info", then "Run anyway". This is expected.
+      If Windows asks for permission to make changes, say Yes.
+
+  2c. POINT IT AT THE GAME
+      The installer shows a list of detected games, or a button to browse for one.
+      Select this file, and only this file:
+
+         <GameDir>\Schedule I.exe
+
+      NOT the Steam shortcut. NOT UnityCrashHandler64.exe. NOT the folder -- the .exe.
+
+      Windows hides file extensions by default, so in the browse dialog the human may see two
+      things both called "Schedule I" -- a folder and the program -- with no way to tell them
+      apart. Have them turn extensions on first: in any Explorer window, View menu -> Show ->
+      File name extensions (Windows 11), or the View ribbon -> "File name extensions" tick box
+      (Windows 10). Then the right one visibly reads "Schedule I.exe".
+
+      Leave every other option alone. Click Install and wait. It takes 10 to 60 seconds.
+
+  2d. VERIFY -- do not trust the installer's own success message
+      Check the filesystem instead. All three must be true:
+
+         Test-Path "<GameDir>\version.dll"
+         Test-Path "<GameDir>\MelonLoader\net6\MelonLoader.dll"
+         Test-Path "<GameDir>\MelonLoader\Dependencies"
+
+      Expect  True  three times.
+
+      And confirm the version is right:
+
+         (Get-Item "<GameDir>\version.dll").VersionInfo.FileVersion
+
+      Expect  0.7.3.0 . If it prints something else, the wrong version was installed -- re-run
+      the installer and pick 0.7.3 explicitly.
+
+      version.dll is about 11 MB. If it is a few kilobytes, it is the wrong file.
+
+  --------------------------------------------------------------------------------------------
+  STEP 3 -- UNBLOCK AND UNZIP THE MOD PACK
+  --------------------------------------------------------------------------------------------
+  3a. UNBLOCK IT FIRST. This matters. Windows tags files that arrived from the internet, and
+      Discord downloads are tagged. The tag survives extraction onto every file inside, and can
+      make the loader refuse the DLLs with no useful error.
+
+      In Explorer: right-click the zip -> Properties -> at the bottom of the General tab, if
+      there is an "Unblock" checkbox, tick it -> Apply -> OK.
+      If there is no checkbox, it was already clean. Move on.
+
+      Or PowerShell, which is safe either way:
+         Unblock-File "$env:USERPROFILE\Downloads\ScheduleI-Expansions-1.2.1-2026-08-06.zip"
+
+  3b. EXTRACT. Right-click the zip -> "Extract All..." -> Extract.
+      Extract it to Downloads or the Desktop. Do NOT extract it directly into the game folder
+      and do NOT extract it into Program Files.
+
+  3c. VERIFY the extracted folder. It must contain, at the top level:
+
+         Mods\        (a folder with 4 files)
+         Plugins\     (a folder with 1 file)
+         UserLibs\    (a folder with 1 file)
+         INSTALL.txt
+         FEATURES.txt
+         LICENSE-S1API.txt
+
+      A very common mistake: Windows sometimes creates an extra folder of the same name, so the
+      real contents end up at  ...\ScheduleI-Expansions-1.2.1-2026-08-06\Mods\  instead of
+      ...\Mods\ . Have the human open folders until they can see "Mods", "Plugins" and
+      "UserLibs" side by side, and use THAT folder as the source below.
+
+  --------------------------------------------------------------------------------------------
+  STEP 4 -- COPY THE FILES INTO THE GAME FOLDER
+  --------------------------------------------------------------------------------------------
+  Three destinations. The third one is the one people get wrong.
+
+     <GameDir>\Mods\        <-  the 3 mod DLLs plus S1API.Il2Cpp.MelonLoader.dll
+     <GameDir>\Plugins\     <-  S1APILoader.MelonLoader.dll
+     <GameDir>\UserLibs\    <-  Expansions.Core.dll
+
+  *** Expansions.Core.dll GOES IN UserLibs, NOT IN Mods. ***
+  It is a shared library, not a mod. MelonLoader scans UserLibs before Mods and registers it so
+  all three mods bind to the one copy. Put it in Mods and the three Expansions mods will fail to
+  load with an error about not finding "Expansions.Core", and F7 will do nothing.
+
+  4a. THE EASY WAY -- one PowerShell command
+      Replace both paths, keep the quotes, paste as one block.
+
+         $src  = "$env:USERPROFILE\Downloads\ScheduleI-Expansions-1.2.1-2026-08-06"
+         $dest = "<GameDir>"
+         foreach ($f in 'Mods','Plugins','UserLibs') {
+             New-Item -ItemType Directory -Force -Path (Join-Path $dest $f) | Out-Null
+             Copy-Item -Path (Join-Path $src "$f\*.dll") -Destination (Join-Path $dest $f) -Force
+         }
+         Get-ChildItem "$dest\Mods","$dest\Plugins","$dest\UserLibs" -Filter *.dll |
+             Select-Object Directory, Name, Length | Format-Table -AutoSize
+
+      $src must be the folder that directly contains Mods, Plugins and UserLibs (see 3c).
+      Windows will probably ask for permission because the game lives in Program Files. Say Yes.
+
+  4b. THE CLICKING WAY, if the human prefers it
+      Open two Explorer windows side by side: the extracted folder, and <GameDir>.
+      If Mods, Plugins or UserLibs do not exist in <GameDir>, create them -- right-click in the
+      empty space -> New -> Folder -> type the name exactly, with that capitalisation.
+      Then drag the contents of each extracted folder into the matching game folder.
+      Windows will ask for administrator permission each time. Click Continue.
+
+  4c. VERIFY -- exact expected contents and sizes
+      Sizes may differ by a few bytes on a rebuild; anything wildly different, or a 0-byte file,
+      means a failed copy.
+
+         <GameDir>\Mods\
+             Expansions.HireableDrivers.dll         180,224 bytes
+             Expansions.PoliceOverhaul.dll          120,832 bytes
+             Expansions.SpecialCustomers.dll        221,184 bytes
+             S1API.Il2Cpp.MelonLoader.dll         1,370,624 bytes
+
+         <GameDir>\Plugins\
+             S1APILoader.MelonLoader.dll             14,848 bytes
+
+         <GameDir>\UserLibs\
+             Expansions.Core.dll                    347,136 bytes
+
+      Six files, and Expansions.Core.dll appears exactly once, in UserLibs.
+      If it also appears in Mods, delete the copy in Mods.
+
+  4d. NOTHING ELSE IS NEEDED
+      S1API is already installed -- it was in the zip and you just copied it. Do not download it
+      separately. Do not download any other dependency.
+
+==================================================================================================
+ 5.  THE FIRST LAUNCH -- READ THIS BEFORE STARTING THE GAME
+==================================================================================================
+
+  *** THIS IS THE STEP WHERE PEOPLE BREAK THEIR INSTALL. WARN THE HUMAN BEFORE THEY CLICK. ***
+
+  On the very first launch after MelonLoader is installed, MelonLoader has to translate the
+  game's compiled code into something mods can talk to. It downloads a tool called Cpp2IL and
+  then regenerates about a hundred files. This happens ONCE.
+
+  WHAT THIS MEANS IN PRACTICE
+     - The computer MUST BE ONLINE for this launch. Offline, it fails and retries next time.
+     - It takes SEVERAL MINUTES. Two to ten is normal. On a slow hard drive it can be longer.
+     - A black console window titled MelonLoader appears. It will sit on the same line for
+       minutes at a time.
+     - The game window may be black, or blank, or say "Not Responding" in the title bar.
+     - Windows may grey it out and offer to close it.
+
+     ALL OF THAT IS NORMAL. DO NOT CLOSE IT. DO NOT END TASK. DO NOT REBOOT. WAIT.
+
+  HOW TO LAUNCH
+     Start it from Steam's PLAY button as normal. Nothing special.
+
+  WHAT YOU WILL SEE IN THE CONSOLE, ROUGHLY IN THIS ORDER
+        MelonLoader v0.7.3 Open-Beta
+        Game Type: Il2cpp
+        Game Name: Schedule I
+        [Il2CppAssemblyGenerator] Contacting RemoteAPI...
+        [Il2CppAssemblyGenerator] Game Not Found on RemoteAPI Host (...api/v1/game/schedule-i)
+        [Il2CppAssemblyGenerator] Using Cpp2IL Version: 2022.1.0-pre-release.21
+        [Il2CppAssemblyGenerator] Checking GameAssembly...
+        ... a long, quiet pause while it works ...
+        Loading Mods...
+
+     "Game Not Found on RemoteAPI Host" LOOKS like an error and is NOT one. It only means
+     nobody has uploaded pre-made files for this game to MelonLoader's server. It builds them
+     itself, which is exactly what the wait is.
+
+  IF ANTIVIRUS ASKS
+     Allow it. MelonLoader writes new DLLs into the game folder, which some antivirus products
+     treat as suspicious. If something gets quarantined, see section 8.1.
+
+  HOW YOU KNOW IT FINISHED
+     The game reaches its normal main menu, and a folder has appeared:
+
+        <GameDir>\MelonLoader\Il2CppAssemblies\
+
+     It should contain around 130 .dll files (134 on the machine this was written on).
+
+        (Get-ChildItem "<GameDir>\MelonLoader\Il2CppAssemblies" -Filter *.dll).Count
+
+  EVERY LAUNCH AFTER THIS ONE
+     Takes seconds, needs no internet, and the console prints:
+
+        [Il2CppAssemblyGenerator] Assembly is up to date. No Generation Needed.
+
+     The wait comes back exactly once more: after the game itself updates. See section 8.8.
+
+==================================================================================================
+ 6.  VERIFY IT WORKED
+==================================================================================================
+
+  Three levels of check. Do them in order. If level 1 fails there is no point doing level 3.
+
+  --------------------------------------------------------------------------------------------
+  6.1  THE LOG -- the authoritative answer
+  --------------------------------------------------------------------------------------------
+  The log is written every launch, whether or not anyone is watching the console.
+
+     Most recent run:   <GameDir>\MelonLoader\Latest.log
+     Older runs:        <GameDir>\MelonLoader\Logs\           (named yy-M-d_H-mm-s.log)
+
+  Open Latest.log in Notepad, or read the interesting lines with:
+
+     $log = "<GameDir>\MelonLoader\Latest.log"
+     $pat = 'Mods loaded|Game Type|S1API|Expansions|Drivers|Police|Customers'
+     Select-String -Path $log -Pattern $pat
+
+  A HEALTHY LOG CONTAINS ALL OF THESE. Exact text, taken from a real working install:
+
+        MelonLoader v0.7.3 Open-Beta
+        Game Type: Il2cpp
+        Game Name: Schedule I
+        Game Version: 0.4.6f11
+        Melon Assembly loaded: '.\UserLibs\Expansions.Core.dll'
+        0 UserLibs loaded.
+        S1APILoader v2.5.0
+        [S1APILoader] Loading S1API for Il2Cpp...
+        [S1APILoader] Successfully loaded S1API for Il2Cpp!
+        S1API (Forked by Bars) v3.1.7
+        Hireable Drivers v0.4.0
+        Police Improvements v0.2.0
+        Special Customers v1.0.0
+        4 Mods loaded.
+        [Expansions/Tutorial] Tutorial ready: 6 chapter(s). ...
+        [Expansions/Core] Ready. Settings: <GameDir>\UserData\Expansions.cfg. ...
+        [Expansions/Core] Actions: 16 registered. ...
+        [Expansions/Core] Diagnostics: 18 probe(s). ...
+        [Expansions/hireable_drivers] Enabled. Diagnostics: F6. Transport mode: Auto.
+        [Expansions/police_overhaul] Enabled.
+        [Expansions/special_customers] Enabled.
+        [Expansions/UI] Added the 'Expansions' entry to the main menu (cloned 'Settings').
+
+     *** "4 Mods loaded." IS THE NUMBER TO EXPECT. *** It counts the three feature mods plus
+     S1API, which MelonLoader also treats as a mod. Expansions.Core.dll is NOT in that four --
+     see "0 UserLibs loaded." below. Fewer than four means something did not load; more than four
+     means another mod was already installed, which is fine but see section 8.9.
+
+     Those Core counts are Core's own, logged before the three mods enable and add theirs. Once a
+     save is loaded the totals are 47 actions and 41 probes.
+
+     "6 chapter(s)" IS THE NUMBER FOR THIS PACKAGE. A seventh chapter exists in Expansions Core
+     for a separate mod by the same author that is not included here, and Core only registers it
+     when that mod is actually loaded -- so on a machine that also has it the line reads
+     "7 chapter(s)" and that is equally correct. Any other number means a chapter failed to
+     register; the lines above it in the log say which.
+
+  ONE LINE WORTH SEARCHING FOR DELIBERATELY
+        [Expansions/police_overhaul] Registered 8/8 police menu action(s) with Core.
+
+     8/8 is correct. "Registered 0/8" means the Police group will not appear on the Actions tab
+     -- see section 8.10. It is the one regression from the previous package that has a
+     single-line tell in the log.
+
+  TWO LINES THAT LOOK WRONG AND ARE NOT
+     "0 UserLibs loaded."
+        Correct and expected. Expansions.Core.dll is a shared library, not a mod, so MelonLoader
+        loads the assembly (the line above it says so) but counts zero mods in that folder. If
+        you instead see Expansions.Core.dll listed under "Loading Mods...", it is in the wrong
+        folder -- see section 8.3.
+     "Game Not Found on RemoteAPI Host"
+        Correct and expected. See section 5.
+
+  WARNINGS YOU CAN IGNORE
+     Yellow [WARNING] lines mentioning "Voice 'female1' was rejected", "could not be dressed",
+     or "Class::Init signatures have been exhausted" are known, cosmetic, and do not stop
+     anything from working.
+
+  --------------------------------------------------------------------------------------------
+  6.2  THE MAIN MENU
+  --------------------------------------------------------------------------------------------
+  Start the game and stay on the title screen. In the column of buttons on the left there
+  should be a new entry reading "Expansions", one slot below Settings. Click it. A screen opens
+  with the heading EXPANSIONS and a row of three tabs: Actions, Tutorial, Mods.
+
+  On the Mods tab you should see exactly THREE cards -- Hireable Drivers, Police Improvements
+  and Special Customers -- each with a name, a version, a description and an Enabled / Disabled
+  toggle. Expansions Core is deliberately not listed: it is the framework the cards live in, not
+  something you can switch off.
+
+  Most buttons on the Actions tab will be greyed out here with the reason "needs a loaded save
+  - you are in the main menu". That is correct.
+
+  If the "Expansions" entry is missing but F7 works in-game, see section 8.5. It is cosmetic.
+
+  --------------------------------------------------------------------------------------------
+  6.3  IN THE GAME
+  --------------------------------------------------------------------------------------------
+  Load a save (or start a new game) and get to the point where you are walking around. Then:
+
+     F7   Opens the Expansions screen -- same screen as the main-menu entry, but now the
+          actions work. Escape closes it.
+     F6   Opens the Hireable Drivers panel -- a read-only diagnostic view of drivers, their
+          property slots and their routes. Empty until you hire someone.
+
+  If both open, the install is finished.
+
+  ONE LAST CHECK WORTH DOING
+     With a save loaded, press F7, go to the Actions tab, and click "Run all diagnostics
+     probes". It writes a report and prints a summary into the output pane at the bottom of the
+     screen. This proves the mods can actually see and read the running game, which is a much
+     stronger signal than a menu opening. Expect 41 results.
+
+     While you are there, SCROLL THE ACTION LIST WITH THE MOUSE WHEEL. There should be 47 rows in
+     four groups, and the wheel should move them. If it does not, say so -- that was a real bug
+     once and its fix has not been confirmed.
+
+==================================================================================================
+ 7.  CONTROLS, AND WHAT TO TRY FIRST
+==================================================================================================
+
+  KEYS
+  ----------------------------------------------------------------------------------------------
+  F7               The Expansions screen. Same screen as the main-menu entry. Three tabs:
+                   Actions, Tutorial, Mods. Every list on it scrolls with the mouse wheel, and
+                   with PgUp / PgDn / Home / End / the arrow keys.
+  F6               The Hireable Drivers panel. READ-ONLY DIAGNOSTICS ONLY -- who is hired, what
+                   each one is doing and why not. You do not hire or configure anyone here:
+                   hiring is a line in the employee fixer's conversation, and routes are on the
+                   game's own management clipboard, the same one you use for a Handler.
+  P                While the Expansions screen is open: run the whole diagnostics suite.
+  Escape           Closes whichever of the two is open. If a search list is open inside one
+                   of them, the first Escape closes the list and the second closes the screen.
+  Backquote        The game's own developer console. The key left of 1 and above Tab, the one
+                   that also makes a tilde. Off by default on some saves -- see section 8.6.
+                   Nothing in this suite needs it.
+
+  While the Expansions screen is open your character should not move. The screen puts the game
+  into its own UI state, the same one the game's own menus use, so typing into a search box
+  filters the list instead of walking you across town. If it does move you, see section 8.10.
+
+  F7 and F6 can be changed, in <GameDir>\UserData\Expansions.cfg :  menu_hotkey  under the
+  [Expansions] heading, and  panel_hotkey  under [HireableDrivers_01_Main]. Both take a key name
+  such as "F9"; setting menu_hotkey to "None" turns F7 off entirely. The comment beside
+  panel_hotkey in that file also names a third key as one to avoid; it belongs to a separate mod
+  that is not in this package, so you can ignore it.
+
+  TRY THIS FIRST -- about ten minutes, in this order
+  ----------------------------------------------------------------------------------------------
+  1. Load a save. None of this works from the main menu.
+
+  2. Press F7 -> Tutorial tab -> "Enable the tutorial quest line".
+     This is the guided tour. It installs six chapters and 22 objectives as real in-game quests,
+     with journal objectives and 50 XP per chapter, walking through every feature in order. It is
+     by far the best way in. Every objective is a real task you can actually do -- nothing in the
+     line ticks itself off. Chapters 1 to 3 are the part of this suite that has actually been
+     played through start to finish; chapters 4 to 6 cover the three feature mods and have not.
+
+  3. Press F7 -> Actions tab -> "Run all diagnostics probes".
+     Read the output pane at the bottom. It tells you what this particular machine and save can
+     and cannot do -- for example whether your vehicles are able to drive themselves, which
+     changes how Hireable Drivers behaves.
+
+  4. Hireable Drivers: find the employee fixer NPC you normally hire staff from. Their
+     conversation now has an extra line per property you own -- "Hire a driver for the Barn
+     ($1,800)" or similar. Hire one, give them a bed on the normal Packager clipboard, then use
+     the clipboard's route rows exactly as you would for a Handler. A driver may only COLLECT
+     from the property you hired it at -- the clipboard's own picker will say so if you try
+     somewhere else -- but it can DELIVER anywhere you own. For a drop-off too far away to walk
+     up to and click, or for a dealer, use F7 -> Actions -> "Set the route's drop-off", which
+     writes onto the same rows.
+
+  5. Police Improvements: F7 -> Actions -> the "Police Improvements" group. "Police: heat +25"
+     twice, then walk past a patrol and notice there are more officers than usual.
+
+  6. Special Customers: there is a permanent NPC called Marcus Vale standing at the Northtown
+     motel. F7 -> Actions -> "Teleport to Marcus Vale" puts you next to him.
+
+  THE FULL REFERENCE
+  ----------------------------------------------------------------------------------------------
+  FEATURES.txt, in the same zip as this file, is the complete 2,257-line reference: every one of
+  the 47 menu actions, all 41 diagnostic probes, all 86 configuration settings, the six
+  tutorial chapters, and an honest list of what is known to be untested. This file gets you
+  installed; that file tells you what everything does. Read section 2 of it for the quick
+  reference, section 12 for what is worth testing first, and section 13 for the known
+  limitations.
+
+==================================================================================================
+ 8.  TROUBLESHOOTING -- SYMPTOM, CAUSE, FIX
+==================================================================================================
+
+  --------------------------------------------------------------------------------------------
+  8.1  NOTHING HAPPENS AT ALL. No console window, no new menu entry, F7 does nothing.
+  --------------------------------------------------------------------------------------------
+  This is MelonLoader not running. The mods are irrelevant until this is fixed.
+
+  CAUSE A -- MelonLoader is not actually installed.
+     CHECK   Test-Path "<GameDir>\version.dll"
+             Test-Path "<GameDir>\MelonLoader\Latest.log"
+     FIX     If version.dll is missing, re-do section 4 step 2. If version.dll exists but
+             Latest.log does not, MelonLoader is present but never started -- most likely
+             cause B or C.
+
+  CAUSE B -- It was installed against the wrong executable.
+     CHECK   In the installer, the game entry must point at "<GameDir>\Schedule I.exe".
+     FIX     Uninstall from within the MelonLoader installer, then install again choosing that
+             exact file.
+
+  CAUSE C -- Antivirus deleted or quarantined something.
+     This is common. version.dll is an 11 MB DLL that injects itself into a game, which is
+     indistinguishable from malware to a heuristic scanner.
+     CHECK   Windows Security -> Virus & threat protection -> Protection history. Look for
+             anything from the last hour mentioning version.dll, MelonLoader, or the game
+             folder. Third-party antivirus keeps a similar list.
+     FIX     Restore the item, then add an exclusion for the whole <GameDir> folder
+             (Windows Security -> Virus & threat protection -> Manage settings -> Exclusions ->
+             Add an exclusion -> Folder). Then re-run the MelonLoader installer.
+             Do not turn the antivirus off. Exclude the folder.
+
+  CAUSE D -- Wrong Steam branch (Mono, not IL2CPP).
+     CHECK   Section 2.3. Also, if Latest.log exists, it will say "Game Type: Mono".
+     FIX     None within this package. These mods are IL2CPP-only.
+
+  CAUSE E -- The game is being launched some other way.
+     Launching through Steam's PLAY button is what works. A desktop shortcut created before
+     MelonLoader was installed still points at the same exe and is fine; a shortcut to a
+     different copy of the game is not.
+
+  --------------------------------------------------------------------------------------------
+  8.2  MELONLOADER RUNS, BUT THE LOG SAYS "0 Mods loaded."
+  --------------------------------------------------------------------------------------------
+  CAUSE A -- The DLLs are in the wrong place, or one level too deep.
+     A very common shape of this: <GameDir>\Mods\Mods\Expansions.PoliceOverhaul.dll , created by
+     dragging the extracted "Mods" folder into <GameDir>\Mods instead of dragging its contents.
+     CHECK   Get-ChildItem "<GameDir>\Mods" -Recurse | Select-Object FullName, Length
+     FIX     Flatten it. The DLLs must sit directly in <GameDir>\Mods, with no subfolder.
+
+  CAUSE B -- The files are still "blocked" by Windows.
+     CHECK   Get-Item "<GameDir>\Mods\*.dll" -Stream Zone.Identifier -ErrorAction SilentlyContinue
+             Any output at all means they are tagged.
+     FIX     Unblock all three folders:
+                $d = "<GameDir>"
+                Get-ChildItem "$d\Mods","$d\Plugins","$d\UserLibs" -Filter *.dll | Unblock-File
+
+  CAUSE C -- The copy silently failed because the game was running.
+     CHECK   Compare the file sizes against the table in section 4c. A missing or 0-byte file
+             is the tell.
+     FIX     Close the game and copy again.
+
+  --------------------------------------------------------------------------------------------
+  8.3  THE MODS LOAD BUT NOTHING WORKS -- F7 does nothing, errors mention "Expansions.Core"
+  --------------------------------------------------------------------------------------------
+  *** This is the single most likely mistake in the whole install. ***
+
+  CAUSE   Expansions.Core.dll is in <GameDir>\Mods instead of <GameDir>\UserLibs .
+          The three Expansions mods are compiled against it, and MelonLoader only publishes
+          UserLibs as a shared assembly search path. In Mods it is loaded as if it were a mod,
+          fails to register (it has no mod entry point), and the three mods that depend on it
+          throw at load time.
+
+  SYMPTOMS IN THE LOG, any of these:
+          Expansions.Core.dll listed under "Loading Mods..." rather than "Loading UserLibs..."
+          "Could not load file or assembly 'Expansions.Core'"
+          FileNotFoundException / TypeLoadException naming Expansions.Core
+          a mod count of 1 instead of 4 -- S1API loads and the three Expansions mods do not
+          no "Expansions" entry in the main menu, and F7 doing nothing in-game
+
+  CHECK   Test-Path "<GameDir>\UserLibs\Expansions.Core.dll"    -> must be True
+          Test-Path "<GameDir>\Mods\Expansions.Core.dll"        -> must be False
+
+  FIX     Move it, do not copy it. There must be exactly one:
+             New-Item -ItemType Directory -Force -Path "<GameDir>\UserLibs" | Out-Null
+             Move-Item "<GameDir>\Mods\Expansions.Core.dll" "<GameDir>\UserLibs\" -Force
+          Then restart the game and re-check the log.
+
+  REMINDER  "0 UserLibs loaded." in the log is CORRECT. See section 6.1.
+
+  --------------------------------------------------------------------------------------------
+  8.4  THE FIRST LAUNCH LOOKS FROZEN -- black window, "Not Responding", nothing for minutes
+  --------------------------------------------------------------------------------------------
+  CAUSE   Almost always: it is working. MelonLoader is regenerating the IL2CPP assemblies, which
+          is CPU and disk heavy and produces no progress output for long stretches.
+  FIX     Wait. Ten minutes before you even start worrying.
+
+  HOW TO TELL "WORKING" FROM "HUNG" WITHOUT CLOSING IT
+     Open Task Manager (Ctrl+Shift+Esc), find "Schedule I", and look at CPU and Disk. If either
+     is moving, it is working.
+     Or watch the folder fill up, from a second PowerShell window:
+        $gen = "<GameDir>\MelonLoader\Il2CppAssemblies"
+        (Get-ChildItem $gen -Filter *.dll -ErrorAction SilentlyContinue).Count
+     Run it a couple of times a minute. If the number is climbing, it is working.
+
+  IF IT GENUINELY NEVER FINISHES
+     CAUSE   No internet on that launch. It cannot download Cpp2IL, so it gives up and retries
+             next time.
+     CHECK   Latest.log for a download or network failure around the [Il2CppAssemblyGenerator]
+             lines.
+     FIX     Connect to the internet and launch again. It resumes from scratch and completes.
+
+  --------------------------------------------------------------------------------------------
+  8.5  THE "Expansions" MAIN-MENU ENTRY IS MISSING, or the F7 screen is a plain grey box
+  --------------------------------------------------------------------------------------------
+  CAUSE   The mod builds its screen by cloning the game's own menu buttons at runtime. If it
+          cannot find the main menu in time -- a slow load, a UI change in a game update -- it
+          gives up and falls back to a plain built-in window instead.
+
+  CHECK the log for either of these:
+          "The native toggle screen is unavailable because ... Falling back to the built-in
+           menu - press F7 to open it."
+          "No MenuScreen reports OpenOnStart among N; falling back to the one with the most
+           buttons"
+
+  FIX     There is nothing to fix and nothing is broken. F7 STILL WORKS and the fallback window
+          carries the same actions, module toggles and probe runner -- it is just uglier and
+          pages instead of scrolling. Restarting the game sometimes lands the pretty version.
+
+  Note the reverse case too: the "Expansions" main-menu entry can be missing while F7 works
+  perfectly. Judge the install on F7, not on the menu entry.
+
+  --------------------------------------------------------------------------------------------
+  8.6  THE IN-GAME CONSOLE WILL NOT OPEN
+  --------------------------------------------------------------------------------------------
+  First: YOU DO NOT NEED IT. Every command in this suite has a button on the F7 Actions tab.
+  This entry exists because people go looking for the console and conclude the mods are broken.
+
+  There are three separate reasons it will not open, and all three have to be right.
+
+  CAUSE A -- Wrong key. It is the BACKQUOTE / GRAVE key: ` . On a US keyboard it is immediately
+             left of the 1 key and directly above Tab, sharing a key with ~ . It is not F1, not
+             a slash, not the apostrophe.
+  CAUSE B -- It is enabled PER SAVE, not globally. The flag lives in each save's Game.json. A
+             save created with it off will never open the console no matter what you press, and
+             a different save on the same machine can behave differently.
+  CAUSE C -- It only exists in the gameplay scene. It will never open from the main menu.
+
+  FIX     Load a save, press F7, go to the Actions tab, and use one of:
+             "Enable and open the console"          - writes the per-save flag and opens it
+             "Enable the console (do not open it)"  - writes the flag only
+             "Show the console key binding"         - reads the live binding out of the game's
+                                                      input settings, so if it has been rebound
+                                                      this tells you the truth
+          The setting persists in that save from then on.
+
+  --------------------------------------------------------------------------------------------
+  8.7  THE GAME CRASHES ON STARTUP, OR CRASHES WHEN A SAVE LOADS
+  --------------------------------------------------------------------------------------------
+  FIX     Find the culprit by removing mods one at a time. Make a folder outside the game, for
+          example  <GameDir>\..\ModsOff\ , and move mods into it, testing after each move:
+             1. Expansions.SpecialCustomers.dll
+             2. Expansions.HireableDrivers.dll
+             3. Expansions.PoliceOverhaul.dll
+          Leave Expansions.Core.dll in UserLibs and both S1API files alone the whole time --
+          removing Core takes all three Expansions mods down and tells you nothing.
+          When it stops crashing, the last file you moved is the one to report.
+
+  BEFORE YOU DO ANY OF THAT, read section 9: moving Expansions.SpecialCustomers.dll out is NOT
+  the same as disabling it, and has consequences for saves that already met its NPCs. If the
+  crash only happens on one particular save, disable the module (section 9) rather than
+  removing the file.
+
+  --------------------------------------------------------------------------------------------
+  8.8  IT ALL WORKED, AND NOW AFTER A GAME UPDATE IT DOES NOT
+  --------------------------------------------------------------------------------------------
+  CAUSE   A game update replaces GameAssembly.dll. Everything MelonLoader generated from the old
+          one is now stale, and mods compiled against the old layout may bind to the wrong
+          things or fail outright.
+
+  WHAT HAPPENS BY ITSELF
+     The next launch regenerates the assemblies. That means the multi-minute wait from section 5
+     comes back, and that launch needs internet again. Expect it and do not panic.
+
+  WHAT TO DO
+     1. Launch once, online, and wait it out.
+     2. Read Latest.log. If the mods load and there are no red lines, you are fine.
+     3. If MelonLoader itself no longer starts, re-run the MelonLoader 0.7.3 installer and
+        install again over the top.
+     4. If the mods load but a feature misbehaves, that is the real risk of an update and it
+        needs a new build of the mods. Report it (section 11) with the log.
+
+  ONE UPDATE BEHAVIOUR THAT IS DELIBERATE
+     The developers of Schedule I are building their own Special Customers feature, expected as
+     version 0.5.0. This mod DETECTS that and switches itself off on purpose rather than fight
+     it. You will see the module's name become "Special Customers (standing down - ...)" and a
+     line in the log giving the reason. That is correct behaviour, not a bug. The other mods are
+     unaffected.
+
+  A NOTE ON "VERIFY INTEGRITY OF GAME FILES"
+     Steam's verify does not know about MelonLoader and normally leaves it alone, but it can
+     restore a game file the loader depends on. If you run it and modding stops working, re-run
+     the MelonLoader installer.
+
+  --------------------------------------------------------------------------------------------
+  8.9  THERE WERE ALREADY OTHER MODS INSTALLED
+  --------------------------------------------------------------------------------------------
+  Ask about this BEFORE you start, not after something breaks. If <GameDir>\Mods already had
+  files in it before step 4, the install is no longer the clean case this document describes.
+
+  CHECK    Get-ChildItem "<GameDir>\Mods","<GameDir>\Plugins","<GameDir>\UserLibs" -File |
+               Select-Object Directory, Name, Length
+           Anything not in the six-file list in section 4c belongs to somebody else.
+
+  THE ONE THAT ACTUALLY MATTERS -- a different S1API version
+     Many Schedule I mods ship their own copy of S1API. Only one can win, and whichever is
+     older will be missing things the newer mods need.
+     CHECK  (Get-Item "<GameDir>\Mods\S1API.Il2Cpp.MelonLoader.dll").VersionInfo.FileVersion
+            Expect 3.1.7.0. If it is lower, the copy from this zip did not overwrite the old
+            one, or an older one was installed afterwards. Copy ours in again, overwriting.
+            If it is HIGHER than 3.1.7, leave it -- S1API is backwards compatible and another
+            mod may need the newer one. Note the version if you end up reporting a problem.
+     A file named S1API.Mono.MelonLoader.dll may also be sitting there from an older install.
+     On the IL2CPP branch it is the wrong flavour and MelonLoader may complain about it in red.
+     Renaming it to S1API.Mono.MelonLoader.dll.disabled makes it invisible to the loader.
+     This package deliberately ships only the IL2CPP flavour, so it never creates that problem.
+
+  OTHER PEOPLE'S MODS IN GENERAL
+     They are not automatically a problem and this suite is written to coexist. But if the game
+     misbehaves in a way section 8 does not describe, move the other mods out of <GameDir>\Mods
+     temporarily and see whether the symptom goes. Report which combination broke it.
+
+  --------------------------------------------------------------------------------------------
+  8.10  SMALLER THINGS THAT LOOK LIKE BUGS
+  --------------------------------------------------------------------------------------------
+  "Typing in a search box walks my character around."
+     This was a real bug and it has been fixed -- the Expansions screen now puts the game into
+     its own UI state while it is open, which is what stops keystrokes reaching the character.
+     If it still happens, the mod could not take that state; the MelonLoader log says why, once.
+     Work around it by scrolling the list instead of typing, or by using the direct rows that
+     need no search ("Teleport to Marcus Vale", "Teleport to the visiting group").
+
+  "The mouse wheel does not scroll the lists on the F7 screen."
+     Also a real bug, also fixed, also unconfirmed. Every list on that screen should scroll with
+     the wheel, and PgUp / PgDn / Home / End / the arrow keys should work too. If it does not
+     scroll, most of the 47 actions are unreachable and that is worth reporting straight away.
+
+  "There is no 'Police Improvements' group in the F7 actions list."
+     Fixed since the last package. If it is still missing, search the MelonLoader log for
+     "police menu action" -- a line reading "Registered 0/8" means the fix did not take, and
+     every police verb is unreachable from the menu until it is fixed again. Nothing else in
+     that mod is affected; heat still runs, and the diagnostics report still shows it.
+
+  "The F6 panel will not let me do anything."
+     Correct, it is read-only now. It is a diagnostic view: who is hired, what each driver is
+     doing, and why one is standing still. Hire drivers from the employee fixer's conversation
+     and set their routes on the game's own management clipboard.
+
+  "My friend joined my game and sees none of this."
+     Everyone must install the same mods. See section 10.
+
+  "The visiting customers are all wearing normal civilian clothes."
+     Known cosmetic issue seen in the developer's own logs. The group still arrives, still
+     orders and still pays. Report it if you like, but it is not an install problem.
+
+  "Something in the log says allow_mutating_probes."
+     Leave it set to false. It is a diagnostic mode that is allowed to write directly into game
+     memory, and it has hard-killed the game process before. Nothing you need is behind it.
+
+==================================================================================================
+ 9.  UNINSTALLING -- AND WHY YOU SHOULD DISABLE INSTEAD
+==================================================================================================
+
+  --------------------------------------------------------------------------------------------
+  THE RULE: DISABLE, DO NOT DELETE                                          *** IMPORTANT ***
+  --------------------------------------------------------------------------------------------
+  If you want a mod to stop doing things, TURN IT OFF. Do not delete its file.
+
+  WHY, CONCRETELY
+     The Special Customers mod creates eight custom characters. Once a save has met them, the
+     save stores them. They are rebuilt from the mod's own code every time that save loads --
+     and that happens BEFORE any on/off setting is read, so there is no toggle anywhere that can
+     un-create them. The mod deliberately does not try to destroy them mid-session either,
+     because deleting a live networked character out from under a loaded save risks corrupting
+     it.
+
+     So: turning the module off stops everything it DOES -- no visits, no offers, no orders --
+     but the characters remain standing in the world.
+
+     Deleting Expansions.SpecialCustomers.dll is what removes them, and that leaves ORPHANED
+     CHARACTER FOLDERS inside every save that ever stored them. Whether the game's own save
+     loader tolerates that has not been established. It might be fine. It might not.
+
+     If you are going to delete that file anyway, restore a save backup from before you ever
+     installed the mods (section 10), or accept the risk knowingly.
+
+  HOW TO DISABLE A MOD -- two ways, both live and both reversible
+  ----------------------------------------------------------------------------------------------
+  IN-GAME (easiest)
+     Press F7 -> Mods tab -> click the toggle on the card so it reads Disabled.
+     It takes effect immediately, and it is remembered for next launch. Turning it back on is
+     the same click.
+
+  BY EDITING THE SETTINGS FILE (works with the game closed)
+     Open this in Notepad:
+        <GameDir>\UserData\Expansions.cfg
+
+     Find the section heading you want and change  enabled = true  to  enabled = false . The
+     three headings, exactly as they appear:
+
+        [HireableDrivers_01_Main]
+        enabled = false
+
+        [PoliceImprovements_01_Main]
+        enabled = false
+
+        [SpecialCustomers_01_Main]
+        enabled = false
+
+     Save the file. Changing it while the game is running also works -- the mods pick it up.
+     Do not rename the headings and do not delete them; the file is regenerated with defaults if
+     it goes missing, which would silently switch everything back on.
+
+  WHICH FILES ARE ACTUALLY SAFE TO DELETE
+  ----------------------------------------------------------------------------------------------
+     Expansions.PoliceOverhaul.dll       SAFE. Its heat data lives in a separate file the game
+                                         ignores, and its federal agents are explicitly blocked
+                                         from ever reaching a save.
+     Expansions.HireableDrivers.dll      SAFE. Drivers are ordinary game employees underneath;
+                                         removing the mod leaves them as normal Handlers.
+     Expansions.SpecialCustomers.dll     NOT SAFE once a save has met the visitors. See above.
+     Expansions.Core.dll                 Removing it disables all three Expansions mods at once
+                                         and they will log load errors. Remove the three mods
+                                         first if you are doing this.
+     S1API / S1APILoader                 Only remove these if you are removing every mod that
+                                         uses them, which may include mods from other people.
+
+  FULL UNINSTALL, EVERYTHING BACK TO VANILLA
+  ----------------------------------------------------------------------------------------------
+     1. Close the game.
+     2. Delete these six files:
+           <GameDir>\Mods\Expansions.HireableDrivers.dll
+           <GameDir>\Mods\Expansions.PoliceOverhaul.dll
+           <GameDir>\Mods\Expansions.SpecialCustomers.dll
+           <GameDir>\Mods\S1API.Il2Cpp.MelonLoader.dll
+           <GameDir>\Plugins\S1APILoader.MelonLoader.dll
+           <GameDir>\UserLibs\Expansions.Core.dll
+     3. Remove MelonLoader: run MelonLoader.Installer.exe again, select the game, and use its
+        Uninstall button. (Deleting <GameDir>\version.dll by hand also stops it loading, but the
+        installer cleans up properly.)
+     4. Optionally delete <GameDir>\UserData\Expansions.cfg and the Expansions-Probe-*.md files.
+     5. If a save had ever met the Special Customers visitors, restore that save from the backup
+        made in section 10.
+
+     None of this touches Steam or the game's own files. Reinstalling the game is never
+     necessary, but "Verify integrity of game files" in Steam is a clean way to be sure.
+
+==================================================================================================
+ 10.  HONEST STATUS -- BACK UP YOUR SAVES FIRST
+==================================================================================================
+
+  --------------------------------------------------------------------------------------------
+  READ THIS BEFORE INSTALLING, NOT AFTER                                    *** IMPORTANT ***
+  --------------------------------------------------------------------------------------------
+  These mods are NEW AND LIGHTLY TESTED. That is not modesty, it is the actual state:
+
+     Expansions Core / the F7 screen       Finished. Used in a real game.
+     The tutorial quest line               Six chapters, 22 objectives, all of them real.
+                                           Chapters 1-3 played end to end and confirmed.
+                                           Chapters 4-6 cover the three feature mods and have
+                                           not been played.
+     Hireable Drivers                      Complete in source, compiles clean, every game
+                                           function it calls was checked against the real game
+                                           files -- and it has NEVER BEEN RUN in a live game.
+                                           It was also rebuilt since the last package: hiring
+                                           and route editing moved onto the game's own NPC
+                                           dialogue and management clipboard.
+     Police Improvements                   Same. Never run. Its menu buttons failed to appear
+                                           the first time anyone tried; that is fixed and the
+                                           fix has not been seen working.
+     Special Customers                     Same, except that one character (Marcus Vale) is
+                                           confirmed to exist correctly in a live game. A group
+                                           has been brought into town once and the sale got
+                                           stuck; that is fixed and unconfirmed too.
+
+  "It compiles and the symbols all resolve" is not the same as "it works". Expect bugs. Expect
+  something to behave oddly the first time you use it. That is the deal.
+
+  The whole suite has been through exactly ONE real play session. That session found six genuine
+  bugs -- lists that would not scroll, an output pane that squeezed those lists down to a handful
+  of rows, typing that moved the character, a menu group that never appeared, and two ways
+  Special Customers could wedge itself. All six are fixed in this package and NONE of the fixes
+  has been run. If something in section 8.10 says "fixed and unconfirmed", that is what it means.
+
+  BACK UP YOUR SAVES. NOW.
+  ----------------------------------------------------------------------------------------------
+  Saves live here, NOT in the game folder and NOT in Documents:
+
+     %USERPROFILE%\AppData\LocalLow\TVGS\Schedule I\Saves\
+
+  Inside it is one folder named with a 17-digit Steam ID, and inside that are SaveGame_1
+  through SaveGame_5.
+
+  COPY IT -- PowerShell, three lines, makes a dated copy on the Desktop:
+
+     $src = "$env:USERPROFILE\AppData\LocalLow\TVGS\Schedule I\Saves"
+     $dst = "$env:USERPROFILE\Desktop\ScheduleI-Saves-Backup-$(Get-Date -Format yyyyMMdd-HHmm)"
+     Copy-Item $src $dst -Recurse
+
+  COPY IT -- by clicking, if that is easier:
+     1. Press Windows+R, paste this, press Enter:
+           %USERPROFILE%\AppData\LocalLow\TVGS\Schedule I
+     2. An Explorer window opens. Right-click the "Saves" folder -> Copy.
+     3. Go to the Desktop, right-click empty space -> Paste.
+     4. Rename the pasted folder to something like "Saves backup before mods".
+
+  VERIFY the backup is real before continuing:
+     Get-ChildItem "$env:USERPROFILE\Desktop\ScheduleI-Saves-Backup-*" -Recurse -File |
+         Measure-Object
+
+     It should count well over a hundred files. A backup with two files in it is not a backup.
+
+  TO RESTORE LATER
+     Close the game, delete or rename the live "Saves" folder at the path above, then copy the
+     backup back in and rename it to exactly "Saves".
+
+  ALSO WORTH KNOWING
+  ----------------------------------------------------------------------------------------------
+  - Play on a save you would not be devastated to lose, at least at first.
+  - The Special Customers mod bumped its save format once already. A save written by this
+    version and then opened by an older build of the mod loses whatever visit was in progress.
+  - CO-OP IS HOST-ONLY AND EVERY PLAYER NEEDS THE SAME MODS.
+    All the world-changing logic runs on the host. A guest who has the mods installed gets a
+    read-only version -- they can look at status screens and teleport their own camera, but
+    host-only buttons grey themselves out saying so. A guest WITHOUT the mods will not see the
+    custom characters correctly and the session may behave strangely. Install the same files on
+    every machine.
+
+==================================================================================================
+ 11.  REPORTING A PROBLEM
+==================================================================================================
+
+  Collect these four things. The first two are what actually get a bug fixed; a description
+  without them is usually not enough to act on.
+
+  1. THE MELONLOADER LOG -- the whole file, from the run where it went wrong
+        <GameDir>\MelonLoader\Latest.log
+
+     "Latest" means the most recent run only. If the game has been launched again since the
+     problem, the evidence is now in the archive instead:
+        <GameDir>\MelonLoader\Logs\        (files named like  26-8-5_0-16-3.log )
+     Take the one whose timestamp matches when it broke.
+
+  2. A DIAGNOSTICS REPORT
+     In-game, with the save loaded that has the problem:
+        Press F7 -> Actions tab -> "Run all diagnostics probes"
+        (or just press P while the Expansions screen is open)
+     Wait for it to finish -- the output pane at the bottom prints a summary and the full path.
+     Then click "Open the newest probe report", which reveals it in Explorer and prints the path
+     again.
+
+     It lands here:
+        <GameDir>\UserData\Expansions-Probe-<yyyy-MM-dd_HH-mm-ss>.md
+
+     Sometimes with a companion file next to it:
+        <GameDir>\UserData\Expansions-Probe-<same timestamp>-avatars.json
+
+     This report is the single most useful thing you can send. It records what the mods can
+     actually see in your running game, which is usually the difference between "we can guess"
+     and "we know".
+
+  3. YOUR SETTINGS FILE
+        <GameDir>\UserData\Expansions.cfg
+
+  4. A PLAIN DESCRIPTION
+        What you were doing, which of the mods it involved, whether you were the host or a guest
+        in co-op or playing alone, which save, and whether it happens every time.
+
+  ZIP IT ALL UP -- PowerShell, one block, leaves the file on the Desktop:
+
+     $g = "<GameDir>"
+     $out = "$env:USERPROFILE\Desktop\ScheduleI-ModReport-$(Get-Date -Format yyyyMMdd-HHmmss)"
+     New-Item -ItemType Directory -Force -Path $out | Out-Null
+     Copy-Item "$g\MelonLoader\Latest.log" $out -ErrorAction SilentlyContinue
+     Copy-Item "$g\UserData\Expansions.cfg" $out -ErrorAction SilentlyContinue
+     Get-ChildItem "$g\UserData\Expansions-Probe-*" | Sort-Object LastWriteTime -Descending |
+         Select-Object -First 2 | Copy-Item -Destination $out
+     Compress-Archive -Path "$out\*" -DestinationPath "$out.zip" -Force
+     Remove-Item $out -Recurse -Force
+     Write-Host "Send this file: $out.zip"
+
+  ONE THING NOT TO DO
+     Do not set  allow_mutating_probes = true  in Expansions.cfg, even if you are trying to
+     gather more information. That mode lets the diagnostics write directly into the running
+     game's memory, and it has killed the game process outright with no crash log. The safe
+     read-only probes already answer the questions worth asking.
+
+==================================================================================================
+ APPENDIX A.  EVERY PATH IN ONE PLACE
+==================================================================================================
+
+  <GameDir> is the folder confirmed in section 3. Default:
+     C:\Program Files (x86)\Steam\steamapps\common\Schedule I
+
+  WHAT YOU INSTALL
+     <GameDir>\version.dll                                MelonLoader hook, ~11 MB, from the
+                                                          installer -- never copied by hand
+     <GameDir>\MelonLoader\                               MelonLoader itself, from the installer
+     <GameDir>\Mods\Expansions.HireableDrivers.dll        mod
+     <GameDir>\Mods\Expansions.PoliceOverhaul.dll         mod
+     <GameDir>\Mods\Expansions.SpecialCustomers.dll       mod
+     <GameDir>\Mods\S1API.Il2Cpp.MelonLoader.dll          third-party API layer
+     <GameDir>\Plugins\S1APILoader.MelonLoader.dll        third-party loader plugin
+     <GameDir>\UserLibs\Expansions.Core.dll               shared library -- NOT in Mods
+
+  WHAT GETS CREATED FOR YOU
+     <GameDir>\MelonLoader\Latest.log                     the log for the most recent run
+     <GameDir>\MelonLoader\Logs\                          archived logs, yy-M-d_H-mm-s.log
+     <GameDir>\MelonLoader\Il2CppAssemblies\              generated on first launch, ~130 DLLs
+     <GameDir>\UserData\Expansions.cfg                    all 86 settings for the suite
+     <GameDir>\UserData\Loader.cfg                        MelonLoader's own settings
+     <GameDir>\UserData\Expansions-Probe-*.md             diagnostics reports
+     <GameDir>\UserData\Expansions-Probe-*-avatars.json   diagnostics sidecar
+     <GameDir>\UserData\Expansions-Probe-journal.log      crash journal for the diagnostics
+
+  OUTSIDE THE GAME FOLDER
+     %USERPROFILE%\AppData\LocalLow\TVGS\Schedule I\Saves\      save games -- BACK THIS UP
+     %USERPROFILE%\AppData\LocalLow\TVGS\Schedule I\Player.log  Unity's own log
+
+  PER-SAVE DATA WRITTEN BY THESE MODS
+     Inside each save folder, under Modded\Saveables\ :
+        hireable_drivers.json         the driver roster and their trip counters
+        expansions_police.json        heat and outlaw status
+        special_customers.json        the current visit
+        ExpansionsTutorial\           tutorial progress
+
+     Driver ROUTES are not in that list on purpose. They live in the game's own save data, in
+     the same field a Handler's routes use, which is what lets the normal management clipboard
+     edit them.
+
+  DOWNLOAD LINKS -- the only two in this document
+     MelonLoader 0.7.3 release page
+        https://github.com/LavaGang/MelonLoader/releases/tag/v0.7.3
+     MelonLoader 0.7.3 installer, direct
+        https://github.com/LavaGang/MelonLoader/releases/download/v0.7.3/MelonLoader.Installer.exe
+
+==================================================================================================
+ APPENDIX B.  WHAT EACH FILE IS AND WHY IT GOES WHERE IT GOES
+==================================================================================================
+
+  MelonLoader scans three folders and treats each one differently. This is the entire reason the
+  layout matters.
+
+     Plugins\    Loaded FIRST, before the game's own code is ready. Used by things that must be
+                 in place before anything else runs. S1APILoader lives here because its job is
+                 to decide which flavour of S1API to load, and that decision has to happen
+                 before any mod asks for it.
+
+     UserLibs\   Scanned BEFORE Mods, and registered as a shared assembly search directory. Code
+                 here is a LIBRARY, not a mod -- MelonLoader will not look for a mod entry point
+                 in it, and correctly reports "0 UserLibs loaded". Expansions.Core.dll lives
+                 here so that all three Expansions mods bind to one single copy of it.
+
+     Mods\       Loaded LAST. Every file here is expected to be a real mod with an entry point.
+                 The three feature DLLs and the S1API runtime live here -- which is why the log
+                 says "4 Mods loaded." and not 3.
+
+  THE FILES
+
+     Expansions.Core.dll               v0.1.0    The framework: the F7/main-menu screen, the
+                                                 settings file, the 47-action surface, the
+                                                 diagnostics harness, the tutorial director.
+                                                 Not a mod. Goes in UserLibs.
+     Expansions.HireableDrivers.dll    v0.4.0    Needs Expansions.Core.dll. F6 diagnostics
+                                                 panel. Hiring lives on the employee fixer's
+                                                 conversation and routes on the game's own
+                                                 management clipboard.
+     Expansions.PoliceOverhaul.dll     v0.2.0    Needs Expansions.Core.dll. Shows in menus as
+                                                 "Police Improvements".
+     Expansions.SpecialCustomers.dll   v1.0.0    Needs Expansions.Core.dll. The only mod here
+                                                 that writes custom characters into saves --
+                                                 see section 9.
+     S1API.Il2Cpp.MelonLoader.dll      v3.1.7    Third party. The cross-version API layer every
+                                                 mod above talks to.
+     S1APILoader.MelonLoader.dll       v3.1.7    Third party. Picks the IL2CPP build of S1API
+                                                 and hands it to MelonLoader. This one ships as
+                                                 part of the S1API.Forked 3.1.7 release but its
+                                                 own Windows file version reads 1.0.0.0; the
+                                                 hash below is what identifies it.
+
+  EVERY VERSION ABOVE IS THE VERSION THE GAME AND THE LOG WILL SHOW
+     Each mod's project version and the version baked into its MelonLoader banner are the same
+     string, so what Windows file properties report, what the log prints and what the F7 Mods
+     tab shows all agree. An earlier package documented a 0.3.0 / 0.4.0 disagreement on
+     Hireable Drivers; that is resolved, and 0.4.0 is the number to quote in a bug report.
+     Expansions.Core.dll has no MelonLoader banner at all, because it is a library and not a
+     mod -- its 0.1.0 comes from file properties only.
+
+  THE THREE MODS ARE INDEPENDENT
+     Install one, two or all three. Expansions.Core.dll handles any combination. Core on its own
+     still gives you the Expansions screen, its 16 actions, the diagnostics suite and the first
+     three tutorial chapters. Removing a feature mod does not remove its chapter -- the chapter
+     stays in the line and reports "coming soon" instead, collapsing to a single objective that
+     ticks itself off after about three seconds so the line does not stall.
+
+  ABOUT THE BUNDLED S1API
+     S1API.Forked 3.1.7 by ifBars, released under the MIT licence, which permits redistribution.
+     The full licence text is in LICENSE-S1API.txt in this package, as MIT requires.
+     Original project:  https://github.com/ifBars/S1API
+     This release:      https://github.com/ifBars/S1API/releases/tag/v3.1.7
+     The two files in this zip are byte-for-byte identical to that official release. Their
+     SHA-256 hashes:
+        S1API.Il2Cpp.MelonLoader.dll
+           ACC37BA790942415BEACE4177B317B5185BE7341ED8A6D4DBCA19300F32494FF
+        S1APILoader.MelonLoader.dll
+           142DBF9A5AF2B45631753FAB4DA0A2A99125D76C6F80292F363EE2684F9B96A5
+
+     If you would rather download it yourself than trust a bundled binary, delete those two
+     files from the zip, take S1API-Forked-3.1.7.zip from the release page above, and copy its
+     Mods and Plugins folders into <GameDir> instead. The result is identical.
+
+  ABOUT MELONLOADER NOT BEING BUNDLED
+     MelonLoader is deliberately NOT in this package, and no version of it should ever be copied
+     in by hand. It patches how the game starts up, and only its own installer does that
+     correctly for a given machine. Copying loader files around is how people end up with a game
+     that will not launch at all.
+
+==================================================================================================
+ END OF DOCUMENT
+==================================================================================================
