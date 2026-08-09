@@ -100,6 +100,10 @@ internal static class VisitorProbes
             ? $"applied, ran {VisitorPreRegistration.RunCount} time(s)"
             : $"**not applied** ({VisitorPreRegistration.PatchFailure})");
 
+        result.Fact("Spawn graph fix", SpawnGraphFix.IsApplied
+            ? "applied (visitor ids only)"
+            : $"**not applied** ({SpawnGraphFix.Failure})");
+
         if (VisitorPreRegistration.LastRegistered.Count > 0)
             result.Fact("Confirmed in S1API's prefab map", string.Join(", ", VisitorPreRegistration.LastRegistered));
 
@@ -171,29 +175,75 @@ internal static class VisitorProbes
 
         result.Fact("NPC.CustomNpcsReady", Describe.YesNo(VisitorRuntime.CustomNpcsReady()));
         result.Fact("Pool resolved", $"{VisitorRuntime.ResolvedCount()} of {VisitorSlot.Count}");
+        result.Fact("Spawn graph fix", SpawnGraphFix.IsApplied
+            ? "applied (Avatar activation + finalize heal + SetVisible guard + umbrella guard; no proactive destroy)"
+            : $"**not applied** ({SpawnGraphFix.Failure})");
+        result.Fact("Fault guard", VisitorFaultGuard.IsTripped
+            ? $"**TRIPPED** — {VisitorFaultGuard.LastTrip}"
+            : $"ok (destroys={VisitorFaultGuard.Destroys})");
         result.Fact("Prefab configured this session", Describe.YesNo(status.PrefabConfigured));
         result.Fact("OnCreated completed", Describe.YesNo(status.Created));
         result.Fact("Configured spawn point", Describe.Of(status.ConfiguredSpawn));
         result.Fact("Authority", HostGate.Evaluate(out var authority) ? authority : $"not authoritative ({authority})");
 
         var pool = new List<IReadOnlyList<string>>();
+        var missing = 0;
+        var invalid = 0;
         foreach (var member in VisitorSlot.All)
         {
             var memberStatus = VisitorRuntime.StatusOf(member);
+            var spawnState = memberStatus.WrapperResolved
+                ? (memberStatus.ActionListValid ? "spawned" : "INVALID")
+                : memberStatus.Created
+                    ? "OnCreated only"
+                    : memberStatus.PrefabConfigured
+                        ? "prefab ok, spawn refused/pending"
+                        : "prefab missing";
+            var detail = memberStatus.WrapperResolved
+                ? Describe.Of(memberStatus.Position)
+                : $"**{memberStatus.Failure}**";
+
+            if (!memberStatus.WrapperResolved)
+                missing++;
+            else if (!memberStatus.ActionListValid || !string.IsNullOrEmpty(memberStatus.Failure))
+                invalid++;
+
             pool.Add(new[]
             {
                 member.Index.ToString("00"),
                 memberStatus.FullName,
                 member.IsResidentScout ? "scout" : "pool",
-                memberStatus.WrapperResolved ? Describe.Of(memberStatus.Position) : $"**{memberStatus.Failure}**",
+                spawnState,
+                Describe.YesNo(memberStatus.Finalized),
+                Describe.YesNo(memberStatus.ActionListValid),
+                detail,
                 Describe.YesNo(memberStatus.IsVisible),
-                Describe.YesNo(memberStatus.HasMugshot),
+                string.IsNullOrEmpty(memberStatus.IntegritySummary) ? "-" : memberStatus.IntegritySummary,
             });
         }
 
-        result.Table(new[] { "Slot", "Name", "Role", "Position", "Visible", "Mugshot" }, pool);
+        result.Table(
+            new[] { "Slot", "Name", "Role", "Spawn", "Finalized", "Actions", "Position", "Visible", "Integrity" },
+            pool);
         result.Line(
-            "Only the scout is meant to be visible between visits; the rest are parked and hidden until a group arrives.");
+            "Only the scout is meant to be visible between visits; the rest are parked and hidden until a group arrives. " +
+            "Actions=no means the umbrella tick is still unwired — SpawnGraphFix must skip UpdateUmbrellaUse (not destroy).");
+
+        if (invalid > 0)
+        {
+            result.Fail(
+                $"{invalid} live visitor(s) have an invalid action list. Confirm SpawnGraphFix IsApplied and that " +
+                "UpdateUmbrellaUse skips appear in the MelonLoader log (no destroy cascade).");
+            return;
+        }
+
+        if (missing > 0)
+        {
+            result.Fail(
+                $"{missing} of {VisitorSlot.Count} visitor slot(s) have no live wrapper. Groups can only use whoever spawned. " +
+                "If Integrity mentions Avatar(active), confirm SpawnGraphFix is applied and reload the save.");
+            return;
+        }
 
         if (!status.WrapperResolved)
         {
@@ -205,6 +255,9 @@ internal static class VisitorProbes
 
         result.Fact("Id", status.Id);
         result.Fact("Name", status.FullName);
+        result.Fact("Finalized", Describe.YesNo(status.Finalized));
+        result.Fact("Action list valid", Describe.YesNo(status.ActionListValid));
+        result.Fact("Integrity", string.IsNullOrEmpty(status.IntegritySummary) ? "ok" : status.IntegritySummary);
         result.Fact("Position", Describe.Of(status.Position));
         result.Fact("Drift from configured spawn", Describe.Metres(Vector3.Distance(status.Position, status.ConfiguredSpawn)));
         result.Fact("Region", status.Region);
@@ -246,20 +299,42 @@ internal static class VisitorProbes
 
     private static void Impostor(ProbeContext context, ProbeResult result)
     {
+        var roster = new List<IReadOnlyList<string>>();
+        var unknown = new List<string>();
+        foreach (var member in VisitorSlot.All)
+        {
+            var known = TryFindImpostor(member.ImpostorName, out var resourcePath, out var catalogFailure);
+            if (!known)
+                unknown.Add($"{member.Index:00}/{member.ImpostorName}: {catalogFailure}");
+
+            roster.Add(new[]
+            {
+                member.Index.ToString("00"),
+                member.FullName,
+                member.ImpostorName.Length > 0 ? member.ImpostorName : "**empty**",
+                known ? resourcePath : $"**missing** ({catalogFailure})",
+            });
+        }
+
+        result.Table(new[] { "Slot", "Name", "Impostor", "Catalogue" }, roster);
+        result.Line(
+            "Every slot needs a named catalogue impostor at ConfigurePrefab. Empty/random impostors left Avatar inactive " +
+            "and S1API refused those spawns with Avatar(active).");
+
+        if (unknown.Count > 0)
+        {
+            result.Fail(
+                $"{unknown.Count} slot impostor name(s) are not in S1API's catalogue: {string.Join("; ", unknown)}. " +
+                "Pick names from NPCImpostorCatalog.GetAll().");
+            return;
+        }
+
         var slot = VisitorSlot.Primary;
-
-        result.Fact("Configured impostor", slot.ImpostorName);
-
-        var known = TryFindImpostor(slot.ImpostorName, out var resourcePath, out var catalogFailure);
-        result.Fact("In S1API's impostor catalog", known
-            ? $"yes — {resourcePath}"
-            : $"**no** ({catalogFailure})");
-
         var status = VisitorRuntime.StatusOf(slot);
         if (!status.WrapperResolved)
         {
             result.Inconclusive(
-                "No live visitor to inspect, so only the catalog half of this question is answered. See `sc.visitor_runtime`.");
+                "All eight impostor names resolve in the catalogue, but no live visitor is available to check the baked texture. See `sc.visitor_runtime`.");
             return;
         }
 
@@ -273,30 +348,28 @@ internal static class VisitorProbes
         var hasTexture = GameReflection.TryReadPath(gameNpc, "Avatar.Impostor.HasTexture", out var textureFlag, out var impostorFailure) &&
                          textureFlag is true;
 
-        result.Fact("Avatar.Impostor.HasTexture", hasTexture
+        result.Fact("Scout Avatar.Impostor.HasTexture", hasTexture
             ? "true"
             : $"**false** ({(impostorFailure.Length > 0 ? impostorFailure : "the impostor component reports no texture")})");
 
         var settingsTexture = GameReflection.TryReadPath(gameNpc, "Avatar.CurrentSettings.ImpostorTexture", out var texture, out var settingsFailure) &&
                               GameReflection.IsPresent(texture);
 
-        result.Fact("AvatarSettings.ImpostorTexture", settingsTexture
+        result.Fact("Scout AvatarSettings.ImpostorTexture", settingsTexture
             ? GameReflection.Format(texture)
             : $"**null** ({(settingsFailure.Length > 0 ? settingsFailure : "not assigned")})");
 
         if (hasTexture && settingsTexture)
         {
             result.Ok(
-                "The impostor baked. Walk 60 m away and look back: you should see a flat billboard of a person, not a blank " +
-                "white card. A runtime-built avatar carries no impostor of its own and vanilla swaps to the billboard past " +
-                "~50 m regardless, so this is what stands between a visitor and a white card at range.");
+                "All eight slots have named catalogue impostors, and the scout's impostor baked. Walk 60 m away: billboard of a " +
+                "person, not a blank white card. Per-visit wardrobe still re-dresses the live mesh independently of these billboards.");
             return;
         }
 
         result.Fail(
             $"No impostor texture is attached to {status.FullName}. Past roughly 50 m the game will swap the avatar for an " +
-            $"empty billboard. Either '{slot.ImpostorName}' is not a name S1API can resolve under charactersettings/, or " +
-            "`WithImpostor` never reached the prefab. Pick another name from `NPCImpostorCatalog.GetAll()`.");
+            $"empty billboard. Either '{slot.ImpostorName}' failed to bake, or `WithImpostor` never reached the prefab.");
     }
 
     private static void Appearance(ProbeContext context, ProbeResult result)

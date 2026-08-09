@@ -34,6 +34,11 @@ internal static class ClipboardRoutes
         if (field is null)
             return false;
 
+        // The vanilla UI can expose an intermediate route object while its picker is open. Mirror only
+        // after the configuration session closes so the sidecar never persists a half-edit.
+        if (ClipboardApi.IsBeingConfigured(employee))
+            return false;
+
         // The clipboard decides how many rows a Packager gets, so the mirror follows its number rather
         // than the config's guess at it.
         var max = ClipboardApi.MaxRoutes(employee);
@@ -93,7 +98,7 @@ internal static class ClipboardRoutes
         // the next pull would read it back into a different row.
         Compact(brain);
 
-        var wanted = new List<(object? Source, object? Destination)>();
+        var wanted = new List<(object? Source, object? Destination, DriverRoute Saved)>();
 
         foreach (var mirrored in brain.Record.Routes)
         {
@@ -115,7 +120,7 @@ internal static class ClipboardRoutes
                 return false;
             }
 
-            wanted.Add((source, destination));
+            wanted.Add((source, destination, mirrored));
         }
 
         var existing = ClipboardApi.Routes(employee);
@@ -142,9 +147,16 @@ internal static class ClipboardRoutes
             if (route is null)
                 return false;
 
-            // Carry the row's item filter across the rebuild rather than resetting it to "anything".
+            // Carry the live filter when possible; after disable/reload the route object is gone, so
+            // rebuild the exact persisted blacklist/whitelist instead of broadening it to "anything".
             if (i < existing.Count && Gx.Get(existing[i], "Filter") is { } filter)
+            {
                 Gx.Set(route, "Filter", filter);
+            }
+            else if (!ClipboardApi.ApplyFilter(route, wanted[i].Saved))
+            {
+                return false;
+            }
 
             built.Add(route);
         }
@@ -216,6 +228,24 @@ internal static class ClipboardRoutes
 
     internal static void ForgetCorrections() => ReportedCorrections.Clear();
 
+    /// <summary>
+    /// Copies the latest clipboard state into the sidecar and removes the vanilla routes while the
+    /// module is disabled. Without this, removing the Harmony patches turns the employee back into an
+    /// ordinary Handler that immediately tries to walk the driver's cross-town routes.
+    /// </summary>
+    internal static void Suspend(DriverBrain brain)
+    {
+        if (brain.Employee is null)
+            return;
+
+        Pull(brain);
+
+        if (ClipboardApi.ReplaceRoutes(brain.Employee, Array.Empty<object?>()))
+            brain.Record.RoutesOnClipboard = false;
+        else
+            DriverLog.Warn($"{brain.Name}'s clipboard routes could not be suspended; its vanilla Handler brain may see them while the module is off.");
+    }
+
     // ── Row mapping ─────────────────────────────────────────────────────────────────────────────
 
     private static bool PullSource(DriverBrain brain, DriverRoute mirrored, object? route)
@@ -226,6 +256,7 @@ internal static class ClipboardRoutes
         {
             // Correct it where the player will see it, not just in our copy.
             ClipboardApi.SetRouteSource(route, null);
+            ClipboardApi.Replicate(brain.Employee);
             ReportOnce($"{brain.Record.EmployeeId}:{TransitApi.TransitName(transit)}",
                 $"Cleared an out-of-property source on one of {brain.Name}'s routes: {reason}");
             transit = null;
@@ -267,12 +298,20 @@ internal static class ClipboardRoutes
 
     private static bool PullFilter(DriverRoute mirrored, object? route)
     {
+        var (mode, itemIds) = ClipboardApi.ReadFilter(route);
         var (id, label) = ClipboardApi.FilterItem(route);
-        if (string.Equals(id, mirrored.ItemId, StringComparison.Ordinal))
+        var sameIds = mirrored.FilterItemIds.SequenceEqual(itemIds, StringComparer.OrdinalIgnoreCase);
+        if (string.Equals(id, mirrored.ItemId, StringComparison.Ordinal) &&
+            string.Equals(mode, mirrored.FilterMode, StringComparison.OrdinalIgnoreCase) &&
+            sameIds)
+        {
             return false;
+        }
 
         mirrored.ItemId = id;
         mirrored.ItemLabel = label;
+        mirrored.FilterMode = mode;
+        mirrored.FilterItemIds = itemIds;
         return true;
     }
 

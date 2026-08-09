@@ -46,9 +46,7 @@ public sealed class DriverSaveStore : Saveable
             {
                 DriverLog.Warn(
                     $"This save's driver data is version {Data.Version} but this build reads {SupportedVersion}. " +
-                    "Ignoring it — the employees stay in the world as ordinary Handlers rather than risking a bad read.");
-
-                Data = new DriverSaveData();
+                    "Reading the fields this build knows and preserving the roster; unknown fields remain harmless.");
             }
 
             Data.Drivers ??= new List<DriverRecord>();
@@ -89,6 +87,16 @@ public sealed class DriverSaveStore : Saveable
             }
 
             record.Routes ??= new List<DriverRoute>();
+            record.PendingCargo ??= new PendingDriverCargo();
+            record.PendingCargo.Source ??= EndpointRef.None();
+            record.PendingCargo.Destination ??= EndpointRef.None();
+            record.PendingCargo.ProtectedSlotQuantities ??= new List<int>();
+
+            if (record.PendingCargo.Units < 0)
+                record.PendingCargo.Units = 0;
+
+            if (record.PendingCargo.DeliveredThisTrip < 0)
+                record.PendingCargo.DeliveredThisTrip = 0;
 
             for (var r = record.Routes.Count - 1; r >= 0; r--)
             {
@@ -101,6 +109,15 @@ public sealed class DriverSaveStore : Saveable
 
                 route.Source ??= EndpointRef.None();
                 route.Destination ??= EndpointRef.None();
+                route.FilterMode = string.Equals(route.FilterMode, "Blacklist", StringComparison.OrdinalIgnoreCase)
+                    ? "Blacklist"
+                    : "Whitelist";
+                route.FilterItemIds ??= new List<string>();
+                route.FilterItemIds = route.FilterItemIds
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Select(id => id.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
             }
         }
     }

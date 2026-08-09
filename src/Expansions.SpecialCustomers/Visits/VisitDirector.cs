@@ -143,7 +143,14 @@ internal sealed class VisitDirector
         if (!Begin(archetype, out message))
             return false;
 
-        message = $"{archetype.DisplayName} arrived in {WorldGeography.NameOf(_visit!.Region)} at {_visit.DeliveryLocationName}.";
+        var visit = _visit!;
+        var names = string.Join(", ", visit.Members.Select(slot => slot.FullName));
+        message =
+            $"{archetype.DisplayName} arrived in {WorldGeography.NameOf(visit.Region)} at {visit.DeliveryLocationName} " +
+            $"with {visit.MemberSlots.Count} member(s): {names}. " +
+            $"Leader {visit.Leader.FullName} texts at arrival; bulk order at {GameClock.Format(visit.OrderTime)}; " +
+            $"they leave at {GameClock.Format(visit.DepartureTime)}. " +
+            $"Pool ready: {VisitorRuntime.ResolvedCount()}/{VisitorSlot.Count}.";
         LastActionNote = message;
         return true;
     }
@@ -704,7 +711,7 @@ internal sealed class VisitDirector
         var members = PickMembers(archetype, ref rng);
         if (members.Count == 0)
         {
-            failure = "no visitor slots are available";
+            failure = DescribeEmptyPool();
             return false;
         }
 
@@ -906,6 +913,30 @@ internal sealed class VisitDirector
         }
 
         return members;
+    }
+
+    /// <summary>
+    /// One-line explanation of why a visit cannot start — names every missing slot and the last
+    /// rejection reason S1API / SpawnGraphFix recorded for it.
+    /// </summary>
+    private static string DescribeEmptyPool()
+    {
+        var missing = new List<string>();
+        foreach (var slot in VisitorSlot.All)
+        {
+            var status = VisitorRuntime.StatusOf(slot);
+            if (status.WrapperResolved)
+                continue;
+
+            missing.Add($"{slot.Index:00}/{slot.FullName}: {status.Failure}");
+        }
+
+        if (missing.Count == 0)
+            return "no visitor slots are available (pool looked empty but every slot reports resolved — retry)";
+
+        return
+            $"no visitor slots are available ({VisitorRuntime.ResolvedCount()}/{VisitorSlot.Count} in world). " +
+            string.Join("; ", missing);
     }
 
     private static float EstimateBudget(Archetype archetype) =>

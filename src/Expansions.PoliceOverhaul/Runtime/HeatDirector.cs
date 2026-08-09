@@ -171,6 +171,49 @@ internal sealed class HeatDirector
     {
         record.Heat = HeatModel.Clamp(heat);
         AnnounceTierIfChanged();
+        // Menu heat buttons used to only mutate the score; the streets caught up on the next game
+        // minute, which read as a silent no-op. Push the world now.
+        ApplyWorldNow();
+    }
+
+    /// <summary>
+    /// Re-evaluates law intensity, schedule staffing and detection from the current heat, without
+    /// waiting for the minute tick. Safe to call from menu actions.
+    /// </summary>
+    internal void ApplyWorldNow()
+    {
+        PoliceRuntime.Response?.Apply();
+
+        if (!_config.EnableIntensity.Value)
+            return;
+
+        var lawController = GameBridge.Singleton(GameTypes.LawController);
+        if (lawController is null)
+            return;
+
+        var scalar = Math.Max(0f, _config.IntensityScalar.Value);
+        SyncBaseline(lawController);
+
+        var target = HeatModel.TargetIntensity(_baselineIntensity, PeakHeat, scalar);
+        CurrentIntensity = target;
+
+        var current = Members.Read(lawController, "LE_Intensity", target);
+        if (current != target && Members.TryWrite(lawController, "LE_Intensity", target))
+        {
+            _lastWrittenIntensity = target;
+
+            if (GameReflection.TryRead(lawController, "CurrentSettings", out var settings, out _) && settings is not null)
+                Members.Invoke(settings, "Evaluate");
+
+            PoliceLog.Detail($"Law intensity {current} -> {target} (immediate apply, heat {PeakHeat:0.#}).");
+        }
+
+        var tier = PeakTier;
+
+        if (_config.EnableScheduleTuning.Value)
+            _schedule.Apply(tier, scalar, _config.MaxOfficersPerPost.Value, _config.PoliceDensity.Value);
+
+        _detection.Apply(tier, scalar, FederalAgents.IsAgent);
     }
 
     // ── Ticks ─────────────────────────────────────────────────────────────────────────────────
@@ -217,6 +260,7 @@ internal sealed class HeatDirector
             _schedule.Apply(tier, scalar, _config.MaxOfficersPerPost.Value, _config.PoliceDensity.Value);
 
         _detection.Apply(tier, scalar, FederalAgents.IsAgent);
+        PoliceRuntime.Response?.Apply();
 
         AnnounceTierIfChanged();
     }

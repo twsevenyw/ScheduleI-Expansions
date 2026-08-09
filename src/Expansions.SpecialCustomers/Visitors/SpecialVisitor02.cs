@@ -18,15 +18,6 @@ public sealed class SpecialVisitor02 : NPC
     protected override void OnCreated()
     {
         base.OnCreated();
-
-        try
-        {
-            Appearance.Build();
-            VisitorRuntime.NoteCreated(SlotIndex, this);
-        }
-        catch (Exception ex)
-        {
-            VisitorRuntime.NoteCreationFailure(SlotIndex, ex);
-        }
+        VisitorLifecycle.FinishCreate(this, SlotIndex);
     }
 }

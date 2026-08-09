@@ -98,32 +98,81 @@ internal static class DriverHiring
             return false;
         }
 
-        var record = new DriverRecord
+        // Charging after creation avoids taking money for a game-side spawn refusal. If the charge
+        // itself cannot run, remove the just-created employee immediately instead of granting a free
+        // hire with a half-written roster.
+        if (!WorldApi.ChangeCash(-fee))
         {
-            EmployeeId = employeeId,
-            EmployeeGuid = guid,
-            DisplayName = EmployeeApi.DisplayName(employee),
-            HomePropertyCode = WorldApi.PropertyCode(property),
-        };
+            EmployeeApi.Fire(employee);
+            message = "Could not charge the driver signing fee; the employee was not hired.";
+            return false;
+        }
 
-        DriverStore.Add(record);
-        DriverStore.EnsureRouteSlots(record);
+        DriverRecord? record = null;
+        DriverBrain? registered = null;
 
-        brain = DriverRegistry.Register(record, employee);
-        DriverRegistry.ApplyIdentity(brain);
-        WorldApi.ChangeCash(-fee);
+        try
+        {
+            record = new DriverRecord
+            {
+                EmployeeId = employeeId,
+                EmployeeGuid = guid,
+                DisplayName = EmployeeApi.DisplayName(employee),
+                HomePropertyCode = WorldApi.PropertyCode(property),
+            };
 
-        if (DriverSettings.AutoAssignVehicle)
-            AutoAssignVehicle(record);
+            DriverStore.Add(record);
+            DriverStore.EnsureRouteSlots(record);
 
-        var beds = WorldApi.UnassignedBeds(property).Count(Gx.Alive);
-        var bedNote = beds > 0
-            ? "Point the management clipboard at them to give them a bed and set their routes."
-            : "There is no free bed on this property — build one, or they will refuse to work.";
+            registered = DriverRegistry.Register(record, employee);
+            brain = registered;
+            DriverRegistry.ApplyIdentity(registered);
 
-        message = $"Hired {record.DisplayName} as a driver at {WorldApi.PropertyName(property)} for ${fee:N0}. {bedNote}";
-        DriverLog.Msg(message);
-        return true;
+            if (DriverSettings.AutoAssignVehicle &&
+                !AutoAssignVehicle(record) &&
+                DriverSettings.ProvideVanOnHire)
+            {
+                throw new InvalidOperationException("the game would not create or assign the promised Veeper van");
+            }
+
+            var beds = WorldApi.UnassignedBeds(property).Count(Gx.Alive);
+            var bedNote = beds > 0
+                ? "Point the management clipboard at them to give them a bed and set their routes."
+                : "There is no free bed on this property — build one, or they will refuse to work.";
+
+            var vehicleNote = record.VehicleGuid.Length > 0
+                ? $" Their {VehicleApi.Name(VehicleApi.FindByGuid(record.VehicleGuid))} is ready."
+                : " Talk to them while standing by a vehicle to assign it.";
+
+            message =
+                $"Hired {record.DisplayName} as a driver at {WorldApi.PropertyName(property)} for ${fee:N0}.{vehicleNote} {bedNote}";
+            DriverLog.Msg(message);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            if (registered is not null)
+            {
+                Release(registered);
+                EmployeeApi.Fire(employee);
+                DriverRegistry.Unregister(employeeId);
+            }
+            else
+            {
+                if (record is not null)
+                    DriverStore.Forget(employeeId);
+
+                EmployeeApi.Fire(employee);
+            }
+
+            if (!WorldApi.ChangeCash(fee))
+                DriverLog.Warn($"The failed hire could not refund ${fee:N0}; restore that cash from Creative Mode.");
+
+            brain = null;
+            message = $"Could not finish hiring the driver ({Gx.Explain(ex)}). Nothing was added to the roster.";
+            DriverLog.Warn(message);
+            return false;
+        }
     }
 
     /// <summary>
@@ -132,11 +181,21 @@ internal static class DriverHiring
     /// </summary>
     internal static bool AutoAssignVehicle(DriverRecord record)
     {
-        var taken = DriverRegistry.AssignedVehicleGuids
+        var taken = new HashSet<string>(DriverRegistry.AssignedVehicleGuids
             .Where(guid => !string.Equals(guid, record.VehicleGuid, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
+            .ToArray(), StringComparer.OrdinalIgnoreCase);
 
-        var vehicle = VehicleAssignment.PickUnassigned(taken);
+        // A driver is a freight role, so an unclaimed Veeper is the first choice even when a faster
+        // car has the same owner. It has the game's largest cargo hold (16 slots) and is the vehicle
+        // the feature promises in its hiring flow.
+        var vehicle = VehicleAssignment.Candidates().FirstOrDefault(candidate =>
+        {
+            var guid = VehicleApi.Guid(candidate);
+            return guid.Length > 0 &&
+                   !taken.Contains(guid) &&
+                   string.Equals(VehicleApi.Code(candidate), VehicleApi.DriverVanCode, StringComparison.OrdinalIgnoreCase);
+        });
+
         if (vehicle is not null)
         {
             record.VehicleGuid = VehicleApi.Guid(vehicle);
@@ -145,7 +204,21 @@ internal static class DriverHiring
             return true;
         }
 
-        if (!DriverSettings.AllowSpawnedVans)
+        if (DriverSettings.ProvideVanOnHire && TrySpawnVan(record))
+            return true;
+
+        // Players who switch dedicated vans off still get the old behaviour: use their largest
+        // unassigned vehicle, then honour the legacy spawned-van opt-in if there is no spare vehicle.
+        vehicle = VehicleAssignment.PickUnassigned(taken);
+        if (vehicle is not null)
+        {
+            record.VehicleGuid = VehicleApi.Guid(vehicle);
+            record.SpawnedVehicle = false;
+            DriverLog.Msg($"{record.DisplayName} will drive the {VehicleApi.Name(vehicle)}.");
+            return true;
+        }
+
+        if (!DriverSettings.AllowSpawnedVans || DriverSettings.ProvideVanOnHire)
         {
             DriverLog.Debug($"No unassigned vehicle to give {record.DisplayName}.");
             return false;
@@ -155,12 +228,12 @@ internal static class DriverHiring
     }
 
     /// <summary>
-    /// Opt-in fallback for a player who owns no spare vehicle. Off by default on purpose: a spawned van
-    /// is a networked object the mod then owns for save, load and cleanup, it inflates net worth through
-    /// <c>LandVehicle.GetNetworth</c>, and it deletes the real decision of which car to buy.
+    /// Provides the shipped 16-slot Veeper. The code is verified from the live prefab catalogue and
+    /// real <c>OwnedVehicles.json</c>; a largest-cargo fallback keeps a future rename from producing a
+    /// driver with no vehicle.
     /// <para>
-    /// The vehicle code is never hard-coded — no code literal is provable from the metadata. The largest
-    /// trunk that can drive itself wins, falling back to the largest trunk of any prefab.
+    /// The vehicle is spawned player-owned so its GUID and trunk persist through the game's normal
+    /// vehicle save path. The record marks it as provided so an empty one can be cleaned up on fire.
     /// </para>
     /// </summary>
     private static bool TrySpawnVan(DriverRecord record)
@@ -173,10 +246,14 @@ internal static class DriverHiring
         if (prefabs.Count == 0)
             return false;
 
-        var prefab = prefabs
-            .OrderByDescending(p => VehicleApi.CanSelfDrive(p, out _) ? 1 : 0)
-            .ThenByDescending(VehicleApi.SlotCount)
-            .First();
+        var prefab = prefabs.FirstOrDefault(p =>
+            string.Equals(VehicleApi.Code(p), VehicleApi.DriverVanCode, StringComparison.OrdinalIgnoreCase));
+
+        if (prefab is null)
+        {
+            DriverLog.Warn($"The exact '{VehicleApi.DriverVanCode}' prefab is missing; refusing to substitute a different vehicle.");
+            return false;
+        }
 
         var code = VehicleApi.Code(prefab);
         if (code.Length == 0)
@@ -201,7 +278,7 @@ internal static class DriverHiring
             manager,
             "SpawnAndReturnVehicle",
             new[] { "String", "Vector3", "Quaternion", "Boolean" },
-            code, spawn.Value, UnityEngine.Quaternion.identity, false);
+            code, spawn.Value, UnityEngine.Quaternion.identity, true);
 
         if (!Gx.Alive(spawned))
         {
@@ -209,13 +286,21 @@ internal static class DriverHiring
             return false;
         }
 
-        record.VehicleGuid = VehicleApi.Guid(spawned);
+        var vehicleGuid = VehicleApi.Guid(spawned);
+        if (vehicleGuid.Length == 0)
+        {
+            Gx.Call(spawned, "DestroyVehicle", Array.Empty<string>());
+            DriverLog.Warn($"The spawned {VehicleApi.Name(spawned)} had no GUID, so it was removed instead of assigning an unsaveable vehicle.");
+            return false;
+        }
+
+        record.VehicleGuid = vehicleGuid;
         record.SpawnedVehicle = true;
 
         if (lot is not null)
             VehicleApi.ParkIn(spawned, lot);
 
-        DriverLog.Msg($"Spawned a {VehicleApi.Name(spawned)} for {record.DisplayName} (allow_spawned_vans is on).");
+        DriverLog.Msg($"Provided {record.DisplayName} with a persistent {VehicleApi.Name(spawned)}.");
         return true;
     }
 
@@ -252,7 +337,20 @@ internal static class DriverHiring
 
         var vehicle = VehicleApi.FindByGuid(brain.Record.VehicleGuid);
         if (vehicle is not null)
-            Gx.Call(vehicle, "DestroyVehicle", Array.Empty<string>());
+        {
+            var cargo = TransitApi.UnitsInStorage(VehicleApi.Storage(vehicle));
+            if (cargo > 0 || VehicleApi.HasPlayerAboard(vehicle))
+            {
+                DriverLog.Msg(
+                    cargo > 0
+                        ? $"Kept the provided {VehicleApi.Name(vehicle)} because its trunk still contains {cargo} item(s)."
+                        : $"Kept the provided {VehicleApi.Name(vehicle)} because a player is using it.");
+            }
+            else
+            {
+                Gx.Call(vehicle, "DestroyVehicle", Array.Empty<string>());
+            }
+        }
 
         brain.Record.VehicleGuid = string.Empty;
         brain.Record.SpawnedVehicle = false;

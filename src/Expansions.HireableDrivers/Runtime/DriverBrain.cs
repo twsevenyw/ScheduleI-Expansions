@@ -37,6 +37,7 @@ internal sealed class DriverBrain
     private const int TransferStallLimit = 3;
 
     private readonly ConvoyLeg _leg = new();
+    private readonly Dictionary<IntPtr, int> _protectedCargo = new();
 
     private object? _employee;
     private int _stateEntered;
@@ -45,7 +46,11 @@ internal sealed class DriverBrain
     private int _retryAfter;
     private int _routeIndex = -1;
     private int _unitsAboard;
+    private int _cargoBaseline;
+    private int _deliveredThisTrip;
     private int _stalledTransfers;
+    private string _cargoItemId = string.Empty;
+    private bool _forceDeparture;
     private Endpoint? _source;
     private Endpoint? _destination;
     private object? _sourceLot;
@@ -82,6 +87,12 @@ internal sealed class DriverBrain
         State = DriverState.Idle;
         _routeIndex = -1;
         _retryAfter = 0;
+        _cargoItemId = string.Empty;
+        _cargoBaseline = 0;
+        _unitsAboard = 0;
+        _deliveredThisTrip = 0;
+        _forceDeparture = false;
+        _protectedCargo.Clear();
         StatusNote = "Waiting for a route.";
     }
 
@@ -114,6 +125,17 @@ internal sealed class DriverBrain
     {
         if (now < _retryAfter)
             return;
+
+        if (!Patches.DriverPatches.TransportSafe)
+        {
+            StatusNote = "Trips are paused because the vanilla Handler brain could not be isolated on this game build.";
+            Issue(
+                "Driver transport is paused after a game update.",
+                "Run the drivers.bindings probe and update the mod before using this route.",
+                10);
+            Cooldown(now, 120);
+            return;
+        }
 
         if (!GameClock.WithinWorkingHours)
         {
@@ -165,7 +187,19 @@ internal sealed class DriverBrain
             return;
         }
 
-        if (!SelectRoute(out var routeIndex, out var source, out var destination, out var why))
+        var vehicleStorage = VehicleApi.Storage(vehicle);
+        if (vehicleStorage is null || VehicleApi.SlotCount(vehicle) <= 0)
+        {
+            StatusNote = $"The {VehicleApi.Name(vehicle)} has no usable cargo storage.";
+            Issue("Your driver's vehicle cannot carry products.", "Talk to them beside a Veeper and hand it over.", 5);
+            Cooldown(now, 60);
+            return;
+        }
+
+        if (TryResumePending(now, vehicle, vehicleStorage))
+            return;
+
+        if (!SelectRoute(out var routeIndex, out var source, out var destination, out var cargoItemId, out var why))
         {
             StatusNote = why;
             Cooldown(now, 20);
@@ -193,13 +227,30 @@ internal sealed class DriverBrain
         _source = source;
         _destination = destination;
         _path = path.Value;
-        _unitsAboard = TransitApi.UnitsInStorage(VehicleApi.Storage(vehicle));
+        _cargoItemId = cargoItemId;
+        _cargoBaseline = TransitApi.UnitsInStorage(vehicleStorage, cargoItemId);
+        _protectedCargo.Clear();
+        var protectedSlots = TransitApi.CaptureProtectedSlotQuantities(vehicleStorage, cargoItemId);
+        foreach (var (slot, quantity) in TransitApi.RestoreProtectedQuantities(vehicleStorage, protectedSlots))
+            _protectedCargo[slot] = quantity;
+
+        _unitsAboard = 0;
+        _deliveredThisTrip = 0;
         _stalledTransfers = 0;
         _tripStarted = now;
 
         _sourceLot = LotFor(source);
         _destinationLot = LotFor(destination);
         _homeLot = HomeLot();
+
+        var pending = Record.PendingCargo;
+        pending.ItemId = cargoItemId;
+        pending.Units = 0;
+        pending.DeliveredThisTrip = 0;
+        pending.RouteIndex = routeIndex;
+        pending.Source = EndpointRef.For(source);
+        pending.Destination = EndpointRef.For(destination);
+        pending.ProtectedSlotQuantities = protectedSlots;
 
         // Whatever stopped them last time is no longer true, and the game cannot clear it itself while
         // the trip suppresses its dispatcher.
@@ -213,13 +264,89 @@ internal sealed class DriverBrain
         TutorialSignals.Raise(DriversChapter.ChapterId, DriversChapter.StepRunStarted);
     }
 
-    private bool SelectRoute(out int index, out Endpoint source, out Endpoint destination, out string why)
+    /// <summary>
+    /// Resumes cargo already loaded before a save/load, scene transition, or module toggle. The trunk
+    /// itself is vanilla-persistent; this restores only the manifest that says which units may move.
+    /// Returns true when pending cargo handled the tick (resumed or waiting on a resolvable condition).
+    /// </summary>
+    private bool TryResumePending(int now, object? vehicle, object? storage)
+    {
+        var pending = Record.PendingCargo;
+        if (!pending.IsActive)
+            return false;
+
+        _protectedCargo.Clear();
+        foreach (var (slot, quantity) in TransitApi.RestoreProtectedQuantities(storage, pending.ProtectedSlotQuantities))
+            _protectedCargo[slot] = quantity;
+
+        var available = TransitApi.UnprotectedUnits(storage, pending.ItemId, _protectedCargo);
+        if (available <= 0)
+        {
+            DriverLog.Msg($"{Name}: interrupted-trip manifest had no matching cargo left; clearing it.");
+            pending.Clear();
+            _protectedCargo.Clear();
+            return false;
+        }
+
+        var destination = EndpointCatalog.Resolve(pending.Destination);
+        if (destination is null || !destination.IsUsable)
+        {
+            StatusNote = $"Loaded cargo is waiting — destination '{pending.Destination.Label}' is unavailable.";
+            Cooldown(now, 60);
+            return true;
+        }
+
+        var path = TransportPath.Choose(vehicle, out var pathReason);
+        if (path is null)
+        {
+            StatusNote = $"Loaded cargo cannot resume: {pathReason}.";
+            Cooldown(now, 120);
+            return true;
+        }
+
+        if (!VehicleAssignment.TryClaim(Record.VehicleGuid, Record.EmployeeId))
+        {
+            StatusNote = $"Loaded cargo is waiting for the {VehicleApi.Name(vehicle)}.";
+            Cooldown(now, 15);
+            return true;
+        }
+
+        _routeIndex = pending.RouteIndex;
+        _source = EndpointCatalog.Resolve(pending.Source);
+        _destination = destination;
+        _path = path.Value;
+        _cargoItemId = pending.ItemId;
+        _cargoBaseline = pending.ProtectedSlotQuantities.Sum(quantity => Math.Max(0, quantity));
+        _unitsAboard = Math.Min(pending.Units, available);
+        _deliveredThisTrip = pending.DeliveredThisTrip;
+        _stalledTransfers = 0;
+        _destinationLot = LotFor(destination);
+        _homeLot = HomeLot();
+
+        pending.Units = _unitsAboard;
+
+        EmployeeApi.ClearWorkIssues(_employee);
+        EmployeeApi.TakeOverMovement(_employee);
+        _leg.Begin(_employee, vehicle, _destinationLot, destination.VehicleAnchor, _path, now);
+        Enter(DriverState.ToDestination, now, $"Resuming delivery of {_unitsAboard} item(s) to {destination.Label}.");
+        DriverLog.Msg($"{Name}: resumed {_unitsAboard} loaded item(s) after an interrupted trip.");
+        return true;
+    }
+
+    private bool SelectRoute(
+        out int index,
+        out Endpoint source,
+        out Endpoint destination,
+        out string cargoItemId,
+        out string why)
     {
         index = -1;
         source = null!;
         destination = null!;
+        cargoItemId = string.Empty;
 
         var complete = 0;
+        var nativeRoutes = ClipboardApi.Routes(Employee);
 
         for (var i = 0; i < Record.Routes.Count; i++)
         {
@@ -241,12 +368,25 @@ internal sealed class DriverBrain
             if (to.Kind == EndpointKind.Dealer && DealerApi.HeldItems(to.Dealer) >= DriverSettings.DealerTopUpCap)
                 continue;
 
-            if (TransitApi.FindOutputSlot(from.Transit, route.ItemId) is null)
+            var nativeRoute = i < nativeRoutes.Count ? nativeRoutes[i] : null;
+            var output = TransitApi.FindOutputSlot(from.Transit, route.ItemId, nativeRoute);
+            if (output is null)
                 continue;
+
+            var selectedItemId = TransitApi.ItemIdInSlot(output);
+            if (selectedItemId.Length == 0)
+                continue;
+
+            if (to.Kind == EndpointKind.Storage &&
+                TransitApi.InputCapacity(to.Transit, TransitApi.ItemInSlot(output), _employee) <= 0)
+            {
+                continue;
+            }
 
             index = i;
             source = from;
             destination = to;
+            cargoItemId = selectedItemId;
             why = string.Empty;
             return true;
         }
@@ -269,9 +409,16 @@ internal sealed class DriverBrain
             return;
         }
 
-        if (_source is null || _destination is null || !_source.IsUsable || !_destination.IsUsable)
+        if (_destination is null || !_destination.IsUsable)
         {
-            Recover(now, "A route endpoint was removed.", "Point the management clipboard at your driver and re-set that route.");
+            Recover(now, "The route destination was removed.", "Point the management clipboard at your driver and re-set that route.");
+            return;
+        }
+
+        if ((State is DriverState.ToSource or DriverState.AtSource or DriverState.Loading) &&
+            (_source is null || !_source.IsUsable))
+        {
+            Recover(now, "The route pickup was removed.", "Point the management clipboard at your driver and re-set that route.");
             return;
         }
 
@@ -383,8 +530,10 @@ internal sealed class DriverBrain
         _lastTransfer = now;
 
         var batch = Math.Max(1, threshold / 4);
-        var moved = TransitApi.SourceToStorage(_source!.Transit, storage, _employee, route.ItemId, batch);
-        _unitsAboard = TransitApi.UnitsInStorage(storage);
+        var moved = TransitApi.SourceToStorage(_source!.Transit, storage, _employee, _cargoItemId, batch);
+        var cargoNow = Math.Max(0, TransitApi.UnitsInStorage(storage, _cargoItemId) - _cargoBaseline);
+        _unitsAboard = Math.Min(_unitsAboard + moved, cargoNow);
+        Record.PendingCargo.Units = _unitsAboard;
 
         if (moved > 0)
         {
@@ -397,26 +546,35 @@ internal sealed class DriverBrain
         }
 
         var full = _unitsAboard >= threshold;
-        var sourceDry = TransitApi.FindOutputSlot(_source.Transit, route.ItemId) is null;
+        var sourceDry = TransitApi.FindOutputSlot(_source.Transit, _cargoItemId) is null;
         var patienceGone = DriverSettings.DepartAfterGameHours > 0 &&
                            now - _tripStarted >= DriverSettings.DepartAfterGameHours * 60;
+        var forced = _forceDeparture && _unitsAboard > 0;
 
-        if (!full && !sourceDry && !patienceGone && _stalledTransfers < TransferStallLimit)
+        if (!full && !sourceDry && !patienceGone && !forced && _stalledTransfers < TransferStallLimit)
             return;
 
         if (_unitsAboard <= 0)
         {
-            Recover(now, "Nothing to collect.", $"Put something in {_source.Label}.");
+            if (sourceDry)
+                Recover(now, "Nothing to collect.", $"Put something in {_source.Label}.");
+            else
+                Recover(now, "The vehicle has no room for the route's product.", "Free some trunk space or assign a Veeper.");
+
             return;
         }
 
         EmployeeApi.MarkWorking(_employee);
+        _forceDeparture = false;
         _leg.Begin(_employee, vehicle, _destinationLot, _destination!.VehicleAnchor, _path, now);
         Enter(DriverState.ToDestination, now, $"Carrying {_unitsAboard} to {_destination.Label}.");
     }
 
     private void RunUnloading(int now, object? vehicle)
     {
+        if (now < _retryAfter)
+            return;
+
         var storage = VehicleApi.Storage(vehicle);
         var quantum = Math.Max(1, DriverSettings.LoadMinutesPerStop / 6);
 
@@ -424,14 +582,35 @@ internal sealed class DriverBrain
             return;
 
         _lastTransfer = now;
+        _unitsAboard = Math.Min(
+            _unitsAboard,
+            Math.Max(0, TransitApi.UnitsInStorage(storage, _cargoItemId) - _cargoBaseline));
+        Record.PendingCargo.Units = _unitsAboard;
 
         var moved = _destination!.Kind == EndpointKind.Dealer
-            ? DealerApi.StorageToDealer(storage, _destination.Dealer, DriverSettings.DealerTopUpCap)
-            : TransitApi.StorageToDestination(storage, _destination.Transit, _employee, EmployeeApi.NetworkObject(_employee));
+            ? DealerApi.StorageToDealer(
+                storage,
+                _destination.Dealer,
+                DriverSettings.DealerTopUpCap,
+                _cargoItemId,
+                _unitsAboard,
+                _protectedCargo)
+            : TransitApi.StorageToDestination(
+                storage,
+                _destination.Transit,
+                _employee,
+                EmployeeApi.NetworkObject(_employee),
+                _cargoItemId,
+                _unitsAboard,
+                _protectedCargo);
 
         if (moved > 0)
         {
             _stalledTransfers = 0;
+            _unitsAboard = Math.Max(0, _unitsAboard - moved);
+            _deliveredThisTrip += moved;
+            Record.PendingCargo.Units = _unitsAboard;
+            Record.PendingCargo.DeliveredThisTrip = _deliveredThisTrip;
             Record.UnitsDelivered += moved;
             StatusNote = $"Unloading at {_destination.Label} — {moved} delivered.";
         }
@@ -440,26 +619,34 @@ internal sealed class DriverBrain
             _stalledTransfers++;
         }
 
-        var remaining = TransitApi.UnitsInStorage(storage);
+        var remaining = _unitsAboard;
         if (remaining > 0 && _stalledTransfers < TransferStallLimit)
             return;
 
         if (remaining > 0)
         {
-            // Undeliverable cargo stays in the trunk, which is a real container the player can open.
-            // Nothing is ever destroyed or dropped on the ground.
-            Issue($"{_destination.Label} is full.", $"Free up space, or the {remaining} left aboard will stay in the van.", 3);
-            StatusNote = $"{_destination.Label} is full — {remaining} still aboard.";
-        }
-        else
-        {
-            StatusNote = "Delivered. Heading home.";
+            // Keep the trip open at the destination and retry. Returning home would lose the ownership
+            // boundary between this trip's cargo and anything the player already had in the trunk.
+            if (!StatusNote.Contains("is full — waiting there", StringComparison.Ordinal))
+                Issue($"{_destination.Label} is full.", $"Free up space; the {remaining} item(s) stay safely in the van.", 3);
+
+            StatusNote = $"{_destination.Label} is full — waiting there with {remaining} item(s) aboard.";
+            _stalledTransfers = 0;
+            Cooldown(now, 60);
+            return;
         }
 
-        Record.CompletedTrips++;
+        StatusNote = "Delivered. Heading home.";
+
+        if (_deliveredThisTrip > 0)
+            Record.CompletedTrips++;
+
         EmployeeApi.MarkWorking(_employee);
-        TutorialSignals.Raise(DriversChapter.ChapterId, DriversChapter.StepDelivered);
+        if (_deliveredThisTrip > 0)
+            TutorialSignals.Raise(DriversChapter.ChapterId, DriversChapter.StepDelivered);
+
         DriverLog.Msg($"{Name} delivered {Record.UnitsDelivered} item(s) in total ({Record.CompletedTrips} trip(s)).");
+        Record.PendingCargo.Clear();
 
         _leg.Begin(_employee, vehicle, _homeLot, HomeAnchor(), _path, now);
         Enter(DriverState.GoingHome, now, StatusNote);
@@ -504,15 +691,23 @@ internal sealed class DriverBrain
                 _leg.SnapToEnd();
 
                 var threshold = DepartThreshold(storage);
-                var itemId = CurrentRoute?.ItemId ?? string.Empty;
 
                 for (var guard = 0; guard < 64; guard++)
                 {
-                    if (TransitApi.UnitsInStorage(storage) >= threshold)
+                    if (_unitsAboard >= threshold)
                         break;
 
-                    if (TransitApi.SourceToStorage(_source.Transit, storage, _employee, itemId, threshold) <= 0)
+                    var loaded = TransitApi.SourceToStorage(
+                        _source.Transit,
+                        storage,
+                        _employee,
+                        _cargoItemId,
+                        threshold - _unitsAboard);
+                    if (loaded <= 0)
                         break;
+
+                    var cargoNow = Math.Max(0, TransitApi.UnitsInStorage(storage, _cargoItemId) - _cargoBaseline);
+                    _unitsAboard = Math.Min(_unitsAboard + loaded, cargoNow);
                 }
             }
 
@@ -521,13 +716,48 @@ internal sealed class DriverBrain
                 _leg.Begin(_employee, vehicle, _destinationLot, _destination.VehicleAnchor, _path, now);
                 _leg.SnapToEnd();
 
+                _unitsAboard = Math.Min(
+                    _unitsAboard,
+                    Math.Max(0, TransitApi.UnitsInStorage(storage, _cargoItemId) - _cargoBaseline));
+
                 var moved = _destination.Kind == EndpointKind.Dealer
-                    ? DealerApi.StorageToDealer(storage, _destination.Dealer, DriverSettings.DealerTopUpCap)
-                    : TransitApi.StorageToDestination(storage, _destination.Transit, _employee, EmployeeApi.NetworkObject(_employee));
+                    ? DealerApi.StorageToDealer(
+                        storage,
+                        _destination.Dealer,
+                        DriverSettings.DealerTopUpCap,
+                        _cargoItemId,
+                        _unitsAboard,
+                        _protectedCargo)
+                    : TransitApi.StorageToDestination(
+                        storage,
+                        _destination.Transit,
+                        _employee,
+                        EmployeeApi.NetworkObject(_employee),
+                        _cargoItemId,
+                        _unitsAboard,
+                        _protectedCargo);
 
                 if (moved > 0)
                 {
+                    _unitsAboard = Math.Max(0, _unitsAboard - moved);
+                    _deliveredThisTrip += moved;
                     Record.UnitsDelivered += moved;
+                }
+
+                if (_unitsAboard > 0)
+                {
+                    _lastTransfer = now;
+                    _stalledTransfers = 0;
+                    Cooldown(now, 60);
+                    Enter(
+                        DriverState.Unloading,
+                        now,
+                        $"{_destination.Label} is full — waiting there with {_unitsAboard} item(s) aboard.");
+                    return;
+                }
+
+                if (_deliveredThisTrip > 0)
+                {
                     Record.CompletedTrips++;
                     TutorialSignals.Raise(DriversChapter.ChapterId, DriversChapter.StepDelivered);
                 }
@@ -574,13 +804,20 @@ internal sealed class DriverBrain
             _routeIndex = -1;
             _source = null;
             _destination = null;
+            _cargoItemId = string.Empty;
+            _cargoBaseline = 0;
+            _unitsAboard = 0;
+            _deliveredThisTrip = 0;
+            _forceDeparture = false;
+            _protectedCargo.Clear();
         }
     }
 
     /// <summary>Clears the retry cooldown so the next tick re-plans immediately.</summary>
-    internal void RequestStart()
+    internal void RequestStart(bool departWithAvailableCargo = false)
     {
         _retryAfter = 0;
+        _forceDeparture |= departWithAvailableCargo;
 
         if (IsOnTrip)
             return;
@@ -621,6 +858,12 @@ internal sealed class DriverBrain
         _source = null;
         _destination = null;
         _routeIndex = -1;
+        _cargoItemId = string.Empty;
+        _cargoBaseline = 0;
+        _unitsAboard = 0;
+        _deliveredThisTrip = 0;
+        _forceDeparture = false;
+        _protectedCargo.Clear();
         Enter(DriverState.Idle, now, note);
     }
 

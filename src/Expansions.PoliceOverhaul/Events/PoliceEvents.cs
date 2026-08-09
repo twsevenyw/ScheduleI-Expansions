@@ -91,7 +91,10 @@ internal static class PoliceEvents
         if (PoliceRuntime.Federal is not { } federal)
             return ActionResult.Failed("Police Improvements is not wired into a loaded game.");
 
-        return federal.ForceBegin(out var message) ? ActionResult.Ok(message) : ActionResult.Failed(message);
+        var started = federal.ForceBegin(out var message);
+        if (!started)
+            PoliceMessages.Announce("Federal agents", message);
+        return started ? ActionResult.Ok(message) : ActionResult.Failed(message);
     }
 
     private static ActionResult Raid(bool immediate)
@@ -99,7 +102,10 @@ internal static class PoliceEvents
         if (PoliceRuntime.Raids is not { } raids)
             return ActionResult.Failed("Police Improvements is not wired into a loaded game.");
 
-        return raids.Force(immediate, out var message) ? ActionResult.Ok(message) : ActionResult.Failed(message);
+        var started = raids.Force(immediate, out var message);
+        if (!started || immediate)
+            PoliceMessages.Announce(immediate ? "Raid" : "Raid", message);
+        return started ? ActionResult.Ok(message) : ActionResult.Failed(message);
     }
 
     private static ActionResult EscalateOutlaw()
@@ -113,9 +119,11 @@ internal static class PoliceEvents
         outlaw.Promote(record, next);
         outlaw.Sync();
 
-        return ActionResult.Ok(
+        var message =
             $"You are now {OutlawState.Describe(next)}. Body searches will find something, pursuits will not " +
-            $"let go, fines are multiplied, and card-only vendors have closed to you.");
+            "let go, fines are multiplied, and card-only vendors have closed to you.";
+        PoliceMessages.Announce($"Outlaw: {OutlawState.Describe(next)}", message);
+        return ActionResult.Ok(message);
     }
 
     private static ActionResult CallPolice()
@@ -124,20 +132,28 @@ internal static class PoliceEvents
         if (player is null)
             return ActionResult.Failed("There is no local player to report.");
 
-        // Dispatch draws from the station pool, so a map whose officers are all dead answers the call
-        // with nobody. Bring the force back first and say so, rather than reporting a success the
-        // player will never see arrive.
-        var config = PoliceRuntime.Config;
-        var wanted = config?.EventOfficerCount.Value ?? 3;
-        var here = Components.TransformOf(GameBridge.LocalPlayer())?.position ?? UnityEngine.Vector3.zero;
-        var available = PoliceForce.EnsureAt(here, wanted);
-
+        // S1API path still runs so vanilla listeners fire; ResponseTuner then makes sure officers
+        // actually leave the station under the configured delay/aggressiveness.
         LawManager.CallPolice(player);
 
-        return ActionResult.Ok(
-            $"Dispatch has been given your position, with {available} officer(s) live nearby. How many respond " +
-            "depends on your current heat tier." +
-            (PoliceForce.LastShortfall.Length > 0 ? $" Note: {PoliceForce.LastShortfall}" : string.Empty));
+        var native = GameBridge.LocalPlayer();
+        var message = PoliceRuntime.Response is { } response
+            ? response.RespondNow(native, "event hotkey")
+            : FallbackCall(native);
+
+        PoliceMessages.Announce("Dispatch", message);
+        return PoliceForce.LastShortfall.Length > 0 && message.Contains("0 officer", StringComparison.Ordinal)
+            ? ActionResult.Failed(message)
+            : ActionResult.Ok(message);
+    }
+
+    private static string FallbackCall(object? native)
+    {
+        var wanted = PoliceRuntime.Config?.EventOfficerCount.Value ?? 3;
+        var here = Components.TransformOf(native)?.position ?? UnityEngine.Vector3.zero;
+        var available = PoliceForce.EnsureAt(here, wanted, native, beginAsSighted: true);
+        return $"Dispatch has your position: {available} officer(s) live nearby." +
+               (PoliceForce.LastShortfall.Length > 0 ? $" Note: {PoliceForce.LastShortfall}" : string.Empty);
     }
 
     private static void Add(ModuleLifetime lifetime, ExpansionEvent expansionEvent)

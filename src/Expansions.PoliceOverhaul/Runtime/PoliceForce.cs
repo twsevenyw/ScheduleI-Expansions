@@ -53,23 +53,43 @@ internal static class PoliceForce
     /// </summary>
     internal readonly struct Census
     {
-        internal Census(int total, int onDuty, int dead, int knockedOut, int inactive, int pooled, int stations, int agents)
+        internal Census(
+            int total,
+            int onDuty,
+            int visible,
+            int ghost,
+            int dead,
+            int knockedOut,
+            int inactive,
+            int pooled,
+            int stations,
+            int agents,
+            int visibleAgents)
         {
             Total = total;
             OnDuty = onDuty;
+            Visible = visible;
+            Ghost = ghost;
             Dead = dead;
             KnockedOut = knockedOut;
             Inactive = inactive;
             Pooled = pooled;
             Stations = stations;
             Agents = agents;
+            VisibleAgents = visibleAgents;
         }
 
         /// <summary>Every officer object in the scene, alive or not.</summary>
         internal int Total { get; }
 
-        /// <summary>Awake, active in the hierarchy and not dead — an officer the player can actually meet.</summary>
+        /// <summary>Hierarchy-active and not dead — the old, lying definition. Prefer <see cref="Visible"/>.</summary>
         internal int OnDuty { get; }
+
+        /// <summary>Rendered + networked + plausible world position. What the player can actually see.</summary>
+        internal int Visible { get; }
+
+        /// <summary>Hierarchy-active (or agent-live) but failing the visibility check — the "log said 8, I saw 0" bucket.</summary>
+        internal int Ghost { get; }
 
         internal int Dead { get; }
 
@@ -86,14 +106,17 @@ internal static class PoliceForce
         /// <summary>Federal agents, which are ours and are counted separately from the town's force.</summary>
         internal int Agents { get; }
 
+        internal int VisibleAgents { get; }
+
         internal string Summary =>
-            $"{OnDuty} on duty, {Dead} dead, {KnockedOut} out cold, {Inactive} inactive, " +
-            $"{Pooled} pooled across {Stations} station(s), {Agents} federal agent(s)";
+            $"{Visible} visible / {OnDuty} hierarchy-active ({Ghost} ghost), {Dead} dead, {KnockedOut} out cold, " +
+            $"{Inactive} inactive, {Pooled} pooled across {Stations} station(s), " +
+            $"{VisibleAgents}/{Agents} federal agent(s) visible";
     }
 
     internal static Census Count()
     {
-        int total = 0, onDuty = 0, dead = 0, knockedOut = 0, inactive = 0, agents = 0;
+        int total = 0, onDuty = 0, visible = 0, ghost = 0, dead = 0, knockedOut = 0, inactive = 0, agents = 0, visibleAgents = 0;
 
         foreach (var officer in DetectionTuner.Officers())
         {
@@ -102,9 +125,15 @@ internal static class PoliceForce
 
             total++;
 
+            var isVisible = OfficerPresence.IsVisiblyPresent(officer);
+
             if (FederalAgents.IsAgent(officer))
             {
                 agents++;
+                if (isVisible)
+                    visibleAgents++;
+                else
+                    ghost++;
                 continue;
             }
 
@@ -120,7 +149,13 @@ internal static class PoliceForce
             else if (!active)
                 inactive++;
             else
+            {
                 onDuty++;
+                if (isVisible)
+                    visible++;
+                else
+                    ghost++;
+            }
         }
 
         var pooled = 0;
@@ -131,7 +166,32 @@ internal static class PoliceForce
             pooled += Members.Read(Members.ReadPath(station, "OfficerPool"), "Count", 0);
         }
 
-        return new Census(total, onDuty, dead, knockedOut, inactive, pooled, stations, agents);
+        return new Census(total, onDuty, visible, ghost, dead, knockedOut, inactive, pooled, stations, agents, visibleAgents);
+    }
+
+    /// <summary>Per-officer visibility rows for the probe — the answer to "log said 8, I saw 0".</summary>
+    internal static List<OfficerPresence.Sighting> Sightings(int limit = 48)
+    {
+        var rows = new List<OfficerPresence.Sighting>(limit);
+        foreach (var officer in DetectionTuner.Officers())
+        {
+            if (!GameReflection.IsPresent(officer) || officer is null)
+                continue;
+
+            try
+            {
+                rows.Add(OfficerPresence.Inspect(officer));
+            }
+            catch (Exception ex)
+            {
+                PoliceLog.Detail($"Sighting inspect failed: {PoliceLog.Describe(ex)}");
+            }
+
+            if (rows.Count >= limit)
+                break;
+        }
+
+        return rows;
     }
 
     // ── Daily restore ─────────────────────────────────────────────────────────────────────────
@@ -209,51 +269,69 @@ internal static class PoliceForce
     // ── Making an event happen ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Guarantees that <paramref name="wanted"/> live officers exist near <paramref name="position"/>,
-    /// spawning them from the nearest station if they do not.
+    /// Guarantees that <paramref name="wanted"/> live officers exist near <paramref name="position"/>.
+    /// Primary path: relocate already-valid shipped officers (<see cref="OfficerDeployment"/>).
+    /// Fallbacks: station <c>Dispatch</c>, then pool pull + relocate of shipped officers.
     /// <para>
-    /// Every police event in this module used to assume officers were available. When the pool is
-    /// drained they are not, and the event fires as a notification with nothing behind it — which the
-    /// player reads, correctly, as broken. So each event asks for its officers first and is told
-    /// honestly how many it got.
+    /// Success is measured by world-space proximity, not manager counts — that is the only proof the
+    /// player can see a body.
     /// </para>
     /// </summary>
-    /// <returns>How many live officers are near the position afterwards.</returns>
-    internal static int EnsureAt(Vector3 position, int wanted, object? targetPlayer = null)
+    /// <returns>How many living shipped officers are within <see cref="OfficerDeployment.SceneRadiusMetres"/>.</returns>
+    internal static int EnsureAt(Vector3 position, int wanted, object? targetPlayer = null, bool? beginAsSighted = null)
     {
         LastShortfall = string.Empty;
 
         if (!HostGate.IsAuthority || wanted <= 0)
             return 0;
 
-        var near = OnDutyNear(position);
+        var pursue = beginAsSighted ?? PoliceRuntime.Response?.BeginAsSighted ?? false;
+
+        var near = OfficerDeployment.CountWithin(position, OfficerDeployment.SceneRadiusMetres).Count;
         if (near >= wanted)
             return near;
 
-        // A drained pool is almost always a pile of corpses, so try the cheap fix before the loud one.
-        if (Count() is { Dead: > 0 } or { KnockedOut: > 0 })
-            ReturnToDuty();
+        // 1) Relocate real officers — the path that actually puts a body in front of the player.
+        OfficerDeployment.Deploy(position, wanted, targetPlayer, pursue: pursue, reason: "ensure-at");
 
-        var shortfall = wanted - OnDutyNear(position);
+        near = OfficerDeployment.CountWithin(position, OfficerDeployment.SceneRadiusMetres).Count;
+        if (near >= wanted)
+            return near;
+
+        // 2) Ask the station's own Dispatch (may pull pooled units onto the street).
+        var shortfall = wanted - near;
         if (shortfall > 0)
-            Dispatch(position, shortfall, targetPlayer);
+            Dispatch(position, shortfall, targetPlayer, beginAsSighted);
 
-        var after = OnDutyNear(position);
-        if (after < wanted)
+        // Relocate again — Dispatch often leaves them at the station spawn.
+        OfficerDeployment.Deploy(position, wanted, targetPlayer, pursue: pursue, reason: "ensure-at-after-dispatch");
+
+        near = OfficerDeployment.CountWithin(position, OfficerDeployment.SceneRadiusMetres).Count;
+        if (near >= wanted)
+            return near;
+
+        // 3) Last resort: PullOfficer + relocate shipped units only.
+        shortfall = wanted - near;
+        if (shortfall > 0)
+            PlaceFromPool(position, shortfall, targetPlayer, beginAsSighted);
+
+        var after = OfficerDeployment.CountWithin(position, OfficerDeployment.SceneRadiusMetres);
+        if (after.Count < wanted)
         {
             var census = Count();
             LastShortfall =
-                $"asked for {wanted} officer(s) and got {after}: {census.Summary}. " +
-                (census.Total == 0
-                    ? "There are no officer objects in the scene at all."
-                    : census.Pooled == 0
-                        ? "Every station pool is empty, so dispatch had nobody to send."
-                        : "The station refused or the officers have not arrived yet.");
+                $"asked for {wanted} officer(s) within {OfficerDeployment.SceneRadiusMetres:0}m and got {after.Count} " +
+                $"(nearest {(after.Count > 0 ? after.NearestMetres.ToString("0.0") + "m" : "n/a")}). " +
+                $"{census.Summary}. Deploy: {OfficerDeployment.LastReport}";
 
             PoliceLog.Warn($"Police event under-staffed — {LastShortfall}");
         }
+        else
+        {
+            TotalDispatched += after.Count;
+        }
 
-        return after;
+        return after.Count;
     }
 
     /// <summary>
@@ -265,7 +343,7 @@ internal static class PoliceForce
     /// an enum whose value would otherwise arrive as a boxed <c>int</c> and fail to bind.
     /// </para>
     /// </summary>
-    internal static int Dispatch(Vector3 position, int count, object? targetPlayer = null)
+    internal static int Dispatch(Vector3 position, int count, object? targetPlayer = null, bool? beginAsSighted = null)
     {
         var stationType = GameReflection.FindType(GameTypes.PoliceStation);
         var playerType = GameReflection.FindType(GameTypes.Player);
@@ -282,20 +360,26 @@ internal static class PoliceForce
         if (player is null)
             return 0;
 
+        var sighted = beginAsSighted ?? PoliceRuntime.Response?.BeginAsSighted ?? false;
         var signature = new[] { typeof(int), playerType, dispatchType, typeof(bool) };
-        var auto = Enum.ToObject(dispatchType, 0);
+        // OnFoot — Auto often picks vehicles and silently under-delivers when the lot is empty.
+        var onFoot = Enum.ToObject(dispatchType, 2);
 
-        var sent = 0;
-        while (sent < count)
+        var before = VisibleNear(position);
+        var requested = 0;
+        while (requested < count)
         {
-            var batch = Math.Min(State.HeatModel.HardOfficerCap, count - sent);
+            // Cooldown is a common silent refuse; clear it between batches.
+            Members.TryWrite(station, "TimeSinceLastDispatch", 999f);
+
+            var batch = Math.Min(State.HeatModel.HardOfficerCap, count - requested);
 
             if (!GameReflection.TryInvokeExact(
                     stationType,
                     station,
                     "Dispatch",
                     signature,
-                    new object?[] { batch, player, auto, false },
+                    new object?[] { batch, player, onFoot, sighted },
                     out _,
                     out var failure))
             {
@@ -303,33 +387,122 @@ internal static class PoliceForce
                 break;
             }
 
-            sent += batch;
+            requested += batch;
         }
 
-        TotalDispatched += sent;
+        // Whatever Dispatch pulled, force them into a visible presence at the scene.
+        RevealNearbyResponders(position, count);
 
-        if (sent > 0)
-            PoliceLog.Detail($"Dispatched {sent} officer(s) from the nearest station.");
+        var sent = Math.Max(0, VisibleNear(position) - before);
+        TotalDispatched += Math.Max(sent, requested);
 
-        return sent;
+        if (requested > 0)
+            PoliceLog.Detail(
+                $"Dispatched {requested} on-foot request(s); {sent} newly visible near scene (beginAsSighted={sighted}).");
+
+        return Math.Max(sent, requested);
     }
 
     /// <summary>
-    /// True when at least one non-agent officer is alive and active anywhere in the world. The federal
-    /// clone path needs a donor, so a federal event with no live officer produces nothing at all.
+    /// Bypass Dispatch entirely: PullOfficer + relocate shipped officers, optional pursuit.
+    /// Never clones.
+    /// </summary>
+    internal static int PlaceFromPool(Vector3 position, int count, object? targetPlayer = null, bool? beginAsSighted = null)
+    {
+        if (count <= 0)
+            return 0;
+
+        var station = ClosestStation(position);
+        var player = targetPlayer ?? GameBridge.LocalPlayer();
+        var playerCode = Members.Read(player, "PlayerCode", string.Empty);
+        var sighted = beginAsSighted ?? PoliceRuntime.Response?.BeginAsSighted ?? false;
+        var placed = 0;
+
+        for (var i = 0; i < count; i++)
+        {
+            object? officer = null;
+            if (station is not null)
+                officer = Members.InvokeFor(station, "PullOfficer");
+
+            if (officer is null)
+                break;
+
+            var offset = Quaternion.Euler(0f, i * 45f, 0f) * Vector3.forward * (8f + i);
+            if (!OfficerDeployment.Relocate(officer, position + offset, "place-from-pool"))
+                continue;
+
+            if (sighted && !string.IsNullOrEmpty(playerCode))
+                Members.Invoke(officer, "BeginFootPursuit_Networked", playerCode, false);
+
+            placed++;
+        }
+
+        if (placed > 0)
+            PoliceLog.Msg($"Direct-placed {placed} shipped officer(s) near the scene (Dispatch fallback).");
+
+        return placed;
+    }
+
+    private static void RevealNearbyResponders(Vector3 position, int budget)
+    {
+        var revealed = 0;
+        foreach (var officer in DetectionTuner.Officers())
+        {
+            if (revealed >= budget || !GameReflection.IsPresent(officer) || officer is null)
+                continue;
+
+            if (FederalAgents.IsAgent(officer))
+                continue;
+
+            if (Members.Read(Members.ReadPath(officer, "Health"), "IsDead", false))
+                continue;
+
+            var here = Components.TransformOf(officer)?.position;
+            if (here is null)
+                continue;
+
+            // Already near but ghost, or freshly pulled and still at the station — yank to the scene.
+            var near = (here.Value - position).sqrMagnitude <= (OnSceneRadius * OnSceneRadius * 4f);
+            var atStation = false;
+            foreach (var station in Stations())
+            {
+                var spawn = Members.ReadPath(station, "SpawnPoint") as Transform;
+                if (spawn is not null && (here.Value - spawn.position).sqrMagnitude < 100f)
+                {
+                    atStation = true;
+                    break;
+                }
+            }
+
+            if (!near && !atStation && OfficerPresence.IsVisiblyPresent(officer))
+                continue;
+
+            if (OfficerPresence.IsVisiblyPresent(officer) && near)
+                continue;
+
+            var offset = Quaternion.Euler(0f, revealed * 40f, 0f) * Vector3.forward * 6f;
+            if (OfficerPresence.Reveal(officer, position + offset, "dispatch-reveal"))
+                revealed++;
+        }
+    }
+
+    /// <summary>
+    /// True when at least one non-designated officer is alive and active. Federal designation needs
+    /// living shipped officers — without them the event cannot run.
     /// </summary>
     internal static bool EnsureAnyLive(Vector3 near)
     {
-        if (Count().OnDuty > 0)
+        if (Count().Visible > 0)
             return true;
 
         ReturnToDuty();
 
-        if (Count().OnDuty > 0)
+        if (Count().Visible > 0)
             return true;
 
         Dispatch(near, 1);
-        return Count().OnDuty > 0;
+        PlaceFromPool(near, 1);
+        return Count().Visible > 0;
     }
 
     // ── Lookups ───────────────────────────────────────────────────────────────────────────────
@@ -364,7 +537,7 @@ internal static class PoliceForce
         return null;
     }
 
-    private static int OnDutyNear(Vector3 position)
+    private static int VisibleNear(Vector3 position)
     {
         var count = 0;
 
@@ -376,8 +549,11 @@ internal static class PoliceForce
             if (Members.Read(Members.ReadPath(officer, "Health"), "IsDead", false))
                 continue;
 
+            if (!OfficerPresence.IsVisiblyPresent(officer))
+                continue;
+
             var here = Components.TransformOf(officer)?.position;
-            if (here is null || !(Components.GameObjectOf(officer)?.activeInHierarchy ?? false))
+            if (here is null)
                 continue;
 
             if ((here.Value - position).sqrMagnitude <= OnSceneRadius * OnSceneRadius)

@@ -101,7 +101,8 @@ internal static class DriverRegistry
             {
                 lock (Gate)
                 {
-                    if (ByPointer.TryGetValue(pointer, out var indexed) && ReferenceEquals(indexed.Employee, employee))
+                    if (ByPointer.TryGetValue(pointer, out var indexed) &&
+                        Gx.PointerOf(indexed.Employee) == pointer)
                     {
                         brain = indexed;
                         return true;
@@ -325,9 +326,45 @@ internal static class DriverRegistry
         // Nothing to hand over means the clipboard is already the record of truth for this driver.
         if (!brain.Record.Routes.Any(r => r.Source.IsSet || r.Destination.IsSet))
             brain.Record.RoutesOnClipboard = true;
+        else if (brain.Record.RoutesOnClipboard && ClipboardLostSavedShape(brain))
+        {
+            // The sidecar mirrors the last known-good clipboard state. If vanilla dropped a
+            // cross-property endpoint during its save/load round trip, hand that state back instead
+            // of letting the first Pull erase the only surviving copy.
+            brain.Record.RoutesOnClipboard = false;
+            DriverLog.Msg($"{brain.Name}: restoring route rows the vanilla clipboard did not load.");
+        }
 
         if (rejected > 0)
             brain.RequestStart();
+    }
+
+    private static bool ClipboardLostSavedShape(DriverBrain brain)
+    {
+        var vanilla = ClipboardApi.Routes(brain.Employee);
+
+        for (var i = 0; i < brain.Record.Routes.Count; i++)
+        {
+            var saved = brain.Record.Routes[i];
+            if (!saved.Source.IsSet && !saved.Destination.IsSet)
+                continue;
+
+            if (i >= vanilla.Count)
+                return true;
+
+            var live = vanilla[i];
+            if (saved.Source.IsSet && ClipboardApi.Source(live) is null)
+                return true;
+
+            if (saved.Destination.IsSet &&
+                saved.Destination.ParsedKind == EndpointKind.Storage &&
+                ClipboardApi.Destination(live) is null)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     internal static string DriverName(DriverRecord record)
@@ -338,6 +375,24 @@ internal static class DriverRegistry
     }
 
     /// <summary>Returns every driver to being an ordinary Handler and empties the roster.</summary>
+    internal static void SuspendAndClear()
+    {
+        foreach (var brain in Drivers)
+        {
+            try
+            {
+                ClipboardRoutes.Suspend(brain);
+            }
+            catch (Exception ex)
+            {
+                DriverLog.Warn($"Could not suspend {brain.Name}'s routes ({ex.GetType().Name}: {ex.Message}).");
+            }
+        }
+
+        Clear();
+    }
+
+    /// <summary>Drops runtime wrappers while retaining the world's current clipboard state.</summary>
     internal static void Clear()
     {
         DriverDesk.DetachAll();

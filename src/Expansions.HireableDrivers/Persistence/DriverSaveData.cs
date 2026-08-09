@@ -48,6 +48,13 @@ public sealed class DriverRecord
     public List<DriverRoute> Routes { get; set; } = new();
 
     /// <summary>
+    /// Cargo already loaded by an interrupted trip. The vehicle trunk is vanilla-persistent; this
+    /// manifest preserves which part belongs to the driver so reload/disable cannot strand it as
+    /// "pre-existing" cargo forever.
+    /// </summary>
+    public PendingDriverCargo PendingCargo { get; set; } = new();
+
+    /// <summary>
     /// False on a blob written before the management clipboard became the route editor. Those routes
     /// exist only here and have to be written onto <c>PackagerConfiguration.Routes</c> once; after
     /// that the clipboard is the record of truth and deleting a row there means deleting it.
@@ -75,6 +82,11 @@ public sealed class DriverRoute
 
     public string ItemLabel { get; set; } = string.Empty;
 
+    /// <summary>The exact vanilla filter shape, retained while routes are suspended or rebuilt.</summary>
+    public string FilterMode { get; set; } = "Whitelist";
+
+    public List<string> FilterItemIds { get; set; } = new();
+
     /// <summary>Units that must be aboard before the vehicle leaves. 0 derives it from capacity.</summary>
     public int DepartAtUnits { get; set; }
 
@@ -90,5 +102,36 @@ public sealed class DriverRoute
         var what = ItemLabel.Length > 0 ? ItemLabel : ItemId.Length > 0 ? ItemId : "anything";
         var threshold = DepartAtUnits > 0 ? $"{DepartAtUnits}+" : "auto";
         return $"{Source.Label} → {Destination.Label} ({what}, depart at {threshold})";
+    }
+}
+
+public sealed class PendingDriverCargo
+{
+    public string ItemId { get; set; } = string.Empty;
+
+    public int Units { get; set; }
+
+    public int DeliveredThisTrip { get; set; }
+
+    public int RouteIndex { get; set; } = -1;
+
+    public EndpointRef Source { get; set; } = new();
+
+    public EndpointRef Destination { get; set; } = new();
+
+    /// <summary>Pre-trip quantities by vehicle ItemSlots index; only matching item-id slots are non-zero.</summary>
+    public List<int> ProtectedSlotQuantities { get; set; } = new();
+
+    public bool IsActive => Units > 0 && ItemId.Length > 0 && Destination.IsSet;
+
+    public void Clear()
+    {
+        ItemId = string.Empty;
+        Units = 0;
+        DeliveredThisTrip = 0;
+        RouteIndex = -1;
+        Source = new EndpointRef();
+        Destination = new EndpointRef();
+        ProtectedSlotQuantities.Clear();
     }
 }

@@ -1,15 +1,20 @@
 using Expansions.PoliceOverhaul.State;
-using S1API.Entities;
 
 namespace Expansions.PoliceOverhaul.Runtime;
 
 /// <summary>
-/// Player-facing police copy. Substantive events go out as phone texts from <see cref="DispatchContact"/>;
-/// toasts are reserved for moments where waiting on the phone would be too slow to act on.
+/// Player-facing police copy. Delivered as on-screen toasts only — never via a custom NPC.
+/// <para>
+/// A Dispatch phone contact used to send these as texts, but S1API could not finalize that NPC
+/// (SetVisible NRE) and the half-built body flooded <c>UpdateUmbrellaUse</c> until the process died.
+/// Toasts carry the full sentence; truncated UI is preferred over a game crash.
+/// </para>
 /// </summary>
 internal static class PoliceMessages
 {
-    private static NPC? _contact;
+    internal const string ModeToastAndText = "toast_and_text";
+    internal const string ModeTextOnly = "text_only";
+
     private static string _lastDelivery = "none yet";
     private static string _lastBody = string.Empty;
     private static int _sent;
@@ -21,58 +26,49 @@ internal static class PoliceMessages
 
     internal static int Sent => _sent;
 
-    internal static bool ContactReady => _contact is not null;
+    /// <summary>Always true: there is no contact to wait for.</summary>
+    internal static bool ContactReady => true;
 
-    internal static void NoteContactReady(NPC contact)
+    internal static void NoteReady()
     {
-        _contact = contact;
-        _lastDelivery = $"contact ready ({DispatchContact.ContactFirstName} {DispatchContact.ContactLastName})";
-        PoliceLog.Msg($"Police messages will come from '{contact.FullName}' ({contact.ID}).");
+        _lastDelivery = $"toast channel ready ({DispatchContact.DisplayName})";
+        PoliceLog.Msg(
+            $"Police messages will come as on-screen toasts labelled '{DispatchContact.DisplayName}' " +
+            "(no custom Dispatch NPC — that path crashed the game).");
     }
 
     /// <summary>
-    /// Phone text. Falls back to a toast only when the contact is not up yet (menu scene / pre-save),
-    /// so a substantive event is never silent.
+    /// Full announcement path. <paramref name="urgent"/> is reserved for call-site clarity; every
+    /// announcement toasts when announcements are on.
     /// </summary>
-    internal static void Message(string body)
+    internal static void Announce(string title, string body, float toastSeconds = 8f, bool urgent = false)
     {
         if (string.IsNullOrWhiteSpace(body))
             return;
 
+        if (!AnnouncementsOn())
+            return;
+
         var text = body.Trim();
-        _lastBody = text;
+        var heading = string.IsNullOrWhiteSpace(title) ? DispatchContact.DisplayName : title.Trim();
+        DeliverToast(heading, text, toastSeconds);
+        _ = urgent;
+    }
 
-        var contact = Resolve();
-        if (contact is not null)
-        {
-            try
-            {
-                contact.SendTextMessage(text, network: true);
-                _sent++;
-                _lastDelivery = $"message #{_sent} via {contact.ID}";
-                PoliceLog.Detail($"Dispatch text: {TrimForLog(text)}");
-                return;
-            }
-            catch (Exception ex)
-            {
-                PoliceLog.Warn($"Dispatch text failed ({PoliceLog.Describe(ex)}); falling back to a toast.");
-            }
-        }
+    /// <summary>Toast with the Dispatch heading.</summary>
+    internal static void Message(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body) || !AnnouncementsOn())
+            return;
 
-        GameBridge.Notify("Dispatch", text, 10f);
-        _lastDelivery = "toast fallback (Dispatch contact not ready)";
+        DeliverToast(DispatchContact.DisplayName, body.Trim(), 10f);
     }
 
     /// <summary>
-    /// Immediate toast. Kept for the inbound-raid warning (and custody clock-skip), where the player
-    /// has seconds to react and a phone thread is too slow.
+    /// Immediate toast. Prefer <see cref="Announce"/> for new call sites.
     /// </summary>
-    internal static void Toast(string title, string body, float seconds = 8f)
-    {
-        _lastBody = body;
-        _lastDelivery = $"toast: {title}";
-        GameBridge.Notify(title, body, seconds);
-    }
+    internal static void Toast(string title, string body, float seconds = 8f, bool urgent = false) =>
+        Announce(title, body, seconds, urgent);
 
     internal static void HeatTierChanged(bool rising, string tierName, float heat, string meaning) =>
         Message(rising
@@ -110,11 +106,13 @@ internal static class PoliceMessages
         Message($"The federal team has pulled out ({reason}). The cooldown on the next visit has started. " +
                 "Your heat and outlaw status are unchanged by the withdrawal itself.");
 
-    internal static void RaidWarning(string propertyName, string when, string reason) =>
-        Toast(
-            "Raid inbound",
-            $"{propertyName} in about {when}. {reason}. Be inside when they arrive or they take product from the containers.",
-            9f);
+    internal static void RaidWarning(string propertyName, string when, string reason)
+    {
+        // Always deliver — a silent raid is undefendable. Bypasses show_heat_hud.
+        var body =
+            $"{propertyName} in about {when}. {reason}. Be inside when they arrive or they take product from the containers.";
+        DeliverToastForced("Raid inbound", body, 9f);
+    }
 
     internal static void RaidResolved(string propertyName, bool present, int stacks, float value, string haul)
     {
@@ -156,29 +154,37 @@ internal static class PoliceMessages
                 "Vanilla leaves vehicle cargo alone — this module does not.");
 
     internal static void BookedIn(string sentence) =>
-        Toast("Booked in", sentence, 10f);
+        Announce("Booked in", sentence, toastSeconds: 10f, urgent: true);
 
     internal static void EarlyRelease(string body) =>
-        Toast("They let you go early", body, 7f);
+        Announce("They let you go early", body, toastSeconds: 7f, urgent: true);
 
-    private static NPC? Resolve()
+    internal static void ShopRefused(string reason) =>
+        Announce("They will not serve you", reason, toastSeconds: 8f, urgent: false);
+
+    internal static string DescribeMode() =>
+        "toast_only (no custom Dispatch NPC — phone text was retired because it crashed the game)";
+
+    private static void DeliverToast(string title, string text, float toastSeconds)
     {
-        if (_contact is not null)
-            return _contact;
+        if (!AnnouncementsOn())
+            return;
 
-        try
-        {
-            var found = NPC.Get(DispatchContact.ContactId) ?? NPC.Get<DispatchContact>();
-            if (found is not null)
-                NoteContactReady(found);
-
-            return found;
-        }
-        catch
-        {
-            return null;
-        }
+        DeliverToastForced(title, text, toastSeconds);
     }
+
+    /// <summary>Toast ignoring show_heat_hud (raid/custody critical path).</summary>
+    private static void DeliverToastForced(string title, string text, float toastSeconds)
+    {
+        _lastBody = text;
+        _sent++;
+        _lastDelivery = $"toast #{_sent}: {title}";
+        GameBridge.Notify(title, text, toastSeconds);
+        PoliceLog.Detail($"Dispatch toast: {TrimForLog(text)}");
+    }
+
+    private static bool AnnouncementsOn() =>
+        PoliceRuntime.Config is not { ShowHud.Value: false };
 
     private static string TrimForLog(string text) =>
         text.Length <= 160 ? text : text[..157] + "...";

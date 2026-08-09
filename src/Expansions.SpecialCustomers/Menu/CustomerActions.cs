@@ -153,9 +153,19 @@ internal static class CustomerActions
         if (director.Current is { } visit)
             return ActionAvailability.Unavailable($"{visit.Archetype.DisplayName} are already in town");
 
-        return VisitorRuntime.CustomNpcsReady()
-            ? ActionAvailability.Ready
-            : ActionAvailability.Unavailable("the visitor NPCs are not in the world yet - load a save, and run the diagnostics probes if they still do not appear");
+        if (!VisitorRuntime.CustomNpcsReady())
+            return ActionAvailability.Unavailable(
+                "the visitor NPCs are not in the world yet - load a save, and run expprobe sc if they still do not appear");
+
+        var resolved = VisitorRuntime.ResolvedCount();
+        if (resolved <= 0)
+            return ActionAvailability.Unavailable(
+                "every visitor slot failed to spawn - check the MelonLoader log for Avatar(active) / SpawnGraphFix");
+
+        if (resolved < VisitorSlot.Count)
+            return ActionAvailability.Ready; // partial pool can still visit; ForceVisit reports who came
+
+        return ActionAvailability.Ready;
     };
 
     private static IReadOnlyList<ActionChoice> ArchetypeChoices()

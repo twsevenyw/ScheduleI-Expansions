@@ -121,13 +121,13 @@ internal static class PoliceMenuActions
                 ? federal.IsStakeout
                     ? $"Agents are staking out {federal.StakeoutProperty} for another {federal.HoursRemaining}h."
                     : $"A federal team is hunting you for another {federal.HoursRemaining}h."
-                : FederalAgents.Status.CanSpawn
-                    ? "No federal team out. They are available on this build."
-                    : $"No federal team out, and this build cannot spawn one: {FederalAgents.Status.Reason}.");
+                : FederalAgents.Status.CanDesignate
+                    ? "No federal team out. Shipped officers can be designated on this save."
+                    : $"No federal team out: {FederalAgents.Status.Reason}.");
         }
 
         var body = string.Join(" ", lines);
-        Toast(headline, body);
+        PoliceMessages.Announce(headline, body);
         return ActionResult.Ok($"{headline}. {body}");
     }
 
@@ -155,7 +155,7 @@ internal static class PoliceMenuActions
                 $"call the police, card-only vendors would refuse you, fines would be x{config.OutlawFineMultiplier.Value:0.0}, and an " +
                 $"arrest would cost you the rest of the day plus ${consequences.Custody.ProcessingFeeDue():N0} in processing.";
 
-            Toast("Outlaw: CLEAN", preview);
+            PoliceMessages.Announce("Outlaw: CLEAN", preview);
             return ActionResult.Ok(preview);
         }
 
@@ -168,7 +168,7 @@ internal static class PoliceMenuActions
             $"and takes your tools. Buying the tier down costs ${config.OutlawLegalFee.Value:N0}; serving it out takes " +
             $"{config.OutlawClearDays.Value - record.CleanDayStreak} more clean day(s).";
 
-        Toast($"Outlaw: {OutlawState.Describe(record.Outlaw)}", bill);
+        PoliceMessages.Announce($"Outlaw: {OutlawState.Describe(record.Outlaw)}", bill);
         return ActionResult.Ok(bill);
     }
 
@@ -187,8 +187,10 @@ internal static class PoliceMenuActions
                 $"Heat is already pinned at {record.Heat:0} ({HeatModel.TierName(record.Tier)}); it cannot go higher.");
         }
 
-        var message = $"Heat {before:0} -> {record.Heat:0} ({HeatModel.TierName(record.Tier)}). The world catches up within a game minute.";
-        Toast($"Heat {record.Heat:0}", message);
+        var message =
+            $"Heat {before:0} -> {record.Heat:0} ({HeatModel.TierName(record.Tier)}). " +
+            $"Law intensity is now {heat.CurrentIntensity} (baseline {heat.BaselineIntensity}); posts and detection re-evaluated immediately.";
+        PoliceMessages.Announce($"Heat {record.Heat:0}", message);
         return ActionResult.Ok(message);
     }
 
@@ -204,8 +206,10 @@ internal static class PoliceMenuActions
         if (Math.Abs(record.Heat - before) < 0.01f)
             return ActionResult.NoChange($"Heat was already {record.Heat:0} ({HeatModel.TierName(record.Tier)}).");
 
-        var message = $"Heat set to {record.Heat:0} ({HeatModel.TierName(record.Tier)}).";
-        Toast(message, "The law scheduler is re-evaluated on the next game minute.");
+        var message =
+            $"Heat set to {record.Heat:0} ({HeatModel.TierName(record.Tier)}). " +
+            $"Law intensity is now {heat.CurrentIntensity} (baseline {heat.BaselineIntensity}); posts and detection re-evaluated immediately.";
+        PoliceMessages.Announce($"Heat {record.Heat:0}", message);
         return ActionResult.Ok(message);
     }
 
@@ -222,7 +226,7 @@ internal static class PoliceMenuActions
         var message = $"You are now {OutlawState.Describe(next)}. Searches will find something, pursuits will not let go, " +
                       "fines are doubled, dealers charge more and card-only vendors have closed to you.";
 
-        Toast($"Outlaw: {OutlawState.Describe(next)}", message);
+        PoliceMessages.Announce($"Outlaw: {OutlawState.Describe(next)}", message);
         return ActionResult.Ok(message);
     }
 
@@ -242,7 +246,7 @@ internal static class PoliceMenuActions
         var message = $"{OutlawState.Describe(previous)} down to {OutlawState.Describe(record.Outlaw)}, " +
                       $"and heat pulled back to {record.Heat:0} so it does not immediately re-latch.";
 
-        Toast($"Outlaw: {OutlawState.Describe(record.Outlaw)}", message);
+        PoliceMessages.Announce($"Outlaw: {OutlawState.Describe(record.Outlaw)}", message);
         return ActionResult.Ok(message);
     }
 
@@ -251,9 +255,10 @@ internal static class PoliceMenuActions
         if (PoliceRuntime.Heat is not { } heat || PoliceRuntime.Outlaw is not { } outlaw)
             return NotWired();
 
-        return outlaw.PayLegalFee(heat.LocalRecord, out var message)
-            ? ActionResult.Ok(message)
-            : ActionResult.Failed(message);
+        var paid = outlaw.PayLegalFee(heat.LocalRecord, out var message);
+        if (!paid)
+            PoliceMessages.Announce("Legal fee", message);
+        return paid ? ActionResult.Ok(message) : ActionResult.Failed(message);
     }
 
     private static string LegalFeeLabel()
@@ -270,7 +275,9 @@ internal static class PoliceMenuActions
             return NotWired();
 
         var started = federal.ForceBegin(out var message);
-        Toast("Federal agents", message);
+        // ForceBegin already texts the rich FederalBegan copy on success.
+        if (!started)
+            PoliceMessages.Announce("Federal agents", message);
         return started ? ActionResult.Ok(message) : ActionResult.Failed(message);
     }
 
@@ -280,6 +287,9 @@ internal static class PoliceMenuActions
             return NotWired();
 
         var started = raids.Force(immediate: false, out var message);
+        // RaidWarning already announces on success; still surface failures as a Dispatch text.
+        if (!started)
+            PoliceMessages.Announce("Raid", message);
         return started ? ActionResult.Ok(message) : ActionResult.Failed(message);
     }
 
@@ -294,13 +304,17 @@ internal static class PoliceMenuActions
         var revived = PoliceForce.ReturnToDuty();
         var after = PoliceForce.Count();
 
-        return ActionResult.Ok(
-            revived > 0
-                ? $"{revived} officer(s) back on duty. The force is now {after.OnDuty} on duty, {after.Pooled} in " +
-                  $"reserve across {after.Stations} station(s), {after.Dead} still down."
-                : before.Total == 0
-                    ? "There are no officer objects in this scene at all, so there was nothing to revive. Load a save and try again."
-                    : $"Nobody needed reviving: {before.Summary}.");
+        var message = before.Total == 0 && revived == 0
+            ? "There are no officer objects in this scene at all, so there was nothing to revive. Load a save and try again."
+            : $"{revived} revived via NPCHealth.Revive(). " +
+              $"Force now {after.Visible} visible / {after.OnDuty} hierarchy-active " +
+              $"({after.Ghost} ghost) / {after.Total - after.Agents} shipped total. " +
+              "No cloning — the closed officer set is the ceiling.";
+
+        PoliceMessages.Announce("Police force", message);
+        return before.Total == 0 && revived == 0
+            ? ActionResult.Failed(message)
+            : ActionResult.Ok(message);
     }
 
     private static ActionResult ResetEverything()
@@ -340,7 +354,7 @@ internal static class PoliceMenuActions
         PoliceRuntime.Schedule?.Restore();
 
         var message = $"{wiped} player record(s) cleared, dealer cuts and snitch chances restored, and the world put back to vanilla.";
-        Toast("Police state reset", message);
+        PoliceMessages.Announce("Police state reset", message);
         return ActionResult.Ok(message);
     }
 
@@ -409,13 +423,6 @@ internal static class PoliceMenuActions
         Entries.Add(new Entry(id, null, label, description, availability, invoke));
         PoliceLog.Detail($"Menu action available: {label()}");
     }
-
-    /// <summary>
-    /// An in-world toast on top of the menu's own output line. The two audiences differ: the output
-    /// pane is for the owner reading the screen, the toast is for the player who fired this from the
-    /// event hotkey and never opened it.
-    /// </summary>
-    private static void Toast(string title, string body) => GameBridge.Notify(title, body, 8f);
 
     internal sealed class Entry
     {

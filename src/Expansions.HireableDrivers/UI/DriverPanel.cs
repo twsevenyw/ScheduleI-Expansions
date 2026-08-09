@@ -184,7 +184,7 @@ internal static class DriverPanel
         {
             return HiringDesk.LastFailure.Length > 0
                 ? $"Hiring is not on the NPC: {HiringDesk.LastFailure}. Use the Expansions menu's repair path."
-                : "Still looking for the employee-hiring NPC in this scene.";
+                : $"Still looking for the employee-hiring NPC — {HiringDesk.StatusLine}";
         }
 
         var picker = RoutePicker.IsAvailable(out var reason)

@@ -224,6 +224,7 @@ internal static class DriverActions
                 return ActionResult.Failed($"{driver.Name} is in the world — talk to them and pick Fire.");
 
             var name = driver.Name;
+            DriverHiring.Release(driver);
             DriverRegistry.Unregister(choice.Id);
             return ActionResult.Ok($"Forgot the record for {name}.");
         },

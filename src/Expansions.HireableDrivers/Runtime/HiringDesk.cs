@@ -8,7 +8,7 @@ namespace Expansions.HireableDrivers.Runtime;
 /// The employee-hiring NPC's <c>DialogueController_Fixer</c> gets one extra interaction choice per
 /// property, added through the game's own <c>AddDialogueChoice</c> API. The game draws them in its own
 /// list with its own font, sounds and gamepad handling, re-runs each entry's visibility check every
-/// time you open the conversation, and fires the choice through its own click path — so selection
+/// time you open the conversation, and fires the choice through the game's own click path — so selection
 /// works because it is the game's selection.
 /// </para>
 /// <para>
@@ -25,11 +25,15 @@ internal static class HiringDesk
     /// </summary>
     private const int ChoicePriority = 0;
 
+    private const int MaxAttempts = 40;
+
     private static readonly List<Entry> Entries = new();
     private static readonly object Gate = new();
 
     private static int _attempts;
     private static bool _attached;
+    private static bool _loggedExhausted;
+    private static string _pendingReason = string.Empty;
 
     internal static bool IsAttached
     {
@@ -49,13 +53,28 @@ internal static class HiringDesk
         }
     }
 
+    internal static int Attempts
+    {
+        get
+        {
+            lock (Gate)
+                return _attempts;
+        }
+    }
+
     internal static string Location { get; private set; } = string.Empty;
 
     /// <summary>
-    /// Why hiring is not on the NPC yet, in the player's words. Empty while it is attached or while the
-    /// retry ladder is still running.
+    /// Why hiring is not on the NPC, in the player's words. Set as soon as a concrete failure is known
+    /// (missing API, empty property list, AddChoice refusal). Cleared on a successful attach.
     /// </summary>
     internal static string LastFailure { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// One-line status for the MelonLoader log and the probes. Always current after the latest attach
+    /// attempt — never empty while the module has tried.
+    /// </summary>
+    internal static string StatusLine { get; private set; } = "hiring desk has not been attempted yet";
 
     /// <summary>
     /// Called on every gameplay scene load and retried from the tick pump until the NPC exists — the
@@ -71,21 +90,28 @@ internal static class HiringDesk
             _attempts++;
         }
 
+        if (!DialogueApi.CanAddChoices(out var apiReason))
+        {
+            Fail(apiReason, giveUp: true);
+            return;
+        }
+
         var controllers = DialogueApi.HiringControllers();
         if (controllers.Count == 0)
         {
-            Note("no employee-hiring NPC (DialogueController_Fixer) is in the scene");
+            Defer("no employee-hiring NPC (DialogueController_Fixer) is in the scene yet");
             return;
         }
 
         var properties = WorldApi.AllProperties().Where(Gx.Alive).ToArray();
         if (properties.Length == 0)
         {
-            Note("the property list is empty, so there is nothing to hire a driver for yet");
+            Defer("the property list is empty, so there is nothing to hire a driver for yet");
             return;
         }
 
         var added = 0;
+        string? addFailure = null;
 
         foreach (var controller in controllers)
         {
@@ -110,7 +136,12 @@ internal static class HiringDesk
                     ChoicePriority);
 
                 if (choice is null)
+                {
+                    addFailure = DialogueApi.LastAddFailure.Length > 0
+                        ? DialogueApi.LastAddFailure
+                        : "AddDialogueChoice returned null";
                     continue;
+                }
 
                 entry.Choice = choice;
 
@@ -123,49 +154,102 @@ internal static class HiringDesk
 
         if (added == 0)
         {
-            Note("the hiring NPC is present but would not accept a driver choice");
-
-            if (_attempts % 20 == 1)
-                DriverLog.Debug($"The hiring NPC is present but would not take a driver choice (attempt {_attempts}).");
-
+            Fail(
+                addFailure is null
+                    ? "the hiring NPC is present but every property was skipped (no propertyCode)"
+                    : "the hiring NPC is present but would not accept a driver choice: " + addFailure,
+                giveUp: addFailure is not null && addFailure.Contains("not on this build", StringComparison.Ordinal));
             return;
         }
 
         Location = DialogueApi.ControllerName(controllers[0]);
         LastFailure = string.Empty;
+        _pendingReason = string.Empty;
 
         lock (Gate)
             _attached = true;
 
-        DriverLog.Msg($"Driver hiring added to {Location}: {added} property option(s).");
+        var ownedProperties = WorldApi.OwnedProperties().Where(Gx.Alive).ToArray();
+        var owned = ownedProperties.Length;
+        var visible = ownedProperties.Count(DriverCapacity.HasRoom);
+
+        StatusLine =
+            $"attached to {Location}: {added} option(s) across {controllers.Count} hiring NPC(s); " +
+            $"{owned} owned propert(ies), {visible} with a free driver slot (hidden when full)";
+
+        DriverLog.Msg($"Driver hiring {StatusLine}.");
     }
 
     /// <summary>Cheap enough to call every tick; does nothing once attached or once we have given up.</summary>
     internal static void Retry()
     {
-        if (IsAttached || _attempts > MaxAttempts)
+        if (IsAttached)
+            return;
+
+        int attempts;
+        lock (Gate)
+            attempts = _attempts;
+
+        if (attempts > MaxAttempts)
             return;
 
         Attach();
 
-        if (_attempts == MaxAttempts && !IsAttached)
+        lock (Gate)
+            attempts = _attempts;
+
+        if (attempts >= MaxAttempts && !IsAttached && !_loggedExhausted)
         {
+            _loggedExhausted = true;
+            if (LastFailure.Length == 0 && _pendingReason.Length > 0)
+                LastFailure = _pendingReason;
+
+            StatusLine = $"gave up after {attempts} attempt(s): {LastFailure}";
             DriverLog.Warn(
-                "Could not add driver hiring to the employee-hiring NPC on this build. " +
+                $"Could not add driver hiring to the employee-hiring NPC ({LastFailure}). " +
                 "The Expansions menu's fallback \"Hire a driver\" action is available instead.");
         }
     }
 
-    private const int MaxAttempts = 40;
-
     /// <summary>
-    /// Records a reason only once the retry ladder has run out, so a reason is never shown while the
-    /// scene is still waking up and the answer would be wrong.
+    /// Scene is still waking up — keep retrying, but remember the reason so the probe/panel is not blank
+    /// while the ladder runs.
     /// </summary>
-    private static void Note(string reason)
+    private static void Defer(string reason)
     {
-        if (_attempts >= MaxAttempts)
-            LastFailure = reason;
+        _pendingReason = reason;
+        LastFailure = reason;
+        StatusLine = $"waiting ({Attempts}/{MaxAttempts}): {reason}";
+
+        if (Attempts == 1 || Attempts % 10 == 0)
+            DriverLog.Msg($"Driver hiring not attached yet — {StatusLine}.");
+    }
+
+    /// <summary>Concrete failure. <paramref name="giveUp"/> skips the rest of the retry ladder.</summary>
+    private static void Fail(string reason, bool giveUp)
+    {
+        LastFailure = reason;
+        _pendingReason = reason;
+        StatusLine = giveUp
+            ? $"failed: {reason}"
+            : $"retrying ({Attempts}/{MaxAttempts}): {reason}";
+
+        if (giveUp)
+        {
+            lock (Gate)
+                _attempts = MaxAttempts + 1;
+
+            if (!_loggedExhausted)
+            {
+                _loggedExhausted = true;
+                DriverLog.Warn($"Driver hiring cannot attach — {reason}");
+            }
+
+            return;
+        }
+
+        if (Attempts == 1 || Attempts % 10 == 0)
+            DriverLog.Warn($"Driver hiring attach failed — {StatusLine}.");
     }
 
     internal static void Detach()
@@ -178,9 +262,12 @@ internal static class HiringDesk
             Entries.Clear();
             _attached = false;
             _attempts = 0;
+            _loggedExhausted = false;
         }
 
         LastFailure = string.Empty;
+        _pendingReason = string.Empty;
+        StatusLine = "hiring desk detached";
 
         foreach (var entry in entries)
             DialogueApi.RemoveChoice(entry.Controller, entry.Choice);
@@ -223,6 +310,9 @@ internal static class HiringDesk
         {
             try
             {
+                if (!HostGate.IsAuthority)
+                    return false;
+
                 if (!Gx.Alive(Property) || Gx.Get(Property, "IsOwned") is not true)
                     return false;
 

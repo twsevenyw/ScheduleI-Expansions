@@ -112,6 +112,14 @@ internal static class DriverProbes
             "Does a police checkpoint stop an NPC-driven van carrying product?",
             "Run a loaded route through an active curfew checkpoint and watch for a pursuit. If it triggers, set " +
             "respect_curfew = true in Expansions.cfg.");
+
+        yield return new MutatingTestNote(
+            "HD-P14",
+            Area,
+            "Does a trip preserve unrelated cargo already in the Veeper?",
+            "Put one product the route does not select in the driver's trunk, run a delivery, then inspect both ends. " +
+            "Only the route-selected product may leave the pickup or the van; the pre-existing trunk item must remain. " +
+            "Repeat with the same product already in the trunk and confirm that baseline quantity remains.");
     }
 
     private static void VehicleAgent(ProbeContext context, ProbeResult result)
@@ -121,6 +129,15 @@ internal static class DriverProbes
         result.Fact("Configured mode", survey.Mode.ToString());
         result.Fact("Vehicles you own", survey.Owned.Count.ToString());
         result.Fact("Vehicle prefabs", survey.Prefabs.Count.ToString());
+        result.Fact("Dedicated van on hire", DriverSettings.ProvideVanOnHire ? "enabled" : "disabled");
+
+        var veeper = survey.Prefabs.FirstOrDefault(entry =>
+            string.Equals(entry.Code, VehicleApi.DriverVanCode, StringComparison.OrdinalIgnoreCase));
+        result.Fact(
+            "Veeper prefab",
+            string.Equals(veeper.Code, VehicleApi.DriverVanCode, StringComparison.OrdinalIgnoreCase)
+                ? $"{veeper.Slots} trunk slots; {(veeper.CanSelfDrive ? "self-drives" : veeper.Reason)}"
+                : "**missing**");
 
         if (survey.Owned.Count > 0)
         {
@@ -153,6 +170,15 @@ internal static class DriverProbes
             result.Inconclusive(
                 "No vehicles and no vehicle prefabs were readable, which means VehicleManager has not spawned yet. " +
                 "Run this from inside a loaded save.");
+            return;
+        }
+
+        if (DriverSettings.ProvideVanOnHire &&
+            !string.Equals(veeper.Code, VehicleApi.DriverVanCode, StringComparison.OrdinalIgnoreCase))
+        {
+            result.Fail(
+                "provide_van_on_hire is enabled but the shipped 'veeper' prefab is missing. Hiring rolls back instead " +
+                "of creating a driver without the promised van.");
             return;
         }
 
@@ -219,13 +245,14 @@ internal static class DriverProbes
         }
 
         result.Table(
-            new[] { "Driver", "State", "Vehicle", "Trips", "Items", "Note" },
+            new[] { "Driver", "State", "Vehicle", "Provided", "Trips", "Items", "Note" },
             drivers
                 .Select(d => (IReadOnlyList<string>)new[]
                 {
                     d.Name,
                     d.State.ToString(),
                     d.Vehicle is null ? d.Record.VehicleGuid.Length == 0 ? "none" : "missing" : VehicleApi.Name(d.Vehicle),
+                    d.Record.SpawnedVehicle ? "yes" : "no",
                     d.Record.CompletedTrips.ToString(),
                     d.Record.UnitsDelivered.ToString(),
                     d.StatusNote,
@@ -422,11 +449,19 @@ internal static class DriverProbes
             return;
         }
 
+        if (!DriverPatches.TransportSafe)
+        {
+            result.Fail(
+                "The Handler dispatcher could not be isolated from driver routes. Trips are deliberately paused so " +
+                "vanilla and the mod cannot move the same products twice.");
+            return;
+        }
+
         if (DriverPatches.SkippedPatches.Count > 0)
         {
             result.Inconclusive(
-                "Every type resolved but at least one patch did not apply. Drivers still work: with no stations and no " +
-                "vanilla routes assigned, an unsuppressed Handler brain finds nothing to do and idles.");
+                "Every load-bearing transport patch applied, but at least one native UI or cleanup patch did not. " +
+                "Its documented repair path remains available.");
             return;
         }
 
@@ -459,28 +494,49 @@ internal static class DriverProbes
 
     private static void HiringDeskProbe(ProbeContext context, ProbeResult result)
     {
+        var apiOk = DialogueApi.CanAddChoices(out var apiReason);
         var controllers = DialogueApi.HiringControllers();
 
+        result.Fact("AddDialogueChoice API", apiOk ? "resolves" : "**missing** — " + apiReason);
         result.Fact("Hiring NPCs found", controllers.Count == 0 ? "**none**" : controllers.Count.ToString());
         result.Fact("Driver options attached", HiringDesk.ChoiceCount.ToString());
+        result.Fact("Attach attempts", HiringDesk.Attempts.ToString());
         result.Fact("Attached to", HiringDesk.Location.Length > 0 ? HiringDesk.Location : "nothing yet");
+        result.Fact("Status", HiringDesk.StatusLine);
         result.Fact("Slot map", DriverSettings.DriverSlotsPerProperty);
 
         if (HiringDesk.LastFailure.Length > 0)
             result.Fact("Why it is not attached", "**" + HiringDesk.LastFailure + "**");
 
+        if (DialogueApi.LastAddFailure.Length > 0)
+            result.Fact("Last AddChoice failure", "**" + DialogueApi.LastAddFailure + "**");
+
         var rows = WorldApi.OwnedProperties()
-            .Select(property => new[]
+            .Select(property =>
             {
-                WorldApi.PropertyName(property),
-                WorldApi.PropertyCode(property),
-                DriverCapacity.ForProperty(property).ToString(),
-                DriverCapacity.Used(WorldApi.PropertyCode(property)).ToString(),
+                var code = WorldApi.PropertyCode(property);
+                var free = DriverCapacity.Free(code);
+                return new[]
+                {
+                    WorldApi.PropertyName(property),
+                    code,
+                    DriverCapacity.ForProperty(property).ToString(),
+                    DriverCapacity.Used(code).ToString(),
+                    free > 0 ? free.ToString() : "**0 (option hidden)**",
+                };
             })
             .ToList();
 
         if (rows.Count > 0)
-            result.Table(new[] { "Property", "Code", "Driver slots", "Used" }, rows);
+            result.Table(new[] { "Property", "Code", "Driver slots", "Used", "Free" }, rows);
+
+        if (!apiOk)
+        {
+            result.Fail(
+                "DialogueController.AddDialogueChoice is not callable on this build, so driver hiring cannot attach. " +
+                apiReason);
+            return;
+        }
 
         if (controllers.Count == 0)
         {
@@ -492,13 +548,25 @@ internal static class DriverProbes
 
         if (!HiringDesk.IsAttached)
         {
-            result.Inconclusive(
-                "The hiring NPC exists but would not take a driver option. Check the log for the reason; the repair " +
-                "path in the Expansions menu is available in the meantime.");
+            result.Fail(
+                "The hiring NPC exists but driver options are not attached: " +
+                (HiringDesk.LastFailure.Length > 0 ? HiringDesk.LastFailure : HiringDesk.StatusLine) +
+                ". The Expansions menu repair path is available in the meantime.");
             return;
         }
 
-        result.Ok($"Driver hiring lives on {HiringDesk.Location} alongside the other employee types.");
+        var ownedWithRoom = WorldApi.OwnedProperties().Count(DriverCapacity.HasRoom);
+        if (ownedWithRoom == 0)
+        {
+            result.Inconclusive(
+                $"Driver hiring is attached to {HiringDesk.Location}, but every owned property's driver slot is full " +
+                "so shouldShowCheck hides every option. Fire a driver or buy another property.");
+            return;
+        }
+
+        result.Ok(
+            $"Driver hiring lives on {HiringDesk.Location} alongside the other employee types " +
+            $"({HiringDesk.ChoiceCount} option(s), {ownedWithRoom} currently visible).");
     }
 
     private static void ClipboardProbe(ProbeContext context, ProbeResult result)
@@ -619,11 +687,20 @@ internal static class DriverProbes
         result.Fact("Repair paths showing in the Expansions menu",
             DriverActions.LastPickerFailure.Length > 0 ? DriverActions.LastPickerFailure : "none");
 
+        result.Fact("Hiring desk status", HiringDesk.StatusLine);
+
+        if (!DialogueApi.CanAddChoices(out var apiReason))
+        {
+            result.Fail("Native hiring is impossible on this build: " + apiReason);
+            return;
+        }
+
         if (!hiring)
         {
             result.Fail(
                 "Hiring is not on the employee fixer, so the one thing that must be native is not. " +
-                "The Expansions menu carries a repair path in the meantime, and it names this reason.");
+                (HiringDesk.LastFailure.Length > 0 ? HiringDesk.LastFailure + ". " : "") +
+                "The Expansions menu carries a repair path in the meantime.");
             return;
         }
 

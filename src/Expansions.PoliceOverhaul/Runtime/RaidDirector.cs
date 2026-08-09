@@ -52,17 +52,30 @@ internal sealed class RaidDirector
     internal float ValueSeized { get; private set; }
 
     /// <summary>
-    /// Hourly eligibility check. Raids are outlaw-only on purpose: heat alone already fills the street
-    /// with officers, and taking someone's stash for a curfew violation would be indefensible.
+    /// Hourly eligibility check. High heat is enough; outlaw status always qualifies and shortens
+    /// the scheduler interval.
     /// </summary>
     internal void HourPass()
     {
         if (!_config.EnablePropertyRaids.Value || IsPending)
             return;
 
+        var player = GameBridge.LocalPlayer();
+        if (player is null || GameBridge.IsArrested(player))
+            return;
+
+        var record = _heat.RecordFor(player);
+        var outlawed = record.Outlaw != OutlawTier.Clean && _outlaw.IsOutlawed(player);
+        var heatQualified = record.Heat >= _config.RaidHeatThreshold.Value;
+
+        if (!outlawed && !heatQualified)
+            return;
+
+        var intervalScale = outlawed ? Math.Clamp(_config.RaidOutlawIntervalScale.Value, 0.15f, 2f) : 1f;
+
         if (_config.EnableEventScheduler.Value)
         {
-            if (!_scheduler.DueRaid(out var detail))
+            if (!_scheduler.DueRaid(out var detail, intervalScale))
             {
                 PoliceLog.Detail($"Raid scheduler: {detail}");
                 return;
@@ -71,20 +84,16 @@ internal sealed class RaidDirector
             PoliceLog.Detail($"Raid scheduler: {detail}");
         }
 
-        var player = GameBridge.LocalPlayer();
-        if (player is null || GameBridge.IsArrested(player))
-            return;
-
-        var record = _heat.RecordFor(player);
-        if (record.Outlaw == OutlawTier.Clean || !_outlaw.IsOutlawed(player))
-            return;
-
         if (record.LastRaidDay >= 0 && TimeManager.ElapsedDays - record.LastRaidDay < _config.RaidCooldownDays.Value)
             return;
 
-        Schedule(player, record, record.Outlaw == OutlawTier.Hunted
+        var reason = record.Outlaw == OutlawTier.Hunted
             ? "you are Hunted and they know where you sleep"
-            : "your record put a warrant on your address");
+            : outlawed
+                ? "your record put a warrant on your address"
+                : $"heat {record.Heat:0} cleared the raid threshold ({_config.RaidHeatThreshold.Value})";
+
+        Schedule(player, record, reason);
     }
 
     /// <summary>Per-minute countdown. Cheap enough to sit on the law controller's own tick.</summary>
@@ -145,24 +154,35 @@ internal sealed class RaidDirector
             return false;
         }
 
-        if (!Schedule(player, _heat.RecordFor(player), "requested from the menu", warn: !immediate))
+        // Manual triggers must always pick a property you own — including the one you are standing
+        // in. Being home is the defence at execute time (they drive past), not a reason for the
+        // button to do nothing.
+        if (!Schedule(player, _heat.RecordFor(player), "requested from the menu", warn: !immediate, allowOccupied: true))
         {
-            message = Owned().Count == 0
-                ? "You do not own a property yet, so there is nothing to raid. Buy one and try again."
-                : "Every property you own has you standing in it. A raid only happens when you are somewhere else.";
+            message = "You do not own a property yet, so there is nothing to raid. Buy one and try again.";
             return false;
         }
 
-        _scheduler.NoteManualRaid();
+        var outlawed = _heat.RecordFor(player).Outlaw != OutlawTier.Clean;
+        _scheduler.NoteManualRaid(outlawed ? Math.Clamp(_config.RaidOutlawIntervalScale.Value, 0.15f, 2f) : 1f);
+
+        var propertyName = _targetName;
+        var standingIn = player is not null && _target is not null &&
+                         Estate.Contains(_target, Components.TransformOf(player)?.position ?? Vector3.zero);
 
         if (immediate)
         {
             Execute();
-            message = $"Raided {_targetName} immediately.";
+            message = standingIn
+                ? $"Raid team reached {propertyName} while you were there and drove on. Nothing taken."
+                : $"Raided {propertyName} immediately.";
             return true;
         }
 
-        message = $"A raid on {_targetName} is inbound in {GameClock.Describe(MinutesUntilRaid)}. Get there or lose the stash.";
+        message = standingIn
+            ? $"A raid on {propertyName} is inbound in {GameClock.Describe(MinutesUntilRaid)}. " +
+              "You are already there — stay put and they drive past; leave and they take product."
+            : $"A raid on {propertyName} is inbound in {GameClock.Describe(MinutesUntilRaid)}. Get there or lose the stash.";
         return true;
     }
 
@@ -173,10 +193,7 @@ internal sealed class RaidDirector
             return;
 
         PoliceLog.Msg($"Raid on {_targetName} called off ({reason}).");
-
-        if (_config.ShowHud.Value)
-            PoliceMessages.RaidCalledOff(_targetName, reason);
-
+        PoliceMessages.RaidCalledOff(_targetName, reason);
         Forget();
     }
 
@@ -191,9 +208,9 @@ internal sealed class RaidDirector
 
     // ── Internals ─────────────────────────────────────────────────────────────────────────────
 
-    private bool Schedule(object player, PlayerHeatRecord record, string reason, bool warn = true)
+    private bool Schedule(object player, PlayerHeatRecord record, string reason, bool warn = true, bool allowOccupied = false)
     {
-        var target = PickTarget(player);
+        var target = PickTarget(player, allowOccupied);
         if (target is null)
             return false;
 
@@ -204,8 +221,15 @@ internal sealed class RaidDirector
 
         PoliceLog.Msg($"Raid scheduled on '{_targetName}' in {_config.RaidDelayMinutes.Value} minute(s): {reason}.");
 
-        // Toast on purpose: the player has a short window to get home; a phone text is too slow.
-        if (warn && _config.ShowHud.Value)
+        // Physical inbound team at warn time — a text with nobody walking up is not a raid.
+        var wanted = Math.Max(1, _config.EventOfficerCount.Value);
+        var onScene = PoliceForce.EnsureAt(Estate.SpawnPointOf(target), wanted, player, beginAsSighted: false);
+        PoliceLog.Msg(
+            $"Raid warn '{_targetName}': {onScene}/{wanted} officer(s) within " +
+            $"{OfficerDeployment.SceneRadiusMetres:0}m — {OfficerDeployment.LastReport}");
+
+        // Urgent toast + phone text naming the property. Always attempt delivery.
+        if (warn)
             PoliceMessages.RaidWarning(_targetName, GameClock.Describe(MinutesUntilRaid), reason);
 
         record.LastRaidWarnedDay = TimeManager.ElapsedDays;
@@ -214,10 +238,10 @@ internal sealed class RaidDirector
 
     /// <summary>
     /// The property they would actually hit: one the player owns and is not currently standing in,
-    /// preferring the one they were last seen at. Being inside is the whole defence, so it is checked
-    /// again at execution time and not merely here.
+    /// preferring the one they were last seen at. Manual triggers may fall back to an occupied
+    /// property so the button never no-ops when you own something.
     /// </summary>
-    private object? PickTarget(object player)
+    private object? PickTarget(object player, bool allowOccupied)
     {
         var owned = Owned();
         if (owned.Count == 0)
@@ -226,19 +250,25 @@ internal sealed class RaidDirector
         var position = Components.TransformOf(player)?.position ?? Vector3.zero;
 
         var recent = Members.ReadPath(player, "LastVisitedProperty");
-        if (GameReflection.IsPresent(recent) && recent is not null && IsRaidable(recent, position, owned))
+        if (GameReflection.IsPresent(recent) && recent is not null && IsRaidable(recent, position, owned, requireAbsent: true))
             return recent;
 
         foreach (var property in owned)
         {
-            if (IsRaidable(property, position, owned))
+            if (IsRaidable(property, position, owned, requireAbsent: true))
                 return property;
         }
 
-        return null;
+        if (!allowOccupied)
+            return null;
+
+        if (GameReflection.IsPresent(recent) && recent is not null && IsRaidable(recent, position, owned, requireAbsent: false))
+            return recent;
+
+        return owned[0];
     }
 
-    private static bool IsRaidable(object property, Vector3 playerPosition, IReadOnlyList<object> owned)
+    private static bool IsRaidable(object property, Vector3 playerPosition, IReadOnlyList<object> owned, bool requireAbsent)
     {
         var pointer = Components.PointerOf(property);
         var isOwned = false;
@@ -251,7 +281,10 @@ internal sealed class RaidDirector
             }
         }
 
-        return isOwned && !Estate.Contains(property, playerPosition);
+        if (!isOwned)
+            return false;
+
+        return !requireAbsent || !Estate.Contains(property, playerPosition);
     }
 
     private static IReadOnlyList<object> Owned() => Estate.Owned();
@@ -268,24 +301,38 @@ internal sealed class RaidDirector
 
         var player = GameBridge.LocalPlayer();
         var position = Components.TransformOf(player)?.position ?? Vector3.zero;
+        var propertyPoint = Estate.SpawnPointOf(target);
 
-        // A raid with no officers behind it is a notification, and the player reads that as the mod
-        // being broken. Officers are guaranteed before either branch runs, because the "they drove
-        // past" outcome is the one that most needs something visible to have happened.
+        // Relocate shipped officers to the property. No bodies within range ⇒ no raid — never a
+        // silent stash wipe dressed up as policing.
         var wanted = Math.Max(1, _config.EventOfficerCount.Value);
-        var onScene = PoliceForce.EnsureAt(Estate.SpawnPointOf(target), wanted, player);
-        PoliceLog.Detail($"Raid on '{name}' has {onScene}/{wanted} officer(s) on scene.");
+        var onScene = PoliceForce.EnsureAt(propertyPoint, wanted, player, beginAsSighted: false);
+        var presence = OfficerDeployment.CountWithin(propertyPoint, OfficerDeployment.SceneRadiusMetres);
+        PoliceLog.Msg(
+            $"Raid execute '{name}': {presence.Count}/{wanted} officer(s) within " +
+            $"{OfficerDeployment.SceneRadiusMetres:0}m (nearest " +
+            $"{(presence.Count > 0 ? presence.NearestMetres.ToString("0.0") : "n/a")}m). " +
+            OfficerDeployment.LastReport);
+
+        if (presence.Count <= 0)
+        {
+            PoliceLog.Warn(
+                $"Raid on '{name}' aborted — zero officers within {OfficerDeployment.SceneRadiusMetres:0}m. " +
+                "Nothing seized. " + PoliceForce.LastShortfall);
+            PoliceMessages.RaidCalledOff(name, "the raid team never made it to the property");
+            return;
+        }
 
         if (player is not null && Estate.Contains(target, position))
         {
-            PoliceLog.Msg($"Raid on '{name}' aborted: the player was there.");
+            PoliceLog.Msg(
+                $"Raid on '{name}' aborted: the player was there with {presence.Count} officer(s) on scene.");
 
             var present = _heat.RecordFor(player);
             present.LastRaidDay = TimeManager.ElapsedDays;
             present.RaidsAvoided++;
 
-            if (_config.ShowHud.Value)
-                PoliceMessages.RaidResolved(name, present: true, stacks: 0, value: 0f, haul: string.Empty);
+            PoliceMessages.RaidResolved(name, present: true, stacks: 0, value: 0f, haul: string.Empty);
 
             TutorialSignalRaid();
             return;
@@ -304,13 +351,15 @@ internal sealed class RaidDirector
             _heat.AddPoliceTake(player, value);
 
         PoliceLog.Msg(stacks > 0
-            ? $"Raid on '{name}' ({reason}): {stacks} stack(s) seized, worth about ${value:0}. {haul}"
-            : $"Raid on '{name}' ({reason}): nothing worth taking was in the containers.");
+            ? $"Raid on '{name}' ({reason}): {stacks} stack(s) seized, worth about ${value:0}. " +
+              $"{presence.Count} officer(s) on scene. {haul}"
+            : $"Raid on '{name}' ({reason}): nothing worth taking was in the containers. " +
+              $"{presence.Count} officer(s) on scene.");
 
-        if (_config.ShowHud.Value)
-            PoliceMessages.RaidResolved(name, present: false, stacks, value, haul);
+        PoliceMessages.RaidResolved(name, present: false, stacks, value, haul);
 
         TutorialSignalRaid();
+        _ = onScene;
     }
 
     /// <summary>

@@ -30,6 +30,13 @@ internal static class PolicePatches
 
     internal static IReadOnlyList<string> MissingTargets => Missing;
 
+    /// <summary>Clears probe bookkeeping on disable. Does not unpatch — Core's UnpatchSelf owns that.</summary>
+    internal static void ResetTracking()
+    {
+        Applied.Clear();
+        Missing.Clear();
+    }
+
     internal static void Apply(HarmonyLib.Harmony harmony)
     {
         Applied.Clear();
@@ -45,9 +52,11 @@ internal static class PolicePatches
         Patch(harmony, GameTypes.Player, "RpcLogic___Arrest_Client_*", 0, postfix: nameof(ArrestedPostfix));
 
         Patch(harmony, GameTypes.PoliceStation, "Dispatch", 4, prefix: nameof(DispatchPrefix));
+        // Keep designated federal officers from auto-retiring mid-event. Ownership is pointer-set only.
         Patch(harmony, GameTypes.PoliceOfficer, "CheckDeactivation", 0, prefix: nameof(CheckDeactivationPrefix));
-        Patch(harmony, GameTypes.PoliceOfficer, "ShouldSave", 0, prefix: nameof(ShouldSavePrefix));
         Patch(harmony, GameTypes.PoliceOfficer, "CanInvestigatePlayer", 1, postfix: nameof(CanInvestigatePostfix));
+        Patch(harmony, GameTypes.NpcHealth, "NotifyAttackedByPlayer", 1, postfix: nameof(OfficerAttackedPostfix));
+        Patch(harmony, GameTypes.NpcHealth, "Die", 0, postfix: nameof(OfficerDiedPostfix));
 
         Patch(harmony, GameTypes.BodySearchBehaviour, "DoesPlayerContainItemsOfInterest", 0, postfix: nameof(BodySearchPostfix));
         Patch(harmony, GameTypes.CheckpointBehaviour, "DoesVehicleContainIllicitItems", 0, postfix: nameof(VehicleSearchPostfix));
@@ -99,6 +108,7 @@ internal static class PolicePatches
 
             PoliceRuntime.Heat!.AddCrimeHeat(player, crime, quantity);
             PoliceRuntime.Consequences!.Track(player, crime, quantity);
+            PoliceRuntime.Response?.QueueResponse(player, $"crime ({crime})");
         });
     }
 
@@ -160,7 +170,17 @@ internal static class PolicePatches
         if (!PoliceRuntime.IsLive || !HostGate.IsAuthority)
             return;
 
-        Guard("a police call", () => PoliceRuntime.Consequences!.Informants.Record(__instance));
+        Guard("a police call", () =>
+        {
+            PoliceRuntime.Consequences!.Informants.Record(__instance);
+
+            // FinalizeCall already asked LawManager to dispatch; we still queue our own sighted
+            // response so the configured delay/aggressiveness actually produce officers on scene.
+            var player = Members.ReadPath(__instance, "TargetPlayer")
+                         ?? Members.ReadPath(__instance, "Target")
+                         ?? GameBridge.LocalPlayer();
+            PoliceRuntime.Response?.QueueResponse(player, "civilian dialled PD");
+        });
     }
 
     /// <summary>
@@ -183,8 +203,8 @@ internal static class PolicePatches
                 return true;
 
             var reason = outlaw.Economy.RefusalFor(__instance);
-            // Toast: this is click-time UI feedback; a phone text would land after they already walked off.
-            PoliceMessages.Toast("They will not serve you", reason, 8f);
+            // Toast for immediacy, and a Dispatch text so the truncated toast is not the only record.
+            PoliceMessages.ShopRefused(reason);
             PoliceLog.Msg($"Refused a card-only shop to an outlawed player: {reason}");
             return false;
         }
@@ -217,8 +237,9 @@ internal static class PolicePatches
 
         var sighted = Members.Read(__instance, "TimeSinceSighted", 0f);
         var searchTime = Members.InvokeFor(__instance, "GetSearchTime") is float time ? time : 0f;
+        var hold = PoliceRuntime.Response?.OutlawPursuitHold ?? 2f;
 
-        return searchTime <= 0f || sighted >= searchTime * 2f;
+        return searchTime <= 0f || sighted >= searchTime * hold;
     }
 
     /// <summary>
@@ -295,21 +316,40 @@ internal static class PolicePatches
         __args[0] = Math.Min(HeatModel.HardOfficerCap, Math.Max(requested, min));
     }
 
-    /// <summary>Tagged agents belong to us, not to the station pool, so they never auto-retire.</summary>
-    private static bool CheckDeactivationPrefix(object __instance) => !FederalAgents.IsAgent(__instance);
-
-    /// <summary>
-    /// Keeps agents out of the save entirely. This is a distinct native method from the
-    /// <c>NPC.ShouldSave</c> that S1API prefixes — confirmed against the interop metadata — so the two
-    /// patches never see each other.
-    /// </summary>
-    private static bool ShouldSavePrefix(object __instance, ref bool __result)
+    /// <summary>Designated federal officers stay out until the event releases them.</summary>
+    private static bool CheckDeactivationPrefix(object __instance)
     {
-        if (!FederalAgents.IsAgent(__instance))
+        // Empty designation set ⇒ never touch the officer (save-load safe).
+        if (FederalAgents.OwnedCount == 0)
             return true;
 
-        __result = false;
-        return false;
+        try
+        {
+            if (__instance is null)
+                return true;
+
+            return !FederalAgents.IsAgent(__instance);
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private static void OfficerAttackedPostfix(object __instance, object[] __args)
+    {
+        if (!PoliceRuntime.IsLive || !HostGate.IsAuthority || __args.Length < 1)
+            return;
+
+        Guard("officer attacked", () => PoliceRuntime.OfficerKills?.NoteAttack(__instance, __args[0]));
+    }
+
+    private static void OfficerDiedPostfix(object __instance)
+    {
+        if (!PoliceRuntime.IsLive || !HostGate.IsAuthority)
+            return;
+
+        Guard("officer died", () => PoliceRuntime.OfficerKills?.OnOfficerDied(__instance));
     }
 
     // ── Arrest consequences ───────────────────────────────────────────────────────────────────

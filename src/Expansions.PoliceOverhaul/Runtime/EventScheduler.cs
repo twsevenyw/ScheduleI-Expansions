@@ -141,7 +141,11 @@ internal sealed class EventScheduler
         return true;
     }
 
-    internal bool DueRaid(out string detail)
+    /// <param name="intervalScale">
+    /// Multiplier on the configured raid interval (e.g. 0.5 while outlawed). Applied to the
+    /// <em>next</em> slot after this one opens.
+    /// </param>
+    internal bool DueRaid(out string detail, float intervalScale = 1f)
     {
         if (!WorldAcceptsEvents(out detail))
             return false;
@@ -153,8 +157,10 @@ internal sealed class EventScheduler
         }
 
         var now = GameClock.Minutes();
+        var (min, max) = ScaledRaidHours(intervalScale);
+
         if (_nextRaidCheckMinute < 0)
-            _nextRaidCheckMinute = ScheduleNext(now, _config.RaidIntervalHoursMin.Value, _config.RaidIntervalHoursMax.Value);
+            _nextRaidCheckMinute = ScheduleNext(now, min, max);
 
         if (now < _nextRaidCheckMinute)
         {
@@ -162,9 +168,9 @@ internal sealed class EventScheduler
             return false;
         }
 
-        _nextRaidCheckMinute = ScheduleNext(now, _config.RaidIntervalHoursMin.Value, _config.RaidIntervalHoursMax.Value);
+        _nextRaidCheckMinute = ScheduleNext(now, min, max);
         Persist(PoliceSaveState.Live);
-        detail = $"raid slot opened; next check in {GameClock.Describe(_nextRaidCheckMinute - now)}";
+        detail = $"raid slot opened (scale x{intervalScale:0.##}); next check in {GameClock.Describe(_nextRaidCheckMinute - now)}";
         _lastDecision = detail;
         return true;
     }
@@ -178,12 +184,21 @@ internal sealed class EventScheduler
         _lastDecision = "manual federal trigger; schedule pushed";
     }
 
-    internal void NoteManualRaid()
+    internal void NoteManualRaid(float intervalScale = 1f)
     {
         var now = GameClock.Minutes();
-        _nextRaidCheckMinute = ScheduleNext(now, _config.RaidIntervalHoursMin.Value, _config.RaidIntervalHoursMax.Value);
+        var (min, max) = ScaledRaidHours(intervalScale);
+        _nextRaidCheckMinute = ScheduleNext(now, min, max);
         Persist(PoliceSaveState.Live);
-        _lastDecision = "manual raid trigger; schedule pushed";
+        _lastDecision = $"manual raid trigger; schedule pushed (scale x{intervalScale:0.##})";
+    }
+
+    private (int Min, int Max) ScaledRaidHours(float intervalScale)
+    {
+        var scale = Math.Clamp(intervalScale, 0.15f, 2f);
+        var min = Math.Max(1, (int)Math.Round(_config.RaidIntervalHoursMin.Value * scale));
+        var max = Math.Max(min, (int)Math.Round(_config.RaidIntervalHoursMax.Value * scale));
+        return (min, max);
     }
 
     private void EnsureSeed(PoliceSaveState? save)

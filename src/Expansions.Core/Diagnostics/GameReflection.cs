@@ -226,7 +226,17 @@ public static class GameReflection
         }
     }
 
-    /// <summary>Reads an instance member (falling back to a static one of the same name).</summary>
+    /// <summary>
+    /// Reads an instance member (falling back to a static one of the same name).
+    /// <para>
+    /// ⚠ False comfort: the <c>bool</c> return only covers managed exceptions. Invoking an IL2CPP
+    /// property getter on a dead or half-constructed native object can raise
+    /// <c>AccessViolationException</c>, which is <em>not</em> catchable and kills the process.
+    /// Only call this when the object's liveness is already proven (or the call is not on a
+    /// save/load / Awake / ShouldSave hot path). Never use it to decide mod ownership of a game
+    /// object — track ownership in a managed set keyed on the native pointer instead.
+    /// </para>
+    /// </summary>
     public static bool TryRead(object? instance, string memberName, out object? value, out string failure)
     {
         value = null;
@@ -257,7 +267,10 @@ public static class GameReflection
         }
     }
 
-    /// <summary>Convenience for a dotted chain, e.g. <c>"NPCData.Appearance.AvatarSettings"</c>.</summary>
+    /// <summary>
+    /// Convenience for a dotted chain, e.g. <c>"NPCData.Appearance.AvatarSettings"</c>.
+    /// Same AV risk as <see cref="TryRead"/> — each hop can hard-fault on a bad native.
+    /// </summary>
     public static bool TryReadPath(object? root, string path, out object? value, out string failure)
     {
         value = root;

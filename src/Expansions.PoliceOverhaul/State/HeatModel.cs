@@ -145,6 +145,13 @@ internal static class HeatModel
         if (densityMultiplier <= 1f || vanillaRequirement <= 1)
             return vanillaRequirement;
 
+        // LE_Intensity is hard-capped at 10 and the late-game vanilla baseline is already 10, so
+        // dividing a requirement of 8→3 does nothing — those posts were already open. Density must
+        // open posts that were gated above the intensity ceiling; floor hard when density asks for
+        // a bigger force.
+        if (densityMultiplier >= 2f)
+            return 1;
+
         return Math.Max(1, (int)Math.Round(vanillaRequirement / densityMultiplier, MidpointRounding.AwayFromZero));
     }
 
@@ -220,6 +227,41 @@ internal static class HeatModel
     {
         var alreadyDrained = Math.Max(0f, perCleanMinute) * Math.Max(0, cleanMinutesToday);
         return Math.Max(0f, perDay - alreadyDrained);
+    }
+
+    /// <summary>
+    /// How hard the existing officers fight, see, and chase — on top of each config lever.
+    /// Calm + Clean stays near 1.0 so early game stays fair; Hunted at federal heat is punishing.
+    /// </summary>
+    internal static float OfficerThreatScale(HeatTier heat, OutlawTier outlaw, float threatScalar)
+    {
+        var heatScale = heat switch
+        {
+            HeatTier.Federal => 1.85f,
+            HeatTier.TaskForce => 1.55f,
+            HeatTier.Crackdown => 1.30f,
+            HeatTier.Alert => 1.12f,
+            _ => 1.0f,
+        };
+
+        var outlawScale = outlaw switch
+        {
+            OutlawTier.Hunted => 1.55f,
+            OutlawTier.Marked => 1.25f,
+            _ => 1.0f,
+        };
+
+        return Math.Max(0.25f, heatScale * outlawScale * Math.Max(0f, threatScalar));
+    }
+
+    /// <summary>
+    /// Damage an officer absorbs. Goes <em>down</em> as threat rises so Hunted cops are not glass cannons.
+    /// </summary>
+    internal static float OfficerDamageTakenScale(HeatTier heat, OutlawTier outlaw, float threatScalar, float configuredTaken)
+    {
+        var toughness = OfficerThreatScale(heat, outlaw, threatScalar);
+        var taken = Math.Clamp(configuredTaken, 0.15f, 1.5f) / Math.Max(0.5f, toughness);
+        return Math.Clamp(taken, 0.15f, 1.25f);
     }
 
     /// <summary>A scalar of 0 flattens every effect to 1.0; 1 is the tuned value; 2 doubles the delta.</summary>

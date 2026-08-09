@@ -13,6 +13,9 @@ namespace Expansions.PoliceOverhaul.Runtime;
 /// </summary>
 internal static class PoliceRuntime
 {
+    /// <summary>Last wire/unwire cycle summary for probes and red-action tooltips.</summary>
+    internal static string WireStatus { get; set; } = "module not enabled";
+
     internal static PoliceConfig? Config { get; private set; }
 
     internal static HeatDirector? Heat { get; private set; }
@@ -33,6 +36,10 @@ internal static class PoliceRuntime
 
     internal static DetectionTuner? Detection { get; private set; }
 
+    internal static ResponseTuner? Response { get; private set; }
+
+    internal static OfficerKillResponse? OfficerKills { get; private set; }
+
     internal static bool IsLive => Heat is not null;
 
     internal static void Attach(
@@ -45,7 +52,9 @@ internal static class PoliceRuntime
         ConsequenceService consequences,
         FederalEvents federal,
         RaidDirector raids,
-        EventScheduler scheduler)
+        EventScheduler scheduler,
+        ResponseTuner response,
+        OfficerKillResponse officerKills)
     {
         Config = config;
         Levers = levers;
@@ -57,6 +66,8 @@ internal static class PoliceRuntime
         Federal = federal;
         Raids = raids;
         Scheduler = scheduler;
+        Response = response;
+        OfficerKills = officerKills;
     }
 
     internal static void Detach()
@@ -71,6 +82,8 @@ internal static class PoliceRuntime
         Federal = null;
         Raids = null;
         Scheduler = null;
+        Response = null;
+        OfficerKills = null;
     }
 
     /// <summary>Convenience for the menu and the probes: the local player's record, or null.</summary>

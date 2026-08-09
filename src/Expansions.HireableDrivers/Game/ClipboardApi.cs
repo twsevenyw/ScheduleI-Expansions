@@ -1,3 +1,5 @@
+using Expansions.HireableDrivers.Persistence;
+
 namespace Expansions.HireableDrivers.Game;
 
 /// <summary>
@@ -28,9 +30,8 @@ internal static class ClipboardApi
     internal static object? Destination(object? route) => Gx.GetAlive(route, "Destination");
 
     /// <summary>
-    /// The route's item filter reduced to a single definition id, which is all the transport loop
-    /// understands. A blacklist or a multi-item whitelist reads as "anything", matching what the loop
-    /// then actually does.
+    /// The single-id compatibility view used in labels and old saves. Full filter semantics are kept
+    /// by <see cref="ReadFilter"/> and evaluated against the live route at trip selection.
     /// </summary>
     internal static (string Id, string Label) FilterItem(object? route)
     {
@@ -47,6 +48,63 @@ internal static class ClipboardApi
 
         var definition = items[0];
         return (Gx.Get<string>(definition, "ID", string.Empty), Gx.Get<string>(definition, "Name", string.Empty));
+    }
+
+    internal static (string Mode, List<string> ItemIds) ReadFilter(object? route)
+    {
+        var filter = Gx.Get(route, "Filter");
+        if (filter is null)
+            return ("Whitelist", new List<string>());
+
+        var mode = string.Equals(Gx.Get(filter, "Mode")?.ToString(), "Blacklist", StringComparison.OrdinalIgnoreCase)
+            ? "Blacklist"
+            : "Whitelist";
+
+        var ids = Gx.List(Gx.Get(filter, "Items"))
+            .Select(definition => Gx.Get<string>(definition, "ID", string.Empty))
+            .Where(id => id.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return (mode, ids);
+    }
+
+    /// <summary>Rebuilds the exact persisted blacklist/whitelist on a new vanilla route object.</summary>
+    internal static bool ApplyFilter(object? route, DriverRoute saved)
+    {
+        if (route is null)
+            return false;
+
+        var mode = Gx.EnumValue(
+            GameTypes.ItemFilterMode,
+            string.Equals(saved.FilterMode, "Blacklist", StringComparison.OrdinalIgnoreCase)
+                ? "Blacklist"
+                : "Whitelist");
+
+        if (mode is null)
+            return false;
+
+        var filter = Gx.New(GameTypes.ManagementItemFilter, mode);
+        if (filter is null)
+            return false;
+
+        foreach (var id in saved.FilterItemIds)
+        {
+            var definition = Gx.Call(
+                Gx.Singleton(GameTypes.Registry),
+                "_GetItem",
+                new[] { "String", "Boolean" },
+                id,
+                false);
+            if (definition is null ||
+                !Gx.TryCall(filter, "AddItem", new[] { "ItemDefinition" }, definition))
+            {
+                DriverLog.Warn($"Could not restore route filter item '{id}'; leaving the saved route suspended.");
+                return false;
+            }
+        }
+
+        return Gx.Set(route, "Filter", filter);
     }
 
     /// <summary>

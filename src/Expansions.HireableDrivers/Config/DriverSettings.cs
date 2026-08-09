@@ -37,6 +37,7 @@ internal static class DriverSettings
     private static ConfigValue<int>? _loadMinutes;
     private static ConfigValue<int>? _dealerTopUpCap;
     private static ConfigValue<bool>? _allowDealerDestinations;
+    private static ConfigValue<bool>? _provideVanOnHire;
     private static ConfigValue<bool>? _allowSpawnedVans;
     private static ConfigValue<bool>? _autoAssignVehicle;
     private static ConfigValue<bool>? _requireBedAndWage;
@@ -80,7 +81,13 @@ internal static class DriverSettings
 
     internal static bool AllowDealerDestinations => _allowDealerDestinations?.Value ?? true;
 
-    internal static bool AllowSpawnedVans => _allowSpawnedVans?.Value ?? false;
+    internal static bool ProvideVanOnHire => _provideVanOnHire?.Value ?? true;
+
+    /// <summary>
+    /// Legacy opt-in retained for existing configs. The new dedicated-van setting is the default path,
+    /// so upgrading players do not stay on the old "no vehicle unless you bought one" behaviour.
+    /// </summary>
+    internal static bool AllowSpawnedVans => ProvideVanOnHire || (_allowSpawnedVans?.Value ?? false);
 
     internal static bool AutoAssignVehicle => _autoAssignVehicle?.Value ?? true;
 
@@ -149,11 +156,15 @@ internal static class DriverSettings
 
         _allowDealerDestinations = config.Bind("allow_dealer_destinations", true, "Allow dealer destinations");
 
+        _provideVanOnHire = config.Bind("provide_van_on_hire", true, "Provide a Veeper van on hire",
+            "On: each new driver takes an unassigned Veeper you own or receives a persistent 16-slot Veeper. " +
+            "Off: the driver falls back to any unassigned vehicle you own.");
+
         _allowSpawnedVans = config.Bind("allow_spawned_vans", false, "Spawn a van if none is available",
-            "Off by default so drivers use vehicles you actually bought.");
+            "Legacy compatibility switch. provide_van_on_hire is the normal dedicated-van setting.");
 
         _autoAssignVehicle = config.Bind("auto_assign_vehicle", true, "Auto-assign a vehicle on hire",
-            "Gives a new driver the first unclaimed vehicle you own, so a route works straight away.");
+            "Gives a new driver a vehicle immediately; with provide_van_on_hire on, this is a Veeper.");
 
         _requireBedAndWage = config.Bind("require_bed_and_wage", true, "Require a bed and payment",
             "On: a driver refuses to work unhoused or unpaid, exactly like other employees. Off: it works regardless.");

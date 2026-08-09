@@ -209,7 +209,9 @@ internal sealed class ConvoyLeg
             if (now < _travelEnds)
                 return LegStatus.Working;
 
-            VehicleApi.Teleport(_vehicle, _approach, VehicleApi.Rotation(_vehicle));
+            if (!VehicleApi.Teleport(_vehicle, _approach, VehicleApi.Rotation(_vehicle)))
+                return Fail("the vehicle rejected the relay transform");
+
             return Advance(Phase.Park, now);
         }
 

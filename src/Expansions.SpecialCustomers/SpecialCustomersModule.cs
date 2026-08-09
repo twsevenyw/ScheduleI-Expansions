@@ -57,6 +57,11 @@ public sealed class SpecialCustomersModule : ExpansionModule
         // through VisitorSettings, which is why they cannot wait for OnEnabled.
         VisitorSettings.Bind(Config);
         CustomerSettings.Bind(Config);
+
+        // Crash guards must land even when the module toggle is off — S1API still constructs every
+        // SpecialVisitorNN from this assembly, and a half-built NPC kills the process either way.
+        Try("patching spawn-graph integrity (always-on)", () => SpawnGraphFix.Apply());
+
         Log.Debug("Registered.");
     }
 
@@ -68,6 +73,14 @@ public sealed class SpecialCustomersModule : ExpansionModule
         {
             Lifetime.OnDispose(VisitorPreRegistration.Disarm);
             VisitorPreRegistration.EnsurePatched(Harmony);
+        });
+
+        // Idempotent re-apply (and reset the session fault guard for a fresh enable).
+        Try("patching spawn-graph integrity", () =>
+        {
+            Lifetime.OnDispose(VisitorFaultGuard.ResetSession);
+            VisitorFaultGuard.ResetSession();
+            SpawnGraphFix.Apply();
         });
 
         Try("attaching the visitor runtime", () => Lifetime.OnDispose(VisitorRuntime.Attach()));
@@ -144,6 +157,7 @@ public sealed class SpecialCustomersModule : ExpansionModule
         // Second and last attempt at the hook. Enabling happens at melon init, which is early enough
         // that the interop assembly may not have been resolvable yet; by the first scene it is.
         Try("hooking prefab pre-registration", () => VisitorPreRegistration.EnsurePatched(Harmony));
+        Try("patching spawn-graph integrity", () => SpawnGraphFix.Apply(Harmony));
 
         VisitorRuntime.OnSceneChanged(sceneName);
 

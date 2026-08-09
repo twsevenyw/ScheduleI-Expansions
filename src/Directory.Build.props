@@ -12,6 +12,11 @@
          comparing, so it was never wrong, only unreadable in a report meant for a player. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <!-- Scratch projects are sometimes created under a project while verifying an IL2CPP shape.
+         The SDK only excludes this project's own obj/bin paths; without the recursive forms below,
+         a nested scratch project's generated AssemblyInfo files are compiled into its parent and
+         every assembly attribute becomes a duplicate. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/bin/**;**/obj/**;**/_tmp_*/**</DefaultItemExcludes>
     <GameDir>C:\Program Files (x86)\Steam\steamapps\common\Schedule I</GameDir>
     <Il2CppAssemblies>$(GameDir)\MelonLoader\Il2CppAssemblies</Il2CppAssemblies>
     <MelonNet6>$(GameDir)\MelonLoader\net6</MelonNet6>

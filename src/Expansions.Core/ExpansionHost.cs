@@ -3,6 +3,7 @@ using Expansions.Core.Configuration;
 using Expansions.Core.Diagnostics;
 using Expansions.Core.Diagnostics.Probes;
 using Expansions.Core.Events;
+using Expansions.Core.Game;
 using Expansions.Core.Logging;
 using Expansions.Core.Tutorial;
 using Expansions.Core.UI;
@@ -45,6 +46,15 @@ public static class ExpansionHost
         }
 
         ExpansionConfig.Initialize();
+
+        try
+        {
+            GameSave.Initialize();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Autosave-on-quit could not be hooked; everything else still works.", ex);
+        }
 
         try
         {
@@ -168,6 +178,14 @@ public static class ExpansionHost
             Log.Error("Core's menu actions did not unregister cleanly.", ex);
         }
 
+        try
+        {
+            GameSave.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Autosave-on-quit did not unhook cleanly.", ex);
+        }
     }
 
     public static void Update(object owner)
@@ -186,6 +204,7 @@ public static class ExpansionHost
         EventHotkey.Tick();
 
         TutorialDirector.Tick();
+        GameSave.Tick();
         Fanout(static module => module.OnUpdate(), "OnUpdate");
     }
 
@@ -285,6 +304,15 @@ public static class ExpansionHost
     {
         if (!ShouldPump(owner))
             return;
+
+        try
+        {
+            GameSave.OnApplicationQuit();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Autosave-on-quit threw during ApplicationQuit; exit continues.", ex);
+        }
 
         Fanout(static module => module.OnApplicationQuit(), "OnApplicationQuit");
     }

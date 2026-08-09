@@ -1,4 +1,4 @@
-using S1API.Entities;
+﻿using S1API.Entities;
 
 namespace Expansions.SpecialCustomers.Visitors;
 
@@ -12,9 +12,9 @@ namespace Expansions.SpecialCustomers.Visitors;
 /// </para>
 /// <para>
 /// Once this assembly is present the NPC exists whether or not the module is enabled — S1API builds
-/// it during save load, before any module toggle is consulted. Disabling the module therefore stops
-/// everything this mod <i>does</i>, not the visitor's existence; that needs the DLL removed, and
-/// removing it orphans the visitor's folder in saves that already stored it.
+/// it during save load, before any module toggle is consulted. <see cref="SpawnGraphFix"/> (always-on)
+/// heals the action graph and guards <c>UpdateUmbrellaUse</c> / <c>SetVisible</c> so a soft finalize
+/// failure cannot kill the process.
 /// </para>
 /// </summary>
 public sealed class SpecialVisitor01 : NPC
@@ -30,18 +30,6 @@ public sealed class SpecialVisitor01 : NPC
     protected override void OnCreated()
     {
         base.OnCreated();
-
-        try
-        {
-            // Required, not cosmetic: without it the avatar is left half-applied and no mugshot is
-            // ever generated, so the contacts and messages screens fall back to a blank portrait.
-            Appearance.Build();
-
-            VisitorRuntime.NoteCreated(SlotIndex, this);
-        }
-        catch (Exception ex)
-        {
-            VisitorRuntime.NoteCreationFailure(SlotIndex, ex);
-        }
+        VisitorLifecycle.FinishCreate(this, SlotIndex);
     }
 }

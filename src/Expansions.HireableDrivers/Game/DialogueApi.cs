@@ -16,6 +16,14 @@ namespace Expansions.HireableDrivers.Game;
 /// </summary>
 internal static class DialogueApi
 {
+    private static readonly string[] AddChoiceSignature = { "DialogueChoice", "Int32" };
+
+    /// <summary>
+    /// Why the most recent <see cref="AddChoice"/> returned null, in one short phrase. Empty after a
+    /// successful add. Surfaced by the hiring desk and the probes so a failure is never silent.
+    /// </summary>
+    internal static string LastAddFailure { get; private set; } = string.Empty;
+
     /// <summary>
     /// Live <c>DialogueController_Fixer</c> components. This is the controller that carries
     /// <c>selectedEmployeeType</c> and <c>selectedProperty</c>, i.e. the employee-hiring conversation.
@@ -32,8 +40,11 @@ internal static class DialogueApi
             var live = new List<object?>(found.Length);
             foreach (var controller in found)
             {
-                if (Gx.Alive(controller))
-                    live.Add(controller);
+                // FindObjectsOfType returns UnityEngine.Object wrappers. Method/member lookup against
+                // Object never sees DialogueController.AddDialogueChoice — cast before anything else.
+                var typed = AsController(controller);
+                if (typed is not null)
+                    live.Add(typed);
             }
 
             return live;
@@ -62,7 +73,7 @@ internal static class DialogueApi
         try
         {
             var found = component.GetComponentInChildren(Il2CppType.From(type), true);
-            return Gx.Alive(found) ? found : null;
+            return AsController(found);
         }
         catch (Exception ex)
         {
@@ -74,7 +85,8 @@ internal static class DialogueApi
     /// <summary>The hiring NPC's name, for the "hire them over there" line the mod tells the player.</summary>
     internal static string ControllerName(object? controller)
     {
-        var npc = Gx.GetAlive(controller, "npc");
+        var typed = AsController(controller) ?? controller;
+        var npc = Gx.GetAlive(typed, "npc");
 
         var full = Gx.Get<string>(npc, "FullName", string.Empty);
         if (!string.IsNullOrWhiteSpace(full))
@@ -99,12 +111,21 @@ internal static class DialogueApi
         Func<bool, bool> shouldShow,
         int priority)
     {
-        if (!Gx.Alive(controller))
+        LastAddFailure = string.Empty;
+
+        var typed = AsController(controller);
+        if (typed is null)
+        {
+            LastAddFailure = "controller is not a DialogueController (FindObjectsOfType/GetComponent returned an untyped Object wrapper that would not cast)";
             return null;
+        }
 
         var choice = Gx.New(GameTypes.DialogueChoice);
         if (choice is null)
+        {
+            LastAddFailure = "DialogueChoice could not be constructed on this build";
             return null;
+        }
 
         Gx.Set(choice, "ChoiceText", text);
         Gx.Set(choice, "Enabled", true);
@@ -117,25 +138,98 @@ internal static class DialogueApi
         // Conversation stays null: this option performs an action rather than opening a dialogue graph,
         // and the mod cannot author the ScriptableObject node links a new branch would need.
 
-        if (!Bind(choice, onChosen) || !Gate(choice, shouldShow))
+        if (!Bind(choice, onChosen))
+        {
+            LastAddFailure = "onChoosen click handler would not bind";
             return null;
+        }
 
-        // AddDialogueChoice is virtual and the Fixer may override it, so resolve against the instance.
-        // It returns the new index; a null comes back only when the method could not be resolved.
-        var index = Gx.Call(controller, "AddDialogueChoice", new[] { "DialogueChoice", "Int32" }, choice, priority);
-        return index is null ? null : choice;
+        if (!Gate(choice, shouldShow))
+        {
+            LastAddFailure = "shouldShowCheck (ShouldShowCheck.op_Implicit) would not bind";
+            return null;
+        }
+
+        // Resolve against DialogueController explicitly. The Fixer inherits the virtual; looking it up
+        // on the runtime type of an untyped Object wrapper is what used to make hiring silently no-op.
+        var dialogueType = Gx.Type(GameTypes.DialogueController);
+        if (dialogueType is null)
+        {
+            LastAddFailure = "DialogueController type is missing on this build";
+            return null;
+        }
+
+        if (Gx.Method(dialogueType, "AddDialogueChoice", AddChoiceSignature) is null)
+        {
+            LastAddFailure = "DialogueController.AddDialogueChoice(DialogueChoice,Int32) is not on this build";
+            return null;
+        }
+
+        // Returns the new index (int). A null comes back only when invoke failed.
+        var index = Gx.CallOn(dialogueType, typed, "AddDialogueChoice", AddChoiceSignature, choice, priority);
+        if (index is null)
+        {
+            LastAddFailure = "AddDialogueChoice invoked but returned nothing (call failed)";
+            return null;
+        }
+
+        return choice;
     }
 
     internal static void RemoveChoice(object? controller, object? choice)
     {
-        if (!Gx.Alive(controller) || choice is null)
+        var typed = AsController(controller);
+        if (typed is null || choice is null)
             return;
 
-        var choices = Gx.Get(controller, "Choices");
+        var choices = Gx.Get(typed, "Choices");
         if (choices is null)
             return;
 
         Gx.Call(choices, "Remove", new[] { Gx.Any }, choice);
+    }
+
+    /// <summary>
+    /// True when <c>AddDialogueChoice(DialogueChoice, int)</c> resolves on this build. Used by probes
+    /// so a renamed symbol fails the probe with a reason instead of looking like "NPC not found".
+    /// </summary>
+    internal static bool CanAddChoices(out string reason)
+    {
+        var dialogueType = Gx.Type(GameTypes.DialogueController);
+        if (dialogueType is null)
+        {
+            reason = "DialogueController type is missing on this build";
+            return false;
+        }
+
+        if (Gx.Type(GameTypes.DialogueChoice) is null)
+        {
+            reason = "DialogueChoice type is missing on this build";
+            return false;
+        }
+
+        if (Gx.Method(dialogueType, "AddDialogueChoice", AddChoiceSignature) is null)
+        {
+            reason = "DialogueController.AddDialogueChoice(DialogueChoice,Int32) is not on this build";
+            return false;
+        }
+
+        reason = string.Empty;
+        return true;
+    }
+
+    /// <summary>
+    /// <c>FindObjectsOfType(Il2CppType)</c> and <c>GetComponentInChildren(Il2CppType)</c> hand back
+    /// <c>UnityEngine.Object</c> wrappers. Il2CppInterop's generated methods live on the concrete
+    /// projection type, so every call site has to <c>TryCast</c> first.
+    /// </summary>
+    private static object? AsController(object? value)
+    {
+        if (!Gx.Alive(value))
+            return null;
+
+        return Gx.Cast(value, GameTypes.DialogueControllerFixer)
+               ?? Gx.Cast(value, GameTypes.DialogueController);
     }
 
     /// <summary>
@@ -171,7 +265,10 @@ internal static class DialogueApi
     {
         var type = Gx.Type(GameTypes.ShouldShowCheck);
         if (type is null)
+        {
+            DriverLog.Warn("ShouldShowCheck is not on this build; driver dialogue options cannot gate themselves.");
             return false;
+        }
 
         var conversion = type
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
@@ -180,12 +277,21 @@ internal static class DialogueApi
                 m.GetParameters() is [{ ParameterType.IsGenericType: true }]);
 
         if (conversion is null)
+        {
+            DriverLog.Warn("ShouldShowCheck.op_Implicit(Func<bool,bool>) is not on this build; driver dialogue options cannot gate themselves.");
             return false;
+        }
 
         try
         {
             var converted = conversion.Invoke(null, new object?[] { shouldShow });
-            return converted is not null && Gx.Set(choice, "shouldShowCheck", converted);
+            if (converted is null || !Gx.Set(choice, "shouldShowCheck", converted))
+            {
+                DriverLog.Warn("A hiring choice would not take a shouldShowCheck; driver hiring falls back to the Expansions menu.");
+                return false;
+            }
+
+            return true;
         }
         catch (Exception ex)
         {

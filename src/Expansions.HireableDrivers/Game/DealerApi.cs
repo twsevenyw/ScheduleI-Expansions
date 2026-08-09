@@ -71,9 +71,15 @@ internal static class DealerApi
     /// Hands cargo over in one shot. There is no reservation API on a dealer, so the transfer has to
     /// be atomic within a single tick rather than spread over several like a storage deposit.
     /// </summary>
-    internal static int StorageToDealer(object? storage, object? dealer, int cap)
+    internal static int StorageToDealer(
+        object? storage,
+        object? dealer,
+        int cap,
+        string itemId,
+        int maxUnits,
+        IReadOnlyDictionary<IntPtr, int>? protectedQuantities)
     {
-        if (storage is null || dealer is null)
+        if (storage is null || dealer is null || maxUnits <= 0)
             return 0;
 
         if (Gx.Get(storage, "IsOpened") is true || Gx.GetAlive(storage, "CurrentPlayerAccessor") is not null)
@@ -84,35 +90,63 @@ internal static class DealerApi
             return 0;
 
         var moved = 0;
+        var storageTouched = false;
 
         foreach (var slot in Gx.List(Gx.Get(storage, "ItemSlots")))
         {
-            if (room <= 0)
+            if (room <= 0 || moved >= maxUnits)
                 break;
 
             var instance = Gx.Get(slot, "ItemInstance");
             if (instance is null)
                 continue;
 
-            var held = Gx.Get(slot, "Quantity") as int? ?? 0;
+            var id = Gx.Get<string>(instance, "ID", string.Empty);
+            if (itemId.Length > 0 && !string.Equals(id, itemId, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var held = TransitApi.UnprotectedQuantity(
+                slot,
+                Gx.Get(slot, "Quantity") as int? ?? 0,
+                protectedQuantities);
             if (held <= 0)
                 continue;
 
-            var amount = Math.Min(held, room);
+            var amount = Math.Min(Math.Min(held, room), maxUnits - moved);
             var chunk = Gx.Call(instance, "GetCopy", new[] { "Int32" }, amount);
             if (chunk is null)
                 continue;
 
-            Gx.Call(slot, "ChangeQuantity", new[] { "Int32", "Boolean" }, -amount, false);
-            Gx.Call(dealer, "AddItemToInventory", new[] { "ItemInstance" }, chunk);
-            moved += amount;
-            room -= amount;
+            var before = HeldItems(dealer);
+            if (!Gx.TryCall(slot, "ChangeQuantity", new[] { "Int32", "Boolean" }, -amount, false))
+                continue;
+
+            storageTouched = true;
+            Gx.TryCall(dealer, "AddItemToInventory", new[] { "ItemInstance" }, chunk);
+
+            // AddItemToInventory returns void and may silently reject. Invocation success proves
+            // nothing; only the inventory delta is authoritative.
+            var actual = Math.Clamp(HeldItems(dealer) - before, 0, amount);
+
+            if (actual < amount)
+            {
+                var rollback = Gx.Call(instance, "GetCopy", new[] { "Int32" }, amount - actual);
+                if (rollback is null ||
+                    !Gx.TryCall(storage, "InsertItem", new[] { "ItemInstance", "Boolean" }, rollback, true))
+                {
+                    DriverLog.Error($"A failed dealer transfer could not restore {amount - actual} item(s) to the vehicle.");
+                }
+            }
+
+            moved += actual;
+            room -= actual;
         }
+
+        if (storageTouched)
+            Gx.TryCall(storage, "ContentsChanged", Array.Empty<string>());
 
         if (moved > 0)
         {
-            Gx.Call(storage, "ContentsChanged", Array.Empty<string>());
-
             // Anything that spilled into the hidden overflow slots is folded back in by the game's own
             // routine, which is also what makes the dealer start selling it.
             Gx.Call(dealer, "TryMoveOverflowItems", Array.Empty<string>());

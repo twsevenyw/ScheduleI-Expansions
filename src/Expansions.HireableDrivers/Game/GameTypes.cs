@@ -26,6 +26,7 @@ internal static class GameTypes
     internal const string AdvancedTransitRoute = "Il2CppScheduleOne.Management.AdvancedTransitRoute";
     internal const string ManagementItemFilter = "Il2CppScheduleOne.Management.ManagementItemFilter";
     internal const string ItemFilterMode = "Il2CppScheduleOne.Management.ManagementItemFilter+EMode";
+    internal const string Registry = "Il2CppScheduleOne.Registry";
     internal const string RouteEntryUi = "Il2CppScheduleOne.UI.Management.RouteEntryUI";
     internal const string RouteListFieldUi = "Il2CppScheduleOne.UI.Management.RouteListFieldUI";
     internal const string PackagerConfigPanel = "Il2CppScheduleOne.UI.Management.PackagerConfigPanel";

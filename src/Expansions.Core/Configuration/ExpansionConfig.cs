@@ -53,6 +53,8 @@ public static class ExpansionConfig
     private static ConfigValue<bool>? _autoUpdate;
     private static ConfigValue<string>? _updateChannel;
     private static ConfigValue<string>? _updateManifestUrl;
+    private static ConfigValue<bool>? _autosaveOnQuit;
+    private static ConfigValue<float>? _periodicAutosaveMinutes;
 
     // Both are read every frame, so the parsed/unboxed values are cached and refreshed on change
     // rather than round-tripping through MelonPreferences.
@@ -65,6 +67,8 @@ public static class ExpansionConfig
     private static bool _autoUpdateCache = true;
     private static string _updateChannelCache = DefaultUpdateChannel;
     private static string _updateManifestUrlCache = DefaultUpdateManifestUrl;
+    private static bool _autosaveOnQuitCache = true;
+    private static float _periodicAutosaveMinutesCache;
 
     public static string FilePath { get; private set; } = string.Empty;
 
@@ -210,6 +214,38 @@ public static class ExpansionConfig
         }
     }
 
+    /// <summary>
+    /// When on (the default), closing the game while a save is loaded and we are the host writes that
+    /// save through <c>SaveManager.Save()</c> before the process exits. Off leaves quit alone.
+    /// </summary>
+    public static bool AutosaveOnQuit
+    {
+        get => _autosaveOnQuitCache;
+        set
+        {
+            _autosaveOnQuitCache = value;
+            if (_autosaveOnQuit is not null)
+                _autosaveOnQuit.Value = value;
+        }
+    }
+
+    /// <summary>
+    /// Minutes between automatic in-session saves. <c>0</c> (the default) disables the timer.
+    /// Uses the game's own <c>SecondsSinceLastSave</c> when readable, so a sleep or manual save
+    /// resets the clock.
+    /// </summary>
+    public static float PeriodicAutosaveMinutes
+    {
+        get => _periodicAutosaveMinutesCache;
+        set
+        {
+            var minutes = value < 0f ? 0f : value;
+            _periodicAutosaveMinutesCache = minutes;
+            if (_periodicAutosaveMinutes is not null)
+                _periodicAutosaveMinutes.Value = minutes;
+        }
+    }
+
     /// <summary>Fires when <see cref="DisabledTutorialChapters"/> changes, including from a file edit.</summary>
     public static event Action? DisabledTutorialChaptersChanged;
 
@@ -294,6 +330,19 @@ public static class ExpansionConfig
             DisabledTutorialChaptersChanged?.Invoke();
         };
 
+        _autosaveOnQuit = config.Bind("autosave_on_quit", true, "Autosave on quit",
+            "When the game is closing with a loaded save and you are the host, write that save through " +
+            "the game's own SaveManager before exit. Skips the main menu and never blocks quit for long.");
+        _autosaveOnQuitCache = _autosaveOnQuit.Value;
+        _autosaveOnQuit.Changed += static (_, current) => _autosaveOnQuitCache = current;
+
+        _periodicAutosaveMinutes = config.Bind("periodic_autosave_minutes", 0f, "Periodic autosave (minutes)",
+            "Automatic in-session saves every N minutes while a save is loaded and you are the host. " +
+            "0 disables it. A sleep or manual save resets the timer.");
+        _periodicAutosaveMinutesCache = NormalizeMinutes(_periodicAutosaveMinutes.Value);
+        _periodicAutosaveMinutes.Changed += static (_, current) =>
+            _periodicAutosaveMinutesCache = NormalizeMinutes(current);
+
         _config = config;
 
         // Announced even though nothing has changed: a listener that asked for the value before this
@@ -306,6 +355,8 @@ public static class ExpansionConfig
 
     private static string Normalize(string? value, string fallback) =>
         string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+
+    private static float NormalizeMinutes(float value) => value < 0f ? 0f : value;
 
     private static string ToPascalCase(string id)
     {

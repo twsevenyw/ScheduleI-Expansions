@@ -264,6 +264,18 @@ internal static class EmployeeApi
             return false;
 
         Gx.Call(employee, "EnterVehicle", new[] { "NetworkConnection", "LandVehicle" }, null, vehicle);
+        if (IsInVehicle(employee))
+            return true;
+
+        // The game's server-side callers normally pass null, but listen-server builds can require the
+        // local client connection for the target RPC half. Retry with that concrete connection before
+        // accepting the visual-only unmanned fallback.
+        var finder = Gx.Type("Il2CppFishNet.InstanceFinder");
+        var clientManager = finder is null ? null : Gx.GetStatic("Il2CppFishNet.InstanceFinder", "ClientManager");
+        var connection = Gx.Get(clientManager, "Connection");
+        if (connection is not null)
+            Gx.Call(employee, "EnterVehicle", new[] { "NetworkConnection", "LandVehicle" }, connection, vehicle);
+
         return IsInVehicle(employee);
     }
 

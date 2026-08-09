@@ -75,20 +75,72 @@ internal sealed class LawScheduleTuner
             posts += ApplyToArray(settings, "Patrols", min, max, 0, density, settled, ref added);
             posts += ApplyToArray(settings, "Sentries", min, max, 0, density, settled, ref added);
             posts += ApplyToArray(settings, "Checkpoints", min, max, widen, density, settled, ref added);
+            // Vehicle patrols have IntensityRequirement but no Min/Max — density still opens more cars.
+            posts += ApplyToArray(settings, "VehiclePatrols", min, max, 0, density, settled, ref added);
         }
 
         if (settled && added == 0)
+        {
+            if (density > 1f)
+                DeployExtraVehicles(density);
             return;
+        }
 
         _applied = (min, max, widen, density);
         AppliedBand = (min, max);
         PostsOpened = _posts.Values.Count(post => post.Opened);
         Evaluate(controller);
+        if (density > 1f)
+            DeployExtraVehicles(density);
 
         PoliceLog.Detail(
             $"Schedule tuned to {min}-{max} officers per post, checkpoints +/-{widen}h, density x{density:0.##} " +
             $"opening {PostsOpened} extra post(s), across {posts} post(s)" +
             (added > 0 ? $" ({added} newly seen this pass)." : "."));
+    }
+
+    /// <summary>
+    /// Density is not foot-only — pull spare marked cars out of the station lots and kick vehicle
+    /// patrol Evaluate so lowered IntensityRequirement posts actually roll.
+    /// </summary>
+    private static void DeployExtraVehicles(float density)
+    {
+        var want = Math.Clamp((int)Math.Ceiling(density), 1, 4);
+        var deployed = 0;
+
+        foreach (var station in PoliceForce.Stations())
+        {
+            if (!GameReflection.IsPresent(station))
+                continue;
+
+            var available = Members.Read(station, "AvailableVehicleCount", 0);
+            for (var i = 0; i < available && deployed < want; i++)
+            {
+                if (Members.InvokeFor(station, "DeployVehicle") is not null)
+                    deployed++;
+            }
+        }
+
+        var controller = GameBridge.Singleton(GameTypes.LawController);
+        if (controller is not null &&
+            GameReflection.TryRead(controller, "CurrentSettings", out var settings, out _) &&
+            settings is not null &&
+            GameReflection.TryRead(settings, "VehiclePatrols", out var vehiclePatrols, out _) &&
+            vehiclePatrols is not null)
+        {
+            foreach (var entry in GameReflection.Enumerate(vehiclePatrols, 64))
+            {
+                if (entry is null)
+                    continue;
+
+                Members.Invoke(entry, "Evaluate");
+                // StartPatrol is safe to call when Evaluate decided the post is due; it no-ops otherwise.
+                Members.Invoke(entry, "StartPatrol");
+            }
+        }
+
+        if (deployed > 0)
+            PoliceLog.Detail($"Density deployed {deployed} extra police vehicle(s) from station lots.");
     }
 
     /// <summary>Writes every snapshotted value back and lets the game re-derive the world from it.</summary>

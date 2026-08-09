@@ -32,6 +32,7 @@ internal static class VisitorRuntime
     private static readonly HashSet<int> Configured = new();
     private static readonly Dictionary<int, NPC> Created = new();
     private static readonly Dictionary<int, string> Failures = new();
+    private static readonly Dictionary<int, VisitorIntegrity.Report> Integrity = new();
     private static readonly object Gate = new();
 
     private static bool _polling;
@@ -112,10 +113,42 @@ internal static class VisitorRuntime
         var reason = Describe.Of(exception);
 
         lock (Gate)
+        {
             Failures[slotIndex] = reason;
+            Created.Remove(slotIndex);
+        }
 
         VisitorLog.Instance.Error(
-            $"Visitor slot {slotIndex} failed during OnCreated ({reason}). It will be in the world but its appearance and mugshot are incomplete.");
+            $"Visitor slot {slotIndex} failed during OnCreated ({reason}). Wrapper kept; umbrella/SetVisible guards stay armed.");
+    }
+
+    /// <summary>
+    /// S1API refused network spawn (or a last-resort withdraw). Bookkeeping only — proactive
+    /// destroy was removed; the umbrella guard neuters the crash while the GO remains.
+    /// </summary>
+    internal static void NoteSpawnRejected(int slotIndex, string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            reason = "PrepareForNetworkSpawn returned false";
+
+        lock (Gate)
+        {
+            Failures[slotIndex] = reason;
+            Created.Remove(slotIndex);
+        }
+    }
+
+    internal static void NoteIntegrity(int slotIndex, VisitorIntegrity.Report report)
+    {
+        lock (Gate)
+            Integrity[slotIndex] = report;
+    }
+
+    /// <summary>Drop every live wrapper reference after a mass withdraw.</summary>
+    internal static void ForgetLiveWrappers()
+    {
+        lock (Gate)
+            Created.Clear();
     }
 
     /// <summary>
@@ -128,10 +161,12 @@ internal static class VisitorRuntime
         {
             Created.Clear();
             Failures.Clear();
+            Integrity.Clear();
         }
 
         _announced = false;
         PoolReady = false;
+        VisitorFaultGuard.ResetSession();
 
         if (string.Equals(sceneName, GameplayScene, StringComparison.Ordinal))
             BeginPolling();
@@ -156,12 +191,14 @@ internal static class VisitorRuntime
         bool configured;
         bool created;
         string failure;
+        VisitorIntegrity.Report? integrity;
 
         lock (Gate)
         {
             configured = Configured.Contains(slot.Index);
             created = Created.ContainsKey(slot.Index);
             failure = Failures.TryGetValue(slot.Index, out var reason) ? reason : string.Empty;
+            integrity = Integrity.TryGetValue(slot.Index, out var report) ? report : null;
         }
 
         var npc = Resolve(slot);
@@ -176,13 +213,20 @@ internal static class VisitorRuntime
                 Created = created,
                 ConfiguredSpawn = slot.SpawnPosition,
                 FramesWaited = _framesWaited,
+                Finalized = integrity?.Finalized ?? false,
+                ActionListValid = integrity?.ActionListValid ?? false,
+                IntegritySummary = integrity?.Summary ?? string.Empty,
                 Failure = failure.Length > 0
                     ? failure
                     : configured
-                        ? "S1API built the prefab but no live wrapper exists yet"
+                        ? "S1API built the prefab but network spawn never produced a live wrapper " +
+                          "(often Avatar(active) — S1API left the hierarchy inactive; see SpawnGraphFix)"
                         : "the prefab was never configured, so S1API never discovered the type",
             };
         }
+
+        // Live inspect so probes see the current graph, not a stale note.
+        var live = VisitorIntegrity.Inspect(npc);
 
         return new VisitorStatus
         {
@@ -198,7 +242,14 @@ internal static class VisitorRuntime
             HasMugshot = Read(() => npc.Icon != null, false),
             Region = Read(() => npc.Region.ToString(), "unknown"),
             FramesWaited = _framesWaited,
-            Failure = failure,
+            Finalized = live.Finalized,
+            ActionListValid = live.ActionListValid,
+            IntegritySummary = live.Summary,
+            Failure = failure.Length > 0
+                ? failure
+                : live.Ok
+                    ? string.Empty
+                    : live.Summary,
         };
     }
 
@@ -275,9 +326,19 @@ internal static class VisitorRuntime
         var resolved = ResolvedCount();
         if (resolved < VisitorSlot.Count)
         {
-            VisitorLog.Instance.Warn(
+            VisitorLog.Instance.Error(
                 $"Only {resolved} of {VisitorSlot.Count} visitors appeared within {_framesWaited} frames. " +
-                "Groups will still visit with whoever turned up. Run 'expprobe sc' for the prefab, impostor and spawnable-ordinal detail.");
+                "Groups cannot form a full crew until the missing slots spawn. Run 'expprobe sc'.");
+
+            foreach (var slot in VisitorSlot.All)
+            {
+                var status = StatusOf(slot);
+                if (status.WrapperResolved)
+                    continue;
+
+                VisitorLog.Instance.Error(
+                    $"Slot {slot.Index:00} {slot.FullName} ({slot.Id}) missing: {status.Failure}");
+            }
         }
 
         if (!VisitorSettings.AnnounceOnLoad)

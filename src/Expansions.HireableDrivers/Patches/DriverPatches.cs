@@ -29,6 +29,13 @@ internal static class DriverPatches
     internal static IReadOnlyList<string> SkippedPatches => Skipped.ToArray();
 
     /// <summary>
+    /// Both are load-bearing. Without UpdateBehaviour suppression and the ready-route veto, the
+    /// vanilla Handler brain can move the same route while the driver state machine is using it.
+    /// </summary>
+    internal static bool TransportSafe =>
+        IsApplied("UpdateBehaviour") && IsApplied("GetTransitRouteReady");
+
+    /// <summary>
     /// Whether a named patch landed, without materialising the list. Read from per-frame availability
     /// predicates, so it must not allocate.
     /// </summary>
@@ -79,7 +86,11 @@ internal static class DriverPatches
             DriverLog.Debug($"Patched: {string.Join(", ", Applied)}.");
 
         if (Skipped.Count > 0)
-            DriverLog.Warn($"Could not patch {string.Join(", ", Skipped)}. Drivers still work; they just share the road with the vanilla Handler brain.");
+            DriverLog.Warn(
+                $"Could not patch {string.Join(", ", Skipped)}. " +
+                (TransportSafe
+                    ? "The affected native UI/cleanup path has a fallback."
+                    : "Trips are disabled so the vanilla Handler brain cannot duplicate a route."));
     }
 
     private enum PatchKind

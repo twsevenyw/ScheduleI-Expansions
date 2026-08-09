@@ -10,6 +10,13 @@ namespace Expansions.PoliceOverhaul.Runtime;
 /// Everything here is best-effort and silent on failure by design: a renamed game member has to
 /// degrade one lever, not throw out of a per-minute tick.
 /// </para>
+/// <para>
+/// ⚠ <see cref="Read"/> / <see cref="ReadPath"/> call <c>GameReflection.TryRead</c>, which looks
+/// safe (bool return) but can still hard-fault the process with an uncatchable
+/// <c>AccessViolationException</c> when the native object is dead or half-built. Never use these
+/// from a Harmony prefix/postfix to answer "is this ours?" — use managed pointer-set membership
+/// instead (<see cref="FederalAgents.IsAgent"/>).
+/// </para>
 /// </summary>
 internal static class Members
 {

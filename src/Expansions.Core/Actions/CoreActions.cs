@@ -41,6 +41,7 @@ internal static class CoreActions
             TutorialActions.StartOrRestart(),
             TutorialActions.Reset(),
             TutorialActions.ShowStatus(),
+            SaveActions.SaveNow(),
             FileActions.OpenSettings(),
             FileActions.OpenUserData(),
             UpdateActions.ShowStatus(),

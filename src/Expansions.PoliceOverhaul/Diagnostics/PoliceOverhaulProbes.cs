@@ -40,6 +40,13 @@ internal static class PoliceOverhaulProbes
             requiresLoadedSave: false);
 
         yield return new DelegateProbe(
+            "police.enable_cycle",
+            "Is disable→re-enable safe, and why were menu actions red?",
+            Area,
+            EnableCycle,
+            requiresLoadedSave: false);
+
+        yield return new DelegateProbe(
             "police.officers",
             "How many officers are actually on the map, and is anything stopping more from appearing?",
             Area,
@@ -166,7 +173,9 @@ internal static class PoliceOverhaulProbes
     {
         if (PolicePatches.AppliedTargets.Count == 0 && PolicePatches.MissingTargets.Count == 0)
         {
-            result.Inconclusive("Patches have not been applied this session. They land on the first gameplay scene, not at mod load.");
+            result.Inconclusive(
+                "Patches have not been applied this session. Services may already be live (actions green) while " +
+                "Harmony is deferred a few frames after wire — re-run this probe.");
             return;
         }
 
@@ -186,6 +195,50 @@ internal static class PoliceOverhaulProbes
             "Everything else still runs — check whether the game updated and renamed them.");
     }
 
+    private static void EnableCycle(ProbeContext context, ProbeResult result)
+    {
+        result.Fact("Wire status", PoliceRuntime.WireStatus);
+        result.Fact("PoliceRuntime.IsLive", PoliceRuntime.IsLive ? "yes — actions should be green" : "**no — actions stay red**");
+        result.Fact("HostGate", HostGate.Evaluate(out var authority) ? $"authority ({authority})" : $"blocked ({authority})");
+        result.Fact("Active scene", GameReflection.ActiveSceneName());
+        result.Fact("Gameplay scene?", PoliceOverhaulModule.IsGameplayScene() ? "yes" : "no");
+        result.Fact("Harmony applied", PolicePatches.AppliedTargets.Count.ToString());
+        result.Fact(
+            "NPC policy",
+            "no create/clone/re-identify/destroy — federal = designate shipped officers only");
+        result.Fact(
+            "Ownership check",
+            $"managed IntPtr set — federal designated={FederalAgents.OwnedCount}; " +
+            "empty set ⇒ CheckDeactivation short-circuits without touching officers");
+        result.Fact("Deferred work", Deferred.Pending.ToString());
+
+        result.Heading("What a clean cycle must prove");
+        result.Bullet("Disable logs `disable-cycle OK` (restores + released federal designations).");
+        result.Bullet("Re-enable logs `services attached` then `enable-cycle OK` a few frames later (deferred patches).");
+        result.Bullet("F7 actions turn green as soon as services attach — they must not wait on Harmony.");
+        result.Bullet("Save load must not AV — no ShouldSave ownership patch, no NPC cloning.");
+
+        if (!PoliceRuntime.IsLive)
+        {
+            result.Fail(
+                "Runtime is not live, so every police action is red. Wire retries from OnUpdate once Main is up and " +
+                "HostGate passes — if this sticks, read Wire status above.");
+            return;
+        }
+
+        if (PolicePatches.AppliedTargets.Count == 0)
+        {
+            result.Inconclusive(
+                "Services are live (actions should work) but patches have not landed yet. Wait a moment and re-run, " +
+                "or check the MelonLoader log for `enable-cycle OK`.");
+            return;
+        }
+
+        result.Ok(
+            "Runtime live and patches applied. Toggle the module off and on once; both cycle OK lines must appear " +
+            "with no process death.");
+    }
+
     /// <summary>
     /// The census, the density dial and every path that can put an officer on the street.
     /// <para>
@@ -203,15 +256,57 @@ internal static class PoliceOverhaulProbes
             new[] { "Count", "Officers", "What it means" },
             new List<IReadOnlyList<string>>
             {
-                new[] { "On duty", census.OnDuty.ToString(), "alive, awake and active — officers you can actually meet" },
+                new[] { "Visible", census.Visible.ToString(), "rendered + FishNet-spawned + plausible world position — what you can actually see" },
+                new[] { "Ghosts", census.Ghost.ToString(), "registered/hierarchy-active but invisible (the 'log said 8, I saw 0' bucket)" },
+                new[] { "Hierarchy-active", census.OnDuty.ToString(), "old lying metric: GameObject active only — not the same as visible" },
                 new[] { "Dead", census.Dead.ToString(), "will not come back on their own for several in-game days" },
                 new[] { "Out cold", census.KnockedOut.ToString(), "knocked out; restored with the dead ones" },
                 new[] { "Inactive", census.Inactive.ToString(), "present but switched off: pooled in a station or culled out of sight" },
                 new[] { "Pooled", census.Pooled.ToString(), "the reserve `PoliceStation.Dispatch` can draw from" },
                 new[] { "Stations", census.Stations.ToString(), "police stations found in the scene" },
-                new[] { "Federal agents", census.Agents.ToString(), "ours, temporary, never in the station pool" },
-                new[] { "Total objects", census.Total.ToString(), "every officer the scene shipped — nothing creates more" },
+                new[] { "Federal designated", $"{census.VisibleAgents}/{census.Agents}", "visible / tagged shipped officers on federal assignment" },
+                new[] { "Total objects", census.Total.ToString(), "every shipped officer object in the scene" },
             });
+
+        result.Heading("Per-officer presence (truth — position + distance, not manager counts)");
+        var sightings = PoliceForce.Sightings(24);
+        if (sightings.Count == 0)
+        {
+            result.Fact("Sightings", "none");
+        }
+        else
+        {
+            result.Code(sightings.ConvertAll(s =>
+            {
+                var dist = s.DistanceToPlayer?.ToString("0.0") ?? "?";
+                var role = FederalAgents.IsAgent(s.Officer) ? "FED" : "shipped";
+                return $"{(s.Visible ? "VISIBLE" : "HIDDEN"),-7} {role,-7} " +
+                       $"go={(s.HierarchyActive ? "on" : "OFF")} " +
+                       $"avatar={(s.AvatarActive ? "on" : "OFF")} ren={(s.RendererEnabled ? "on" : "OFF")} " +
+                       $"net={(s.NetworkSpawned ? "spawned" : "UNSPAWNED")} " +
+                       $"@ ({s.Position.x:0.0},{s.Position.y:0.0},{s.Position.z:0.0}) dist={dist}m " +
+                       $"{s.Name}" +
+                       (s.Visible ? "" : $" [{s.WhyNotVisible}]");
+            }));
+        }
+
+        result.Heading("Deployment");
+        result.Fact("Last relocate", OfficerDeployment.LastReport);
+        result.Fact("Scene radius", $"{OfficerDeployment.SceneRadiusMetres:0}m");
+        result.Fact("NPC policy", "relocate + designate only — never create/clone/destroy");
+        if (PoliceRuntime.Raids is { IsPending: true } raids)
+        {
+            var point = Estate.Owned().FirstOrDefault(p =>
+                string.Equals(Estate.NameOf(p), raids.PendingProperty, StringComparison.Ordinal));
+            if (point is not null)
+            {
+                var at = OfficerDeployment.CountWithin(Estate.SpawnPointOf(point), OfficerDeployment.SceneRadiusMetres);
+                result.Fact(
+                    "Officers at pending raid property",
+                    $"{at.Count} within {OfficerDeployment.SceneRadiusMetres:0}m " +
+                    $"(nearest {(at.Count > 0 ? at.NearestMetres.ToString("0.0") + "m" : "n/a")})");
+            }
+        }
 
         var config = PoliceRuntime.Config;
         var schedule = PoliceRuntime.Schedule;
@@ -232,10 +327,25 @@ internal static class PoliceOverhaulProbes
                     : $"{tuned} (no vanilla posts qualify at intensity {heat.CurrentIntensity})");
         }
 
-        result.Heading("Spawn paths");
+        result.Heading("Force size");
+        result.Fact(
+            "Federal designations",
+            $"tagged={FederalAgents.OwnedCount} — managed IntPtr set; no native deref for ownership");
+        result.Fact(
+            "Honest ceiling note",
+            "Closed officer set only. Density opens more posts and asks for more per post (Dispatch hard-caps 4); it never invents bodies.");
+
+        result.Heading("Revive / dispatch paths");
         result.Fact("Daily restore", config is null ? "-" : config.RespawnOfficersDaily.Value ? "on" : "**off**");
         result.Fact("Restored so far", $"{PoliceForce.TotalRevived} officer(s), {PoliceForce.LastRevived} at the last day rollover");
         result.Fact("Dispatched by this module", $"{PoliceForce.TotalDispatched} officer(s)");
+        result.Fact("Response delay", config is null ? "-" : $"{config.ResponseDelaySeconds.Value:0.##}s");
+        result.Fact(
+            "Pursuit aggressiveness",
+            config is null
+                ? "-"
+                : $"{config.PursuitAggressiveness.Value:0.##} (beginAsSighted={(PoliceRuntime.Response?.BeginAsSighted ?? false ? "yes" : "no")})");
+        result.Fact("Officer-kill responses", PoliceRuntime.OfficerKills is { } kills ? $"{kills.KillsThisSession} this session; {kills.LastResponse}" : "-");
         result.Fact("Schedule pillar", config is null ? "-" : config.EnableScheduleTuning.Value ? "on" : "**off**");
         result.Fact("Intensity pillar", config is null ? "-" : config.EnableIntensity.Value ? "on" : "**off**");
         result.Fact("Dispatch clamp bound", PolicePatches.AppliedTargets.Contains("PoliceStation.Dispatch") ? "yes" : "**no**");
@@ -251,61 +361,60 @@ internal static class PoliceOverhaulProbes
             return;
         }
 
-        if (census.OnDuty == 0)
+        if (census.Visible == 0)
         {
             result.Fail(
-                $"Every one of the {census.Total} officer(s) in town is dead, out cold or switched off. This is the " +
-                "state the map ends up in after a violent week, because the game ships a fixed set of officers and " +
-                "never makes more. Turn on the daily restore, or trigger any police event to force one now.");
+                $"0 visible officers (hierarchy-active={census.OnDuty}, ghosts={census.Ghost}, inactive={census.Inactive}). " +
+                "If the log claimed responders near the scene, they were ghosts — check the per-officer table for " +
+                "UNSPAWNED / Avatar OFF / bad position.");
             return;
         }
 
-        if (census.Dead > census.OnDuty)
+        if (census.Ghost > 0)
         {
             result.Fail(
-                $"{census.Dead} dead against {census.OnDuty} on duty. The force is losing officers faster than they " +
+                $"{census.Ghost} ghost unit(s) are registered but not a rendered/networked presence. " +
+                "That is the 'I don't see any cops' bug — fix presence before trusting OnDuty counts.");
+            return;
+        }
+
+        if (census.Dead > census.Visible)
+        {
+            result.Fail(
+                $"{census.Dead} dead against {census.Visible} visible. The force is losing officers faster than they " +
                 "come back, so patrols and checkpoints will thin out over the next few days even though the schedule " +
                 "is asking for them.");
             return;
         }
 
         result.Ok(
-            $"{census.OnDuty} officer(s) on duty with {census.Pooled} in reserve. Density and staffing are " +
-            "snapshot-and-restore: disabling the module writes every `MinMembers`, `MaxMembers` and " +
-            "`IntensityRequirement` back to the shipped value. Reviving officers uses the game's own " +
-            "`NPCHealth.Revive()`, so nothing to undo there either.");
+            $"{census.Visible} visible officer(s) ({census.OnDuty} hierarchy-active) with {census.Pooled} in reserve. " +
+            "Density and staffing are snapshot-and-restore over the shipped closed set — no cloning.");
     }
 
     private static void Federal(ProbeContext context, ProbeResult result)
     {
         var status = FederalAgents.Survey();
+        var fedConfig = PoliceRuntime.Config;
 
-        result.Fact("Can spawn", status.CanSpawn ? "yes" : "**no**");
-        result.Fact("Strategy", status.Strategy.ToString());
-        result.Fact("Reason", status.Reason);
-        result.Fact("Live agents", FederalAgents.LiveCount.ToString());
+        result.Fact("Path", "designate shipped officers (relocate + buff + restore) — never clone");
+        result.Fact("Last deploy", OfficerDeployment.LastReport);
+        result.Fact("Designate viable", status.CanDesignate ? $"yes — {status.Reason}" : $"no — {status.Reason}");
+        result.Fact("Currently designated", FederalAgents.LiveCount.ToString());
+        result.Fact("Configured team size", fedConfig?.FederalAgentsPerEvent.Value.ToString() ?? "-");
+        result.Fact("Configured duration (h)", fedConfig?.FederalEventHours.Value.ToString() ?? "-");
 
         if (PoliceRuntime.Federal is { } events)
         {
             result.Fact("Event active", events.IsActive ? $"yes, {events.HoursRemaining} in-game hour(s) left" : "no");
+            result.Fact("Designated officers", events.FieldedOfficers.ToString());
             result.Fact("Mode", events.IsActive ? events.IsStakeout ? $"stakeout on {events.StakeoutProperty}" : "foot pursuit" : "-");
             result.Fact("Target", events.TargetKey.Length > 0 ? events.TargetKey : "-");
         }
 
-        if (!status.CanSpawn)
-        {
-            result.Fail(
-                "Federal agents cannot be spawned on this build. Every other pillar is unaffected — heat, intensity, " +
-                "consequences and outlaw status do not depend on this. Run this probe again from inside a loaded save " +
-                "before concluding anything: the clone path needs at least one live officer to exist.");
-            return;
-        }
-
         result.Ok(
-            $"Agents are viable via the {status.Strategy} path, for both pursuits and stakeouts. They are tagged by " +
-            "native pointer, never added to `PoliceStation.OfficerPool`, and `ShouldSave` is forced false for them, so " +
-            "they cannot leak into the save. Spawn one from the F7 menu and then save, reload and check the NPC set is " +
-            "unchanged.");
+            "Federal / stakeout designate the town's own officers by relocate + reversible buffs. " +
+            "Release restores stats; nothing is created or destroyed.");
     }
 
     private static void WorldState(ProbeContext context, ProbeResult result)
@@ -422,8 +531,8 @@ internal static class PoliceOverhaulProbes
     }
 
     /// <summary>
-    /// Whether the two control surfaces actually took. This probe exists because "Registered 0/8" is
-    /// a failure mode this module has shipped before, and it is invisible from inside the game.
+    /// Whether the two control surfaces actually took, and — for every registered action — whether
+    /// clicking Run right now would change live game state or refuse with a named precondition.
     /// </summary>
     private static void Controls(ProbeContext context, ProbeResult result)
     {
@@ -443,6 +552,45 @@ internal static class PoliceOverhaulProbes
         result.Heading("Live in Core's registries");
         result.Code(actionIds.Concat(eventIds).ToList());
 
+        result.Heading("Would Run do something right now?");
+        var readinessRows = new List<IReadOnlyList<string>>();
+        var blocked = 0;
+
+        foreach (var entry in PoliceMenuActions.All)
+        {
+            var availability = SafeAvailability(entry.Availability);
+            var label = entry.DynamicLabel?.Invoke() ?? entry.Label ?? entry.Id;
+            if (!availability.IsAvailable)
+                blocked++;
+
+            readinessRows.Add(new[]
+            {
+                label,
+                availability.IsAvailable ? "READY" : "**blocked**",
+                availability.IsAvailable
+                    ? LiveEffectHint(entry.Id)
+                    : availability.Reason.Length > 0 ? availability.Reason : "unavailable",
+            });
+        }
+
+        foreach (var item in EventRegistry.Events.Where(e => e.Id.StartsWith(PoliceOverhaulModule.ModuleId + ".", StringComparison.Ordinal)))
+        {
+            var availability = item.GetAvailability();
+            if (!availability.IsAvailable)
+                blocked++;
+
+            readinessRows.Add(new[]
+            {
+                $"[event] {item.Label}",
+                availability.IsAvailable ? "READY" : "**blocked**",
+                availability.IsAvailable
+                    ? LiveEffectHint(item.Id)
+                    : availability.Reason.Length > 0 ? availability.Reason : "unavailable",
+            });
+        }
+
+        result.Table(new[] { "Control", "Status", "What Run would do / why not" }, readinessRows);
+
         if (actionIds.Count == 0 && eventIds.Count == 0)
         {
             result.Fail(
@@ -460,30 +608,25 @@ internal static class PoliceOverhaulProbes
         }
 
         result.Ok(
-            $"{actionIds.Count} action(s) and {eventIds.Count} event(s) are registered under '{PoliceOverhaulModule.ModuleId}.', " +
-            "so they appear on the Expansions screen and in the event chooser grouped as \"Police Improvements\".");
+            $"{actionIds.Count} action(s) and {eventIds.Count} event(s) registered. {blocked} control(s) are blocked " +
+            "by a named precondition right now — that is expected (no property, already Hunted, etc.), not a silent no-op.");
     }
 
     private static void Messages(ProbeContext context, ProbeResult result)
     {
-        result.Fact("Contact id", DispatchContact.ContactId);
-        result.Fact("Contact display", $"{DispatchContact.ContactFirstName} {DispatchContact.ContactLastName}");
-        result.Fact("Contact ready", PoliceMessages.ContactReady ? "yes" : "**no**");
+        result.Fact("Channel", "toast-only (no custom Dispatch NPC)");
+        result.Fact("Display label", DispatchContact.DisplayName);
+        result.Fact("Legacy contact id", $"{DispatchContact.ContactId} (not spawned)");
+        result.Fact("Channel ready", PoliceMessages.ContactReady ? "yes" : "**no**");
+        result.Fact("Announcements", PoliceRuntime.Config is { ShowHud.Value: false } ? "**off** (show_heat_hud)" : "on");
+        result.Fact("Announce mode", PoliceMessages.DescribeMode());
         result.Fact("Messages sent this session", PoliceMessages.Sent.ToString());
         result.Fact("Last delivery", PoliceMessages.LastDelivery);
         result.Fact("Last body", string.IsNullOrEmpty(PoliceMessages.LastBody) ? "-" : PoliceMessages.LastBody);
 
-        if (!PoliceMessages.ContactReady)
-        {
-            result.Inconclusive(
-                "Dispatch has not reported OnCreated yet. Load a save (S1API builds custom NPCs during NPCsLoader) " +
-                "and run this again. Until then, substantive events fall back to toasts.");
-            return;
-        }
-
         result.Ok(
-            "Phone texts come from the non-physical Dispatch contact, not from federal-agent clones. " +
-            "Imminent raid warnings and custody clock-skips still toast on purpose.");
+            "Police announcements are on-screen toasts labelled Dispatch Office. A custom messaging NPC " +
+            "was retired because S1API could not finalize it and the half-built body crashed the game.");
     }
 
     private static void Scheduler(ProbeContext context, ProbeResult result)
@@ -503,7 +646,8 @@ internal static class PoliceOverhaulProbes
             $"{config.FederalIntervalHoursMin.Value}-{config.FederalIntervalHoursMax.Value} in-game hour(s)");
         result.Fact(
             "Raid interval",
-            $"{config.RaidIntervalHoursMin.Value}-{config.RaidIntervalHoursMax.Value} in-game hour(s)");
+            $"{config.RaidIntervalHoursMin.Value}-{config.RaidIntervalHoursMax.Value}h " +
+            $"(outlaw scale x{config.RaidOutlawIntervalScale.Value:0.##}, heat threshold {config.RaidHeatThreshold.Value}, cooldown {config.RaidCooldownDays.Value}d)");
         result.Fact(
             "Next federal check",
             scheduler.MinutesUntilFederalCheck < 0
@@ -533,4 +677,40 @@ internal static class PoliceOverhaulProbes
     private static OutlawEconomy? Economy() => PoliceRuntime.Outlaw?.Economy;
 
     private static string Yes(bool value) => value ? "yes" : "**off**";
+
+    private static ActionAvailability SafeAvailability(Func<ActionAvailability>? predicate)
+    {
+        if (predicate is null)
+            return ActionAvailability.Unavailable("no availability predicate");
+
+        try
+        {
+            return predicate();
+        }
+        catch (Exception ex)
+        {
+            return ActionAvailability.Unavailable($"availability threw: {ex.GetType().Name}");
+        }
+    }
+
+    /// <summary>One-line "what the player should see" for a READY control — not a substitute for clicking it.</summary>
+    private static string LiveEffectHint(string id) => id switch
+    {
+        "police_overhaul.show_heat" => "read-out toast+text of heat/tier/outlaw/raid/federal",
+        "police_overhaul.explain_outlaw" => "itemised outlaw bill as toast+text",
+        "police_overhaul.heat_up" => $"heat +25 and immediate intensity rewrite (now {PoliceRuntime.Heat?.LocalRecord.Heat:0})",
+        "police_overhaul.heat_max" => "heat=100, Federal band, posts/detection applied now",
+        "police_overhaul.heat_clear" => "heat=0, world back toward vanilla intensity now",
+        "police_overhaul.outlaw_next" => "promote Clean→Marked or Marked→Hunted + economy sync",
+        "police_overhaul.outlaw_clear" => "demote one outlaw tier and pull heat under the latch",
+        "police_overhaul.outlaw_pay" => $"spend ${PoliceRuntime.Config?.OutlawLegalFee.Value:N0} to demote one tier",
+        "police_overhaul.spawn_federal" or "police_overhaul.federal_team" => "spawn plain-clothes agents (or stakeout if you are home)",
+        "police_overhaul.raid_trigger" or "police_overhaul.raid_warning" => "schedule a warned raid on an owned property",
+        "police_overhaul.raid_now" => "execute a raid immediately on an owned property",
+        "police_overhaul.restore_force" => "Revive() every dead/KO officer; report the census",
+        "police_overhaul.reset" => "wipe heat/outlaw/raid/agents and restore vanilla levers",
+        "police_overhaul.escalate_outlaw" => "promote outlaw tier + apply economy/visibility",
+        "police_overhaul.call_police" => "CallPolice + sighted Dispatch under response_delay/aggressiveness",
+        _ => "invoke the registered handler",
+    };
 }

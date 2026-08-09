@@ -38,12 +38,16 @@ internal sealed class FederalEvents
     /// <summary>The property being watched, or empty. Shown in the menu and the probe.</summary>
     internal string StakeoutProperty { get; private set; } = string.Empty;
 
-    /// <summary>Per-minute upkeep: posted agents drift, so they are walked back to their post.</summary>
+    /// <summary>Per-minute upkeep: posted agents/officers drift, so they are walked back to their post.</summary>
     internal void MinutePass()
     {
-        if (IsStakeout)
-            FederalAgents.HoldPosts();
+        if (!IsStakeout)
+            return;
+
+        OfficerDeployment.HoldPosts();
+        FederalAgents.HoldPosts();
     }
+
 
     /// <summary>In-game hours remaining, or 0 when nothing is happening. Shown in the menu and the probe.</summary>
     internal int HoursRemaining => _endsAtHour < 0 ? 0 : Math.Max(0, _endsAtHour - ElapsedHours());
@@ -57,8 +61,9 @@ internal sealed class FederalEvents
 
         if (IsActive)
         {
-            if (HoursRemaining <= 0 || FederalAgents.LiveCount == 0)
-                End("the assignment expired");
+            var anyoneLeft = FederalAgents.LiveCount > 0;
+            if (HoursRemaining <= 0 || !anyoneLeft)
+                End(HoursRemaining <= 0 ? "the assignment expired" : "the team dispersed");
 
             return;
         }
@@ -109,22 +114,26 @@ internal sealed class FederalEvents
 
         if (IsActive)
         {
-            message = $"A federal event is already running ({FederalAgents.LiveCount} agent(s), {HoursRemaining}h left).";
+            message =
+                $"A federal event is already running ({FederalAgents.LiveCount} designated officer(s), " +
+                $"{HoursRemaining}h left).";
             return false;
         }
 
-        var spawned = Begin(player, _heat.RecordFor(player), "requested from the menu");
-        if (spawned > 0)
+        var designated = Begin(player, _heat.RecordFor(player), "requested from the menu");
+        if (designated > 0)
         {
             _scheduler.NoteManualFederal();
             message = IsStakeout
-                ? $"{spawned} federal agent(s) are setting up outside {StakeoutProperty}."
-                : $"{spawned} federal agent(s) dispatched to your position.";
+                ? $"{designated} shipped officer(s) are setting up a federal watch outside {StakeoutProperty}."
+                : $"{designated} shipped officer(s) on federal assignment at your position.";
 
             return true;
         }
 
-        message = $"Could not dispatch: {FederalAgents.Status.Reason}.";
+        message =
+            $"Could not field a federal team. Deploy: {OfficerDeployment.LastReport}. " +
+            $"Survey: {FederalAgents.Status.Reason}.";
         return false;
     }
 
@@ -133,7 +142,8 @@ internal sealed class FederalEvents
         if (!IsActive)
             return;
 
-        FederalAgents.DespawnAll();
+        OfficerDeployment.ClearHeldPosts();
+        FederalAgents.ReleaseAll();
 
         var record = _heat.Find(_targetKey);
         if (record is not null)
@@ -144,16 +154,16 @@ internal sealed class FederalEvents
 
         PoliceLog.Msg($"Federal event over ({reason}).");
 
-        if (_config.ShowHud.Value)
-            PoliceMessages.FederalEnded(reason);
+        PoliceMessages.FederalEnded(reason);
 
         Clear();
     }
 
-    /// <summary>Teardown: agents go, but no encounter is recorded — the module quitting is not an event.</summary>
+    /// <summary>Teardown: designations released, but no encounter is recorded — the module quitting is not an event.</summary>
     internal void Abort()
     {
-        FederalAgents.DespawnAll();
+        OfficerDeployment.ClearHeldPosts();
+        FederalAgents.ReleaseAll();
         Clear();
     }
 
@@ -163,7 +173,11 @@ internal sealed class FederalEvents
         _targetKey = string.Empty;
         IsStakeout = false;
         StakeoutProperty = string.Empty;
+        FieldedOfficers = 0;
     }
+
+    /// <summary>Shipped officers designated for the current federal event.</summary>
+    internal int FieldedOfficers { get; private set; }
 
     private string TriggerFor(PlayerHeatRecord record)
     {
@@ -198,20 +212,19 @@ internal sealed class FederalEvents
         var code = Members.Read(player, "PlayerCode", string.Empty);
         var stakeoutAt = StakeoutTarget(player, out var propertyName);
         var origin = stakeoutAt ?? SpawnOrigin(player);
+        var wanted = Math.Max(1, _config.FederalAgentsPerEvent.Value);
 
-        // The clone strategy builds an agent by copying a live officer, so an empty map produces an
-        // event with nothing in it. Put the town's own force back on its feet first — that is both
-        // the donor and the local police the agents are supposed to be arriving alongside.
         if (!PoliceForce.EnsureAnyLive(origin))
-            PoliceLog.Warn("No live officer to work from; the federal team may not be able to spawn.");
+            PoliceLog.Warn("No live officer available before federal designate.");
 
-        var spawned = FederalAgents.Spawn(_config.FederalAgentsPerEvent.Value, origin, code, stakeoutAt);
+        // Relocate + tag + buff shipped officers only — never clone or re-identify.
+        var designated = FederalAgents.Designate(wanted, origin, code, stakeoutAt);
 
-        if (spawned == 0)
+        if (designated <= 0)
         {
-            // Not viable on this build. Log it once per attempt and let the rest of the mod carry on;
-            // a failed federal spawn must never look like a broken save.
-            PoliceLog.Warn($"Federal trigger fired ({trigger}) but no agents could be spawned: {FederalAgents.Status.Reason}.");
+            PoliceLog.Warn(
+                $"Federal trigger fired ({trigger}) but nobody could be designated. " +
+                $"Deploy: {OfficerDeployment.LastReport}. Survey: {FederalAgents.Status.Reason}.");
             record.LastFederalEventDay = TimeManager.ElapsedDays;
             return 0;
         }
@@ -220,23 +233,22 @@ internal sealed class FederalEvents
         _targetKey = record.PlayerKey;
         IsStakeout = stakeoutAt is not null;
         StakeoutProperty = propertyName;
+        FieldedOfficers = designated;
         record.MinutesAtFederalHeat = 0;
 
         PoliceLog.Msg(
             $"Federal event started ({(IsStakeout ? "stakeout on " + propertyName : "pursuit")}): {trigger}. " +
-            $"{spawned} agent(s) for {_config.FederalEventHours.Value} in-game hour(s).");
+            $"{designated} shipped officer(s) designated for {_config.FederalEventHours.Value} in-game hour(s). " +
+            OfficerDeployment.LastReport);
 
-        if (_config.ShowHud.Value)
-        {
-            PoliceMessages.FederalBegan(
-                IsStakeout,
-                propertyName,
-                trigger,
-                spawned,
-                _config.FederalEventHours.Value);
-        }
+        PoliceMessages.FederalBegan(
+            IsStakeout,
+            propertyName,
+            trigger,
+            designated,
+            _config.FederalEventHours.Value);
 
-        return spawned;
+        return designated;
     }
 
     /// <summary>

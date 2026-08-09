@@ -27,10 +27,14 @@ internal static class Readiness
         if (!HostGate.Evaluate(out var reason))
             return ActionAvailability.Unavailable($"the host owns police state and this peer is a {reason}");
 
-        return PoliceRuntime.IsLive
-            ? ActionAvailability.Ready
-            : ActionAvailability.Unavailable(
-                "Police Improvements has not wired into a loaded game yet - load a save and come back");
+        if (PoliceRuntime.IsLive)
+            return ActionAvailability.Ready;
+
+        var status = PoliceRuntime.WireStatus;
+        return ActionAvailability.Unavailable(
+            string.IsNullOrEmpty(status) || status.StartsWith("module ", StringComparison.Ordinal)
+                ? "Police Improvements has not wired into a loaded game yet - load a save and come back"
+                : status);
     }
 
     internal static ActionAvailability Federal()
@@ -45,7 +49,7 @@ internal static class Readiness
         if (PoliceRuntime.Federal is { IsActive: true } federal)
             return ActionAvailability.Unavailable($"a federal event is already running, {federal.HoursRemaining}h left");
 
-        if (FederalAgents.Status.CanSpawn || FederalAgents.Survey().CanSpawn)
+        if (FederalAgents.Status.CanDesignate || FederalAgents.Survey().CanDesignate)
             return ActionAvailability.Ready;
 
         return ActionAvailability.Unavailable(FederalAgents.Status.Reason);

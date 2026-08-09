@@ -1,6 +1,5 @@
 using S1API.Economy;
 using S1API.Entities;
-using S1API.Entities.Impostors;
 using UnityEngine;
 
 namespace Expansions.SpecialCustomers.Visitors;
@@ -92,34 +91,23 @@ internal static class VisitorPrefab
     /// Non-negotiable. Vanilla swaps to the billboard impostor past ~50 m whether or not one was
     /// baked, so an NPC without this reads as a blank white card at range.
     /// <para>
-    /// Slot 01 keeps the hand-picked name it already shipped with. The rest take a deterministic
-    /// draw from the shipped catalogue, which cannot be a typo and is identical on every peer.
+    /// Always a <b>named</b> catalogue entry from <see cref="VisitorSlot.ImpostorName"/>. Prefab-time
+    /// <c>GetRandom</c>/<c>WithRandomImpostor</c> left Avatar inactive and S1API refused the spawn
+    /// with <c>Avatar(active)</c> for every slot that used them; named <c>WithImpostor</c> (as slot 01
+    /// always did with Austin) does not.
     /// </para>
     /// </summary>
     private static void ApplyImpostor(NPCPrefabBuilder.AvatarDefaultsBuilder avatar, VisitorSlot slot)
     {
-        if (slot.ImpostorName.Length > 0)
+        if (slot.ImpostorName.Length == 0)
         {
-            avatar.WithImpostor(slot.ImpostorName);
+            VisitorLog.Instance.Error(
+                $"Slot {slot.Index:00} ({slot.Id}) has no ImpostorName; refusing to call WithRandomImpostor " +
+                "because that path leaves Avatar inactive and S1API drops the spawn.");
             return;
         }
 
-        try
-        {
-            var impostor = NPCImpostorCatalog.GetRandom(slot.Index);
-            if (impostor is not null)
-            {
-                avatar.WithImpostor(impostor);
-                return;
-            }
-        }
-        catch (Exception ex)
-        {
-            VisitorLog.Instance.Warn(
-                $"Could not draw an impostor for slot {slot.Index:00} ({Describe.Of(ex)}); falling back to a random one.");
-        }
-
-        avatar.WithRandomImpostor();
+        avatar.WithImpostor(slot.ImpostorName);
     }
 
     /// <summary>

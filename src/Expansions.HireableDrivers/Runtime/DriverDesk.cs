@@ -27,6 +27,8 @@ internal static class DriverDesk
     /// <summary>Neutral, so driver options never outrank the shipped Fire option.</summary>
     private const int ChoicePriority = 0;
 
+    internal const int ExpectedChoices = 3;
+
     private static readonly int[] Thresholds = { 0, 5, 10, 20, 40, 80 };
 
     private static readonly Dictionary<string, Desk> ByDriver = new(StringComparer.Ordinal);
@@ -36,7 +38,7 @@ internal static class DriverDesk
     internal static bool IsAttached(string employeeId)
     {
         lock (Gate)
-            return ByDriver.ContainsKey(employeeId);
+            return ByDriver.TryGetValue(employeeId, out var desk) && desk.Choices.Count == ExpectedChoices;
     }
 
     /// <summary>
@@ -109,7 +111,7 @@ internal static class DriverDesk
 
         // A full list scan per driver is far too much for every tick, so this samples occasionally; the
         // common case is a dictionary hit and nothing else.
-        if (++_verifyCounter % VerifyEveryTicks != 0 || desk.StillOnTheNpc())
+        if (!desk.ShouldVerify() || desk.StillOnTheNpc())
             return;
 
         DriverLog.Debug($"{brain.Name}'s driver options are no longer on their NPC; re-adding them.");
@@ -118,8 +120,6 @@ internal static class DriverDesk
     }
 
     private const int VerifyEveryTicks = 30;
-
-    private static int _verifyCounter;
 
     internal static void Detach(string employeeId)
     {
@@ -169,6 +169,7 @@ internal static class DriverDesk
     private sealed class Desk
     {
         private readonly DriverBrain _brain;
+        private int _verifyCountdown = VerifyEveryTicks;
 
         internal Desk(DriverBrain brain, object? controller)
         {
@@ -179,6 +180,16 @@ internal static class DriverDesk
         internal object? Controller { get; }
 
         internal List<object?> Choices { get; } = new();
+
+        internal bool ShouldVerify()
+        {
+            _verifyCountdown--;
+            if (_verifyCountdown > 0)
+                return false;
+
+            _verifyCountdown = VerifyEveryTicks;
+            return true;
+        }
 
         /// <summary>
         /// Every managed delegate the game now holds an interop wrapper for. Il2CppInterop's wrapper is
@@ -192,7 +203,13 @@ internal static class DriverDesk
             Add(HandoverLabel, _ => NearbyVehicle() is not null, TakeNearbyVehicle);
             Add(_ => "Set off now", _ => CanSetOff(), SetOff);
 
-            return Choices.Count > 0;
+            if (Choices.Count == ExpectedChoices)
+                return true;
+
+            DriverLog.Warn(
+                $"{_brain.Name}'s dialogue accepted only {Choices.Count}/{ExpectedChoices} driver options; " +
+                "removing the partial set so diagnostics report the feature as broken.");
+            return false;
         }
 
         private void Add(Func<bool, string> label, Func<bool, bool> visible, Action onChosen)
@@ -300,6 +317,13 @@ internal static class DriverDesk
                 if (guid.Length == 0 || string.Equals(guid, _brain.Record.VehicleGuid, StringComparison.OrdinalIgnoreCase))
                     continue;
 
+                if (DriverRegistry.Drivers.Any(other =>
+                        !string.Equals(other.Record.EmployeeId, _brain.Record.EmployeeId, StringComparison.Ordinal) &&
+                        string.Equals(other.Record.VehicleGuid, guid, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
                 var holder = VehicleAssignment.HolderOf(guid);
                 if (holder is not null && !string.Equals(holder, _brain.Record.EmployeeId, StringComparison.Ordinal))
                     continue;
@@ -323,9 +347,24 @@ internal static class DriverDesk
                 if (vehicle is null)
                     return;
 
+                var previousGuid = _brain.Record.VehicleGuid;
+                var previousWasProvided = _brain.Record.SpawnedVehicle;
                 VehicleAssignment.Release(_brain.Record.VehicleGuid, _brain.Record.EmployeeId);
                 _brain.Record.VehicleGuid = VehicleApi.Guid(vehicle);
                 _brain.Record.SpawnedVehicle = false;
+
+                if (previousWasProvided &&
+                    !string.Equals(previousGuid, _brain.Record.VehicleGuid, StringComparison.OrdinalIgnoreCase))
+                {
+                    var previous = VehicleApi.FindByGuid(previousGuid);
+                    if (previous is not null &&
+                        !VehicleApi.HasPlayerAboard(previous) &&
+                        TransitApi.UnitsInStorage(VehicleApi.Storage(previous)) == 0)
+                    {
+                        Gx.Call(previous, "DestroyVehicle", Array.Empty<string>());
+                    }
+                }
+
                 _brain.RequestStart();
 
                 var message = $"{_brain.Name} will drive the {VehicleApi.Name(vehicle)}.";
@@ -347,8 +386,9 @@ internal static class DriverDesk
         {
             try
             {
-                _brain.RequestStart();
-                Expansions.Core.Actions.ActionLog.Ok($"{_brain.Name} will re-plan on the next tick.");
+                _brain.RequestStart(departWithAvailableCargo: true);
+                Expansions.Core.Actions.ActionLog.Ok(
+                    $"{_brain.Name} will collect one available batch and leave without waiting for the normal threshold.");
             }
             catch (Exception ex)
             {

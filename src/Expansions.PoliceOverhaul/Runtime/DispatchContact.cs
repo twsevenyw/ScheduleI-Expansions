@@ -1,50 +1,26 @@
-using S1API.Entities;
-
 namespace Expansions.PoliceOverhaul.Runtime;
 
 /// <summary>
-/// Invisible phone contact that every Police Improvements message is sent from.
+/// Display labels for police announcements. Intentionally <b>not</b> an <c>S1API.Entities.NPC</c>.
 /// <para>
-/// S1API messaging needs an NPC sender. Using a federal-agent clone would attribute the text to
-/// whoever that officer was copied from (and put a temporary chase NPC in the contacts list). A
-/// dedicated non-physical contact is one intentional entry — "Dispatch" — and nothing else.
+/// A dedicated Dispatch NPC was half-built by S1API (SetVisible / GetAndValidateReferences NREs on
+/// finalize) and then ticked every frame via <c>NPCActions.UpdateUmbrellaUse</c>, killing the game.
+/// Messages are toast-only through <see cref="PoliceMessages"/> / <see cref="GameBridge.Notify"/> —
+/// a readable announcement does not require a custom NPC, and a custom NPC is what crashed.
 /// </para>
 /// <para>
-/// Discovered by S1API from the type alone, so the id and simple type name are save data: do not
-/// rename either. The contact exists whenever this DLL is loaded, even if the module is toggled off;
-/// we simply stop sending.
+/// The former id <c>expansions_police_dispatch</c> is kept as a constant for probes and save-folder
+/// archaeology only. No type with that id is registered anymore, so S1API will not spawn it.
 /// </para>
 /// </summary>
-public sealed class DispatchContact : NPC
+internal static class DispatchContact
 {
-    /// <summary>Never rename: this is the on-disk NPC id and the messaging key.</summary>
+    /// <summary>Legacy id — do not create an NPC with this. Probe / log reference only.</summary>
     internal const string ContactId = "expansions_police_dispatch";
 
     internal const string ContactFirstName = "Dispatch";
 
     internal const string ContactLastName = "Office";
 
-    /// <summary>Invisible contact — messaging only, no world body.</summary>
-    public override bool IsPhysical => false;
-
-    protected override void ConfigurePrefab(NPCPrefabBuilder builder) =>
-        builder.WithIdentity(ContactId, ContactFirstName, ContactLastName);
-
-    protected override void OnCreated()
-    {
-        base.OnCreated();
-
-        try
-        {
-            // Keep it out of the Customer / Dealer / Supplier filtered contact lists. The messages
-            // app still shows the thread when Dispatch texts the player — that is the whole point.
-            ConversationCanBeHidden = true;
-            ClearConversationCategories();
-            PoliceMessages.NoteContactReady(this);
-        }
-        catch (Exception ex)
-        {
-            PoliceLog.Warn($"Dispatch contact initialised with a warning: {PoliceLog.Describe(ex)}");
-        }
-    }
+    internal const string DisplayName = "Dispatch Office";
 }

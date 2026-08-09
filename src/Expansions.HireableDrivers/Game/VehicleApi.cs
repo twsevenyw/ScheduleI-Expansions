@@ -8,6 +8,9 @@ internal static class VehicleApi
     /// <summary>How close to the requested destination still counts as having arrived.</summary>
     private const float ArrivalRadius = 14f;
 
+    /// <summary>The shipped 16-slot Veeper van's authoritative prefab/save code.</summary>
+    internal const string DriverVanCode = "veeper";
+
     internal static object? Manager() => Gx.Singleton(GameTypes.VehicleManager);
 
     internal static IReadOnlyList<object?> PlayerOwned() => Gx.List(Gx.Get(Manager(), "PlayerOwnedVehicles"));
@@ -39,6 +42,17 @@ internal static class VehicleApi
     }
 
     internal static string Code(object? vehicle) => Gx.Get<string>(vehicle, "VehicleCode", string.Empty);
+
+    internal static bool IsDriverVan(object? vehicle)
+    {
+        var code = Code(vehicle);
+        if (string.Equals(code, DriverVanCode, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var name = Name(vehicle);
+        return name.Contains("Veeper", StringComparison.OrdinalIgnoreCase) ||
+               name.Contains("van", StringComparison.OrdinalIgnoreCase);
+    }
 
     internal static object? Storage(object? vehicle) => Gx.GetAlive(vehicle, "Storage");
 

@@ -111,8 +111,12 @@ internal static class WorldApi
             var live = new List<object?>(found.Length);
             foreach (var lot in found)
             {
-                if (Gx.Alive(lot))
-                    live.Add(lot);
+                // The non-generic Unity overload returns Object wrappers. Reading EntryPoint,
+                // ParkingSpots or GUID from that base wrapper silently fails, so retain the concrete
+                // ParkingLot projection instead.
+                var typed = Gx.Cast(lot, type);
+                if (typed is not null)
+                    live.Add(typed);
             }
 
             _parkingLots = live;

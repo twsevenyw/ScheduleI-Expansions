@@ -29,24 +29,26 @@ internal sealed class VisitorSlot
 
     private static readonly VisitorSlot[] Slots =
     {
-        // Slot 01 is the group's advance scout and the only member who stays in town between visits.
-        // He predates the pool, he is already in the owner's save, and the menu's teleport action
-        // points at him — so his identity, impostor and post are fixed.
+        // Impostor names must be real catalogue entries (see ImpostorTextureResolver). A named
+        // WithImpostor(...) at prefab time is what leaves Avatar active through S1API's Awake-graph
+        // check — GetRandom/WithRandomImpostor at ConfigurePrefab time does not, which is why slot 01
+        // (Austin) spawned and 02–08 were refused with Avatar(active). Wardrobe randomisation still
+        // re-dresses the live mesh per visit; the impostor is only the >50 m billboard.
         new(1, "Marcus", "Vale", "Austin", "monotone", 1f, 0f, 1f, 0.45f, new Color32(150, 120, 95, 255),
             AvatarAssets.Hair.Peaked, new Color(0.14f, 0.12f, 0.11f), Vector3.zero, residentScout: true),
-        new(2, "Dana", "Roscoe", string.Empty, "female1", 1f, 1f, 0.97f, 0.5f, new Color32(206, 168, 136, 255),
+        new(2, "Dana", "Roscoe", "Chloe", "female-1", 1f, 1f, 0.97f, 0.5f, new Color32(206, 168, 136, 255),
             AvatarAssets.Hair.MessyBob, new Color(0.28f, 0.18f, 0.11f), new Vector3(1.4f, 0f, 0.6f)),
-        new(3, "Wes", "Kohler", string.Empty, "redneck", 0.95f, 0f, 1.05f, 0.62f, new Color32(178, 137, 104, 255),
+        new(3, "Wes", "Kohler", "Dean", "redneck", 0.95f, 0f, 1.05f, 0.62f, new Color32(178, 137, 104, 255),
             AvatarAssets.Hair.BuzzCut, new Color(0.11f, 0.1f, 0.09f), new Vector3(2.8f, 0f, 0.2f)),
-        new(4, "Priya", "Nandal", string.Empty, "female2", 1.03f, 1f, 0.95f, 0.42f, new Color32(148, 108, 80, 255),
+        new(4, "Priya", "Nandal", "Kathy", "female-2", 1.03f, 1f, 0.95f, 0.42f, new Color32(148, 108, 80, 255),
             AvatarAssets.Hair.ShoulderLength, new Color(0.09f, 0.08f, 0.08f), new Vector3(4.2f, 0f, 0.8f)),
-        new(5, "Otto", "Brandt", string.Empty, "cold", 0.98f, 0f, 1.02f, 0.55f, new Color32(232, 197, 168, 255),
+        new(5, "Otto", "Brandt", "Carl", "cold", 0.98f, 0f, 1.02f, 0.55f, new Color32(232, 197, 168, 255),
             AvatarAssets.Hair.Spiky, new Color(0.35f, 0.24f, 0.12f), new Vector3(5.6f, 0f, 0.3f)),
-        new(6, "Camille", "Oduya", string.Empty, "female1", 1.05f, 1f, 0.99f, 0.47f, new Color32(110, 78, 56, 255),
+        new(6, "Camille", "Oduya", "Jessi", "female-1", 1.05f, 1f, 0.99f, 0.47f, new Color32(110, 78, 56, 255),
             AvatarAssets.Hair.Afro, new Color(0.08f, 0.07f, 0.07f), new Vector3(7f, 0f, 0.9f)),
-        new(7, "Silas", "Boone", string.Empty, "tyler", 1f, 0f, 1.08f, 0.68f, new Color32(76, 53, 39, 255),
+        new(7, "Silas", "Boone", "Mick", "tyler", 1f, 0f, 1.08f, 0.68f, new Color32(76, 53, 39, 255),
             AvatarAssets.Hair.LongCurly, new Color(0.07f, 0.06f, 0.06f), new Vector3(8.4f, 0f, 0.4f)),
-        new(8, "Nora", "Vasilenko", string.Empty, "timid", 1.02f, 1f, 0.96f, 0.4f, new Color32(207, 168, 134, 255),
+        new(8, "Nora", "Vasilenko", "Pearl", "timid", 1.02f, 1f, 0.96f, 0.4f, new Color32(207, 168, 134, 255),
             AvatarAssets.Hair.MidFringe, new Color(0.52f, 0.4f, 0.2f), new Vector3(9.8f, 0f, 0.7f)),
     };
 
@@ -95,10 +97,9 @@ internal sealed class VisitorSlot
 
     /// <summary>
     /// Name of a shipped impostor billboard, resolved by S1API from <c>charactersettings/&lt;name&gt;</c>.
-    /// Empty means "pick one deterministically from the catalogue by slot index", which cannot be a
-    /// typo. Mandatory either way: vanilla swaps every NPC to its billboard past ~50 m, and a
-    /// runtime-built avatar carries no impostor of its own, so without one the visitor is a blank
-    /// card at range.
+    /// Must be non-empty and catalogue-real: a named <c>WithImpostor</c> at prefab time is what keeps
+    /// the Avatar active through S1API's spawn validator. Vanilla also swaps every NPC to this
+    /// billboard past ~50 m, so without one the visitor is a blank card at range.
     /// </summary>
     internal string ImpostorName { get; }
 

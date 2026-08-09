@@ -63,9 +63,9 @@
      NEW SURFACE      Triggerable EVENTS on the UP ARROW: a short in-world list you raise while
                       playing. Police contributes five; Core contributes two so the list is
                       never empty. Shift+Up re-fires the last one.
-     DRIVERS          Reworked to the game's own screens (v0.5.0). See section 5 -- and see the
-                      known limitation there: on 0.4.6f12 the hiring hook does NOT attach, and
-                      the menu fallback is currently the only way to hire.
+     DRIVERS          Reworked to the game's own screens (v0.6.0). Native fixer hiring is live-
+                      verified on 0.4.6f12; each driver now receives a Veeper, preserves unrelated
+                      trunk cargo and can truly "set off now". See section 5.
      POLICE           Seven previously-deferred features built (v0.3.0): property raids,
                       stakeouts, custody and the lost day, equipment loss, informants, outlaw
                       economics, and the legal fee now actually spends. Then, on top: THE MAP'S
@@ -101,7 +101,7 @@
    2.  QUICK REFERENCE -- keys, menus, console, file locations
    3.  EXPANSIONS CORE                          [SHIPPED]                v0.1.0
    4.  THE ACTIONS AND EVENTS SURFACE -- every action, by owning mod
-   5.  HIREABLE DRIVERS                         [SHIPPED, UNVERIFIED]    v0.5.0
+   5.  HIREABLE DRIVERS                         [SHIPPED, UNVERIFIED]    v0.6.0
    6.  POLICE IMPROVEMENTS                      [SHIPPED]                v0.3.0
    7.  SPECIAL CUSTOMERS                        [SHIPPED, UNVERIFIED]    v1.0.0
    8.  QUALITY OF LIFE                          [SHIPPED]                v0.1.0
@@ -432,7 +432,7 @@
                    pane, and "Open the newest probe report" reveals it in Explorer.
   Grep handle:     every probe emits a line "RESULT:<probe_id>:<status>".
   Report tail:     a "Requires a mutating test" section listing the questions no read-only probe
-                   can answer -- 20 from Core plus 4 registered by Hireable Drivers -- each with a
+                   can answer -- 20 from Core plus 5 registered by Hireable Drivers -- each with a
                    step-by-step recipe.
   Safety:          each probe is isolated; one throwing is recorded FAILED and the run continues.
                    The report is written even if every probe fails. Probes needing a loaded save
@@ -689,8 +689,8 @@
    Hire a driver
      (repair path)           picker   GREYED OUT with the reason "hire drivers at <the fixer>,
                                       with the rest of your staff" whenever the dialogue hook
-                                      took. ON 0.4.6f12 THE HOOK DOES NOT TAKE, so this row is
-                                      live and is currently the only way to hire. Host only.
+                                      took. Verified attached on 0.4.6f12: 13 property choices,
+                                      with 12 visible for the loaded save. Host only.
    Choose which driver the repair
      paths apply to          picker   Only appears when the clipboard's own drop-off list is
                                       unavailable.
@@ -704,36 +704,26 @@
                                       are fired by talking to them, like any employee.
 
 ==================================================================================================
- 5.  HIREABLE DRIVERS                                       [SHIPPED, UNVERIFIED]   v0.5.0
+ 5.  HIREABLE DRIVERS                                       [SHIPPED, UNVERIFIED]   v0.6.0
 ==================================================================================================
 
   Module id:        hireable_drivers
   DLL:              Expansions.HireableDrivers.dll  -->  Mods\
   Config category:  HireableDrivers_01_Main
-  Size:             37 source files, ~7,050 lines
-  Contributes:      7 actions, 10 probes, 4 mutating-test notes, 10 Harmony patch targets,
-                    24 settings + enabled, a 6-objective tutorial chapter, one save blob
+  Size:             37 source files, ~7,300 lines
+  Contributes:      7 actions, 10 probes, 5 mutating-test notes, 10 Harmony patch targets,
+                    25 settings + enabled, a 6-objective tutorial chapter, one save blob
 
   --------------------------------------------------------------------------------------------
-  READ THIS FIRST: HIRING DOES NOT ATTACH ON 0.4.6f12               [BROKEN ON 0.4.6f12]
+  NATIVE HIRING ON 0.4.6f12                                       [RUNTIME VERIFIED]
   --------------------------------------------------------------------------------------------
-  The design is that you hire a driver from the employee-fixer NPC's own conversation, through the
-  game's public DialogueController.AddDialogueChoice. On build 0.4.6f12 that method is not found:
-
-     [WARNING] [Expansions/hireable_drivers] Could not reach
-       'Object.AddDialogueChoice(DialogueChoice,Int32)' (not found). That part of the driver loop
-       is disabled.
-     [WARNING] [Expansions/hireable_drivers] Could not add driver hiring to the employee-hiring
-       NPC on this build. The Expansions menu's fallback "Hire a driver" action is available
-       instead.
-
-  This degrades exactly as designed: the mod says so in the log, the repair-path action ungreys
-  itself, and you hire from F7 -> Actions -> "Hire a driver (repair path)" instead. Everything
-  after hiring -- beds, routes, the clipboard, the transport loop -- is unaffected by this.
-
-  The same lookup also feeds the driver's own dialogue (vehicle assignment, departure size, "set
-  off now"), so on this build those live only on the repair paths and the F6 panel too. The
-  drivers.hiring_desk and drivers.native_surfaces probes report the exact state.
+  Drivers are hired from the employee-fixer NPC's own conversation through the public
+  DialogueController.AddDialogueChoice API. The 2026-08-09 live probe on 0.4.6f12 confirmed one
+  fixer, 13 attached property choices, 12 visible choices for the loaded save, all 10 Harmony
+  targets, 190 pickups, 169 drop-offs and 33 parking lots. The old failure was reflection against
+  UnityEngine.Object instead of the concrete DialogueController wrapper; every non-generic Unity
+  lookup is now cast before member resolution. If a future build moves the API, the F7 repair path
+  appears with the exact binding failure instead of silently losing hiring.
 
   WHAT IT IS
   --------------------------------------------------------------------------------------------
@@ -748,7 +738,7 @@
   no SyncVars and no spawnable prefabId, and Employee.Initialize would never replicate its name,
   appearance or assignment.
 
-  WHERE EACH SETTING LIVES (the design; see the box above for what 0.4.6f12 actually does)
+  WHERE EACH SETTING LIVES
   --------------------------------------------------------------------------------------------
      Hire                  Employee-fixer NPC dialogue, one entry per owned property
      Bed                   Shipped management clipboard, unchanged
@@ -788,9 +778,10 @@
      Working hours      07:00 to 04:00, the shipped day window.
      Curfew             Ignored by default, matching the shipped rule that dealers cannot be
                         arrested. respect_curfew = true makes them stop.
-     Vehicle            A new driver auto-claims the first unclaimed vehicle you own, so a route
-                        works straight away. A driver whose van was sold picks up another as soon
-                        as one is free. A vehicle is claimed for the duration of a trip.
+     Vehicle            A new driver takes an unassigned Veeper, or receives a persistent 16-slot
+                        Veeper when provide_van_on_hire = true (default). Hiring rolls back and
+                        refunds the fee if the promised van cannot be created. A sold/missing van
+                        self-heals the same way. One assigned vehicle per driver.
 
   ROUTES -- EDITED ON THE SHIPPED CLIPBOARD
   --------------------------------------------------------------------------------------------
@@ -807,7 +798,8 @@
                    stations, presses, pots, mushroom beds, drying racks, ovens, cauldrons, mixing
                    and chemistry stations, loading docks.
      To            Any of the above ANYWHERE YOU OWN, or a recruited dealer.
-     What          The vanilla item filter, or blank for "anything the source holds".
+     What          The vanilla item filter, including blacklist and multi-item whitelist shapes;
+                   blank means "anything the source holds".
      Depart at     Item count. Not a vanilla field, so it lives on the driver's dialogue.
                    0 means automatic: default_depart_threshold_percent of the trunk's capacity.
      On / off      Per row.
@@ -876,9 +868,10 @@
      Loading          Moves a batch every LoadMinutesPerStop/6 in-game minutes. Departs when the
                       threshold is met, the source runs dry, patience runs out, or three
                       consecutive transfers move nothing.
-     Unloading        Anything that will not fit at the far end STAYS IN THE TRUNK, which is a
-                      real container you can open. Nothing is destroyed or dropped. The driver
-                      files a clipboard issue naming what is stuck.
+     Unloading        Only cargo loaded for the active route can leave the trunk; unrelated cargo
+                      and the pre-trip baseline of the same product are preserved. If the far end
+                      is full, the driver waits there and retries instead of counting fake trips or
+                      returning home with cargo the next route could misidentify.
      Recovering       Files a clipboard issue with a reason and a fix, releases the vehicle claim
                       and any slot locks, hands movement back to vanilla, and cools down 60
                       in-game minutes.
@@ -951,9 +944,10 @@
   There are NO Harmony patches for hiring. That is entirely the game's public AddDialogueChoice
   API -- which is exactly why its absence on 0.4.6f12 degrades rather than throws.
 
-  A patch that fails to apply is survivable: with no stations and no vanilla routes assigned, an
-  unsuppressed Handler brain finds nothing to do and idles. The drivers.bindings probe reports
-  which applied and which were skipped.
+  A UI patch that fails has a repair path. The two load-bearing isolation patches are different:
+  if UpdateBehaviour suppression or GetTransitRouteReady veto is missing, trips pause and
+  drivers.bindings fails. The mod never lets its state machine and the vanilla Handler brain move
+  the same route at once.
 
   PERSISTENCE
   --------------------------------------------------------------------------------------------
@@ -969,6 +963,10 @@
 
   The roster is rebuilt from scratch on load rather than merged, because the deserialised records
   are new objects and a stale brain would keep editing the previous save's copy.
+
+  Disabling the module first mirrors the latest clipboard rows into the sidecar and clears the
+  vanilla RouteListField. Re-enabling restores them. This prevents the now-ordinary Handler brain
+  from trying to walk a cross-town driver route while the Harmony patches are off.
 
   INTEROP DISCIPLINE
   --------------------------------------------------------------------------------------------
@@ -995,9 +993,9 @@
      drivers.clipboard        Are the management clipboard's route rows really driving this mod?
      drivers.native_surfaces  Is every driver setting reachable through the game's own screens?
 
-  Plus 4 mutating-test notes appended to the report: HD-P2 (does EnterVehicle seat an employee),
+  Plus 5 mutating-test notes appended to the report: HD-P2 (does EnterVehicle seat an employee),
   HD-P3 (does Navigate drive with no player nearby), HD-P4 (cross-property reachability), HD-P7
-  (does a checkpoint stop an NPC-driven van).
+  (does a checkpoint stop an NPC-driven van), HD-P14 (unrelated/same-product trunk baseline stays).
 
   NOTE ON THE REPORT: both this area and Police Improvements are titled "9." in source, so the two
   headings sort adjacently rather than as 9 and 10. Cosmetic; it does not affect any probe.
@@ -2097,7 +2095,7 @@
                                                  special_customers, tweaks.
 
   ----------------------------------------------------------------------------------------------
-  [HireableDrivers_01_Main]  -- 24 keys + enabled                        [SHIPPED, UNVERIFIED]
+  [HireableDrivers_01_Main]  -- 25 keys + enabled                        [SHIPPED, UNVERIFIED]
   ----------------------------------------------------------------------------------------------
      KEY                               TYPE    DEFAULT  WHAT IT DOES
      enabled                           bool    true     Load the module.
@@ -2134,12 +2132,13 @@
      dealer_topup_cap                  int     10       Items per dealer visit. Dealers hold 10
                                                         inventory slots. Clamped 1-50.
      allow_dealer_destinations         bool    true     Let a route target a recruited dealer.
-     allow_spawned_vans                bool    false    Spawn a van if none is available. Off by
-                                                        default so drivers use cars you bought.
-     auto_assign_vehicle               bool    true     Give a new driver the first unclaimed
-                                                        vehicle you own, so a route works at once.
-                                                        Also self-heals a driver whose van was
-                                                        sold.
+     provide_van_on_hire               bool    true     Take an unassigned Veeper or create a
+                                                        persistent 16-slot Veeper for each driver.
+                                                        A failed provision rolls the hire back.
+     allow_spawned_vans                bool    false    Legacy compatibility switch used when
+                                                        provide_van_on_hire is off.
+     auto_assign_vehicle               bool    true     Assign the Veeper during hire and replace
+                                                        it if the assigned van is sold or missing.
      require_bed_and_wage              bool    true     On: a driver refuses to work unhoused or
                                                         unpaid, exactly like other employees.
      respect_curfew                    bool    false    On: drivers start nothing new once curfew
@@ -2481,7 +2480,7 @@
          Expansions.Core.dll               shared library, NOT a MelonMod        v0.1.0
 
      <GameDir>\Mods\
-         Expansions.HireableDrivers.dll    expansion mod                         v0.5.0
+         Expansions.HireableDrivers.dll    expansion mod                         v0.6.0
          Expansions.PoliceOverhaul.dll     expansion mod                         v0.3.0
          Expansions.SpecialCustomers.dll   expansion mod                         v1.0.0
          Expansions.Tweaks.dll             expansion mod ("Quality of Life")     v0.1.0
@@ -2589,19 +2588,20 @@
       as "self-drives: yes" means you get the real driving path; all "no" is not a bug, but every
       trip will relay.
 
-   4. HIRING. Try the employee fixer first. On 0.4.6f12 the extra dialogue line is expected to be
-      ABSENT -- confirm the log carries the AddDialogueChoice warning, then hire from
-      F7 -> Actions -> "Hire a driver (repair path)" instead.
-      PASS either way: you are charged and a driver appears on the roster.
+   4. HIRING. Talk to the employee fixer and choose "Hire a driver for <property>".
+      PASS: the line is present, you are charged, a driver appears on the roster, and a persistent
+      16-slot Veeper is parked for them. The F7 repair action must be greyed out because native
+      hiring works. FAIL: run drivers.hiring_desk; it names the exact missing API or scene object.
 
    5. THE CLIPBOARD. Point the management clipboard at that driver.
-      PASS: Bed, Stations and five Route rows. Stations refuses with "Drivers run transit routes,
-      not stations." Set the Bed. Then set a route's pickup with the worldspace picker -- hovering
+      PASS: Bed and five Route rows; the Stations row is hidden. Set the Bed. Put one unrelated
+      product in the Veeper, then set a route's pickup with the worldspace picker -- hovering
       a container at a DIFFERENT property must refuse with "Driver X only collects from the Barn".
       Set a drop-off at another property you own; the vanilla out-of-range refusal must be
       overturned.
-      Then watch. PASS: the driver leaves and the destination stock goes up. FAIL: it stays Idle
-      -- press F6 and read the no-work reason, which is the diagnosis.
+      Talk to the driver and choose "Set off now". PASS: they load one available batch, leave
+      without waiting for the normal threshold, the destination stock goes up, and the unrelated
+      Veeper cargo remains untouched. FAIL: press F6 and read the no-work reason.
 
    6. Start a trip and then sleep through it.
       PASS: you wake to "Delivery completed while you slept" and the cargo is at the far end.
@@ -2653,13 +2653,13 @@
 ==================================================================================================
 
   --------------------------------------------------------------------------------------------
-  DRIVER HIRING DOES NOT ATTACH ON 0.4.6f12                                 *** IMPORTANT ***
+  DRIVER FULL TRIP STILL NEEDS ONE END-TO-END PLAYTEST                       *** IMPORTANT ***
   --------------------------------------------------------------------------------------------
-  Covered in full at the top of section 5. In one line: DialogueController.AddDialogueChoice is
-  not found on this build, so the extra "Hire a driver for the Barn ($1,800)" line never appears
-  on the employee fixer, and the F7 repair-path action is currently the only way to hire. The same
-  lookup feeds the driver's own dialogue, so vehicle assignment and departure size are on the
-  repair paths too. Everything after hiring is unaffected.
+  Native hiring is fixed and runtime-verified: the 0.4.6f12 probe found the employee fixer and 13
+  attached driver choices. All patches, endpoints, parking lots and VehicleAgents also verified.
+  What has not yet been observed in one uninterrupted run is hire -> bed -> clipboard route ->
+  Veeper load -> road trip -> deposit -> save/reload. Section 14 gives that exact test. HD-P14
+  additionally proves unrelated trunk cargo and the same-product baseline survive the delivery.
 
   --------------------------------------------------------------------------------------------
   THE SPECIAL CUSTOMERS SALE LOOP HAS NEVER COMPLETED
@@ -2814,8 +2814,8 @@
      Is mix-time exclusion for chemists         GetMixTimeForCurrentOperation may be inlined.
        actually reachable?                      tweaks.mixing_speed counts calls that reached it.
 
-  The probe report ends with 24 further questions that no read-only probe can answer -- 20 from
-  Core plus 4 from Hireable Drivers -- each with a written recipe.
+  The probe report ends with 25 further questions that no read-only probe can answer -- 20 from
+  Core plus 5 from Hireable Drivers -- each with a written recipe.
 
 ==================================================================================================
  16.  DEFERRED -- designed but deliberately not built
@@ -2898,8 +2898,8 @@
      Special Customers -- post watchdog                [SHIPPED]              Corrected drift
      Special Customers -- the whole sale loop          [SHIPPED, UNVERIFIED]  Never completed
      Special Customers -- randomised appearance        [SHIPPED, UNVERIFIED]  Never seen
-     Hireable Drivers -- hiring at the fixer           [BROKEN ON 0.4.6f12]   Hook not found
-     Hireable Drivers -- everything else               [SHIPPED, UNVERIFIED]  Never run
+     Hireable Drivers -- hiring at the fixer           [RUNTIME VERIFIED]     13 choices attached
+     Hireable Drivers -- clipboard / full trip         [SHIPPED, UNVERIFIED]  Needs one end-to-end run
      Tutorial chapters 6-9 (feature mods)              [SHIPPED, UNVERIFIED]  Never played
      Section 16 items                                  [PLANNED]              Not built
 
@@ -2910,7 +2910,7 @@
      Events            7           (Police 5, Core 2), on the Up arrow
      Probes           53           (Core 18 incl. 1 opt-in, Customers 11, Drivers 10, Police 10,
                                    Quality of Life 4)
-     Config keys     129           (shared 9, Police 46, Customers 37, Drivers 25, Quality of
+     Config keys     130           (shared 9, Police 46, Customers 37, Drivers 26, Quality of
                                    Life 12 -- each module count includes its automatic "enabled")
      Harmony patches  42 targets   (Police 20, Quality of Life 11, Drivers 10, Customers 1,
                                    Core 0). 41 apply at default settings.
