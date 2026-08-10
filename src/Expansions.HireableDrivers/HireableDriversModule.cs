@@ -37,7 +37,7 @@ public sealed class HireableDriversModule : ExpansionModule
     public override string Description =>
         "Driver employees who can transport items between your properties, businesses, and dealers.";
 
-    public override string Version => "0.7.4";
+    public override string Version => "0.7.5";
 
     protected override void OnRegistered()
     {

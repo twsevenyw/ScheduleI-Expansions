@@ -154,7 +154,7 @@ internal sealed class FederalEvents
 
         PoliceLog.Msg($"Federal event over ({reason}).");
 
-        PoliceMessages.FederalEnded(reason);
+        PoliceMessages.FederalEnded(reason, SubjectPlayer());
 
         Clear();
     }
@@ -246,9 +246,25 @@ internal sealed class FederalEvents
             propertyName,
             trigger,
             designated,
-            _config.FederalEventHours.Value);
+            _config.FederalEventHours.Value,
+            player);
 
         return designated;
+    }
+
+    private object? SubjectPlayer()
+    {
+        if (_targetKey.Length == 0)
+            return GameBridge.LocalPlayer();
+
+        foreach (var player in GameBridge.Players())
+        {
+            if (player is not null &&
+                string.Equals(GameBridge.KeyFor(player), _targetKey, StringComparison.Ordinal))
+                return player;
+        }
+
+        return GameBridge.LocalPlayer();
     }
 
     /// <summary>

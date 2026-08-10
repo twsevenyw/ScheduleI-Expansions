@@ -291,6 +291,7 @@ internal static class DriverRegistry
             ApplyIdentity(brain);
             if (!record.PendingCargo.IsActive)
             {
+                DriverHiring.CleanupOrphanTripVans(record);
                 DriverHiring.RetireTripVan(record, employee, preserveCargo: true);
                 var property = WorldApi.OwnedProperties().FirstOrDefault(candidate =>
                     string.Equals(
@@ -422,6 +423,7 @@ internal static class DriverRegistry
     /// <summary>Drops runtime wrappers while retaining the world's current clipboard state.</summary>
     internal static void Clear()
     {
+        DriverHiring.ForgetVehicleCleanup();
         DriverDesk.DetachAll();
         RoutePicker.Reset();
 

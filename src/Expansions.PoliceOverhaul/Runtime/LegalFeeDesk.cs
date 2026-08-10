@@ -228,7 +228,7 @@ internal static class LegalFeeDesk
 
         if (!outlaw.PayLegalFee(record, out var message))
         {
-            PoliceMessages.Announce("Legal fee", message);
+            PoliceMessages.Announce("Legal fee", message, forPlayer: GameBridge.LocalPlayer());
             PoliceLog.Detail($"Legal fee desk refused: {message}");
             return false;
         }

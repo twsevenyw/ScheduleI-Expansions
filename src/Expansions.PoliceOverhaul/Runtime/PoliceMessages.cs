@@ -3,11 +3,16 @@ using Expansions.PoliceOverhaul.State;
 namespace Expansions.PoliceOverhaul.Runtime;
 
 /// <summary>
-/// Player-facing police copy. Delivered as on-screen toasts only — never via a custom NPC.
+/// Player-facing police copy. Delivered as on-screen toasts — never via a custom NPC.
 /// <para>
 /// A Dispatch phone contact used to send these as texts, but S1API could not finalize that NPC
 /// (SetVisible NRE) and the half-built body flooded <c>UpdateUmbrellaUse</c> until the process died.
 /// Toasts carry the full sentence; truncated UI is preferred over a game crash.
+/// </para>
+/// <para>
+/// Co-op: <see cref="NotificationsManager"/> is local-only and we have no custom RPCs, so every
+/// announcement is routed through <see cref="AnnounceRelay"/> — local toast when this peer is the
+/// audience, Steam lobby publish so a client peer can toast the same line on their machine.
 /// </para>
 /// </summary>
 internal static class PoliceMessages
@@ -31,17 +36,26 @@ internal static class PoliceMessages
 
     internal static void NoteReady()
     {
-        _lastDelivery = $"toast channel ready ({DispatchContact.DisplayName})";
+        HostGate.Evaluate(out var peer);
+        _lastDelivery =
+            $"toast+lobby relay ready ({DispatchContact.DisplayName}); peer={peer}; route={AnnounceRelay.RouteInUse}";
         PoliceLog.Msg(
-            $"Police messages will come as on-screen toasts labelled '{DispatchContact.DisplayName}' " +
-            "(no custom Dispatch NPC — that path crashed the game).");
+            $"Police messages: on-screen toasts labelled '{DispatchContact.DisplayName}'. " +
+            "Co-op clients receive the same lines via the Steam lobby side-channel " +
+            "(NotificationsManager cannot cross the wire; no custom RPCs). " +
+            $"Peer role now: {peer}.");
     }
 
     /// <summary>
-    /// Full announcement path. <paramref name="urgent"/> is reserved for call-site clarity; every
-    /// announcement toasts when announcements are on.
+    /// Full announcement path. <paramref name="forPlayer"/> null = world (every peer).
+    /// <paramref name="urgent"/> is reserved for call-site clarity.
     /// </summary>
-    internal static void Announce(string title, string body, float toastSeconds = 8f, bool urgent = false)
+    internal static void Announce(
+        string title,
+        string body,
+        float toastSeconds = 8f,
+        bool urgent = false,
+        object? forPlayer = null)
     {
         if (string.IsNullOrWhiteSpace(body))
             return;
@@ -51,35 +65,40 @@ internal static class PoliceMessages
 
         var text = body.Trim();
         var heading = string.IsNullOrWhiteSpace(title) ? DispatchContact.DisplayName : title.Trim();
-        DeliverToast(heading, text, toastSeconds);
+        Deliver(heading, text, toastSeconds, TargetKey(forPlayer), bypassHudGate: false);
         _ = urgent;
     }
 
-    /// <summary>Toast with the Dispatch heading.</summary>
-    internal static void Message(string body)
+    /// <summary>World-level announcement — every peer (host toast + lobby for clients).</summary>
+    internal static void AnnounceWorld(string title, string body, float toastSeconds = 8f, bool urgent = false) =>
+        Announce(title, body, toastSeconds, urgent, forPlayer: null);
+
+    /// <summary>Toast with the Dispatch heading for one player (or world when <paramref name="forPlayer"/> is null).</summary>
+    internal static void Message(string body, object? forPlayer = null)
     {
         if (string.IsNullOrWhiteSpace(body) || !AnnouncementsOn())
             return;
 
-        DeliverToast(DispatchContact.DisplayName, body.Trim(), 10f);
+        Deliver(DispatchContact.DisplayName, body.Trim(), 10f, TargetKey(forPlayer), bypassHudGate: false);
     }
 
     /// <summary>
     /// Immediate toast. Prefer <see cref="Announce"/> for new call sites.
     /// </summary>
-    internal static void Toast(string title, string body, float seconds = 8f, bool urgent = false) =>
-        Announce(title, body, seconds, urgent);
+    internal static void Toast(string title, string body, float seconds = 8f, bool urgent = false, object? forPlayer = null) =>
+        Announce(title, body, seconds, urgent, forPlayer);
 
-    internal static void HeatTierChanged(bool rising, string tierName, float heat, string meaning) =>
+    internal static void HeatTierChanged(bool rising, string tierName, float heat, string meaning, object? forPlayer = null) =>
         Message(rising
             ? $"Police attention just stepped up to {tierName} (heat {heat:0}). {meaning}"
-            : $"Police attention has eased to {tierName} (heat {heat:0}). {meaning}");
+            : $"Police attention has eased to {tierName} (heat {heat:0}). {meaning}",
+            forPlayer);
 
     /// <summary>
     /// Arrest wiped street heat. Outlaw tier is called out when still latched so the player does not
     /// think booking also laundered Marked/Hunted.
     /// </summary>
-    internal static void ArrestClearedHeat(float previousHeat, OutlawTier outlaw)
+    internal static void ArrestClearedHeat(float previousHeat, OutlawTier outlaw, object? forPlayer = null)
     {
         var outlawNote = outlaw switch
         {
@@ -93,10 +112,11 @@ internal static class PoliceMessages
         Message(
             previousHeat > 0.5f
                 ? $"Arrest processed. Your heat was wiped from {previousHeat:0} back to 0 — street pressure resets when you pay the price.{outlawNote}"
-                : $"Arrest processed. Heat stays at 0.{outlawNote}");
+                : $"Arrest processed. Heat stays at 0.{outlawNote}",
+            forPlayer);
     }
 
-    internal static void OutlawChanged(OutlawTier tier)
+    internal static void OutlawChanged(OutlawTier tier, object? forPlayer = null)
     {
         Message(tier switch
         {
@@ -112,28 +132,31 @@ internal static class PoliceMessages
             _ =>
                 "Your outlaw flag is cleared. Fines, searches and shops are back to the normal heat rules — " +
                 "but the heat score itself is unchanged, so the street presence still matches how wanted you are.",
-        });
+        }, forPlayer);
     }
 
-    internal static void FederalBegan(bool stakeout, string propertyName, string trigger, int agents, int hours) =>
+    internal static void FederalBegan(bool stakeout, string propertyName, string trigger, int agents, int hours, object? forPlayer = null) =>
         Message(stakeout
             ? $"A plain-clothes federal team ({agents}) is sitting on {propertyName} for about {hours} in-game hour(s). " +
               $"Reason logged: {trigger}. They are not local PD — walking past them while Marked or Hunted is enough for a search. " +
               "Leaving the property does not end the watch; they hold the post until the assignment expires."
             : $"A plain-clothes federal team ({agents}) is in town asking about you for about {hours} in-game hour(s). " +
               $"Reason logged: {trigger}. They pursue on foot and will not call the whole local force in behind them. " +
-              "Survive the window without getting bagged and the encounter still counts toward outlaw pressure.");
+              "Survive the window without getting bagged and the encounter still counts toward outlaw pressure.",
+            forPlayer);
 
-    internal static void FederalEnded(string reason) =>
+    internal static void FederalEnded(string reason, object? forPlayer = null) =>
         Message($"The federal team has pulled out ({reason}). The cooldown on the next visit has started. " +
-                "Your heat and outlaw status are unchanged by the withdrawal itself.");
+                "Your heat and outlaw status are unchanged by the withdrawal itself.",
+            forPlayer);
 
     internal static void RaidWarning(string propertyName, string when, string reason)
     {
-        // Always deliver — a silent raid is undefendable. Bypasses show_heat_hud.
+        // Always deliver — a silent raid is undefendable. Bypasses show_heat_hud. World audience:
+        // owned properties are shared in co-op.
         var body =
             $"{propertyName} in about {when}. {reason}. Be inside when they arrive or they take product from the containers.";
-        DeliverToastForced("Raid inbound", body, 9f);
+        Deliver("Raid inbound", body, 9f, AnnounceRelay.WorldTarget, bypassHudGate: true);
     }
 
     internal static void RaidResolved(string propertyName, bool present, int stacks, float value, string haul)
@@ -156,53 +179,71 @@ internal static class PoliceMessages
     internal static void RaidCalledOff(string propertyName, string reason) =>
         Message($"The inbound raid on {propertyName} was called off ({reason}). Nothing was taken.");
 
-    internal static void FineSettled(float cash, float bank) =>
+    internal static void FineSettled(float cash, float bank, object? forPlayer = null) =>
         Message(bank > 0.5f
             ? $"Court penalties hit: ${cash:0} taken from cash on hand, and ${bank:0} pulled from your online / bank balance " +
               "as unpaid fine debt. That bank hit is permanent play history — toggling the mod off will not refund it."
-            : $"Court penalties hit: ${cash:0} taken from cash on hand. Your bank balance was not touched this time.");
+            : $"Court penalties hit: ${cash:0} taken from cash on hand. Your bank balance was not touched this time.",
+            forPlayer);
 
-    internal static void LegalFeePaid(string summary) => Message(summary);
+    internal static void LegalFeePaid(string summary, object? forPlayer = null) => Message(summary, forPlayer);
 
-    internal static void InformantFallout(string names) =>
+    internal static void InformantFallout(string names, object? forPlayer = null) =>
         Message($"{names} is who called it in. Their relationship with you just dropped for making that call. " +
-                "This is not a federal tip — it is a civilian who dialled local PD.");
+                "This is not a federal tip — it is a civilian who dialled local PD.",
+            forPlayer);
 
-    internal static void EquipmentSeized(string names) =>
-        Message($"On top of the product, they kept your kit: {names}. Seeds, soil, furniture and lighting are never taken.");
+    internal static void EquipmentSeized(string names, object? forPlayer = null) =>
+        Message($"On top of the product, they kept your kit: {names}. Seeds, soil, furniture and lighting are never taken.",
+            forPlayer);
 
-    internal static void VehicleSearched(int stacks) =>
+    internal static void VehicleSearched(int stacks, object? forPlayer = null) =>
         Message($"The vehicle you were arrested next to was searched. {stacks} stack(s) of product were seized from its storage. " +
-                "Vanilla leaves vehicle cargo alone — this module does not.");
+                "Vanilla leaves vehicle cargo alone — this module does not.",
+            forPlayer);
 
-    internal static void BookedIn(string sentence) =>
-        Announce("Booked in", sentence, toastSeconds: 10f, urgent: true);
+    internal static void BookedIn(string sentence, object? forPlayer = null) =>
+        Announce("Booked in", sentence, toastSeconds: 10f, urgent: true, forPlayer);
 
-    internal static void EarlyRelease(string body) =>
-        Announce("They let you go early", body, toastSeconds: 7f, urgent: true);
+    internal static void EarlyRelease(string body, object? forPlayer = null) =>
+        Announce("They let you go early", body, toastSeconds: 7f, urgent: true, forPlayer);
 
-    internal static void ShopRefused(string reason) =>
-        Announce("They will not serve you", reason, toastSeconds: 8f, urgent: false);
+    internal static void ShopRefused(string reason, object? forPlayer = null) =>
+        Announce("They will not serve you", reason, toastSeconds: 8f, urgent: false, forPlayer);
 
     internal static string DescribeMode() =>
-        "toast_only (no custom Dispatch NPC — phone text was retired because it crashed the game)";
+        "toast + steam-lobby relay (no custom Dispatch NPC; no custom RPCs)";
 
-    private static void DeliverToast(string title, string text, float toastSeconds)
+    /// <summary>
+    /// Player key for relay targeting. Null player ⇒ world audience (every peer).
+    /// </summary>
+    internal static string TargetKey(object? player) =>
+        player is null ? AnnounceRelay.WorldTarget : GameBridge.KeyFor(player);
+
+    /// <summary>Resolve a heat-record key back to a live player object when possible.</summary>
+    internal static object? PlayerForRecord(PlayerHeatRecord record)
     {
-        if (!AnnouncementsOn())
-            return;
+        foreach (var player in GameBridge.Players())
+        {
+            if (player is not null &&
+                string.Equals(GameBridge.KeyFor(player), record.PlayerKey, StringComparison.Ordinal))
+                return player;
+        }
 
-        DeliverToastForced(title, text, toastSeconds);
+        return GameBridge.LocalPlayer();
     }
 
-    /// <summary>Toast ignoring show_heat_hud (raid/custody critical path).</summary>
-    private static void DeliverToastForced(string title, string text, float toastSeconds)
+    private static void Deliver(string title, string text, float toastSeconds, string targetKey, bool bypassHudGate)
     {
+        if (!bypassHudGate && !AnnouncementsOn())
+            return;
+
         _lastBody = text;
         _sent++;
-        _lastDelivery = $"toast #{_sent}: {title}";
-        GameBridge.Notify(title, text, toastSeconds);
-        PoliceLog.Detail($"Dispatch toast: {TrimForLog(text)}");
+        AnnounceRelay.Deliver(title, text, toastSeconds, targetKey, bypassHudGate);
+        _lastDelivery =
+            $"#{_sent}: {title} → {targetKey} via {AnnounceRelay.RouteInUse} ({AnnounceRelay.PeerRole})";
+        PoliceLog.Detail($"Dispatch toast: [{targetKey}] {TrimForLog(text)}");
     }
 
     private static bool AnnouncementsOn() =>

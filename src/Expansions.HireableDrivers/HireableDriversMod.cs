@@ -1,7 +1,7 @@
 using Expansions.Core;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(Expansions.HireableDrivers.HireableDriversMod), "Hireable Drivers", "0.7.4", "Evan")]
+[assembly: MelonInfo(typeof(Expansions.HireableDrivers.HireableDriversMod), "Hireable Drivers", "0.7.5", "Evan")]
 [assembly: MelonGame("TVGS", "Schedule I")]
 [assembly: MelonColor(255, 90, 170, 240)]
 [assembly: MelonPlatformDomain(MelonPlatformDomainAttribute.CompatibleDomains.IL2CPP)]

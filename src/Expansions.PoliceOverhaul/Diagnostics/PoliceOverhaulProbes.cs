@@ -209,6 +209,7 @@ internal static class PoliceOverhaulProbes
         result.Fact("Wire status", PoliceRuntime.WireStatus);
         result.Fact("PoliceRuntime.IsLive", PoliceRuntime.IsLive ? "yes — actions should be green" : "**no — actions stay red**");
         result.Fact("HostGate", HostGate.Evaluate(out var authority) ? $"authority ({authority})" : $"blocked ({authority})");
+        result.Fact("Announce peer/route", $"{AnnounceRelay.PeerRole} / {AnnounceRelay.RouteInUse}");
         result.Fact("Active scene", GameReflection.ActiveSceneName());
         result.Fact("Gameplay scene?", PoliceOverhaulModule.IsGameplayScene() ? "yes" : "no");
         result.Fact("Harmony applied", PolicePatches.AppliedTargets.Count.ToString());
@@ -229,6 +230,14 @@ internal static class PoliceOverhaulProbes
 
         if (!PoliceRuntime.IsLive)
         {
+            if (string.Equals(authority, "client", StringComparison.Ordinal))
+            {
+                result.Ok(
+                    "This peer is a co-op client — world runtime stays off by design (actions stay red). " +
+                    "Announcement relay should be live; see Announce peer/route above and police.messages.");
+                return;
+            }
+
             result.Fail(
                 "Runtime is not live, so every police action is red. Wire retries from OnUpdate once Main is up and " +
                 "HostGate passes — if this sticks, read Wire status above.");
@@ -548,6 +557,13 @@ internal static class PoliceOverhaulProbes
             });
 
         result.Fact("Owned properties", owned.Count.ToString());
+        result.Fact("Raid excluded codes", config.RaidExcludedProperties.Value);
+        if (PoliceRuntime.Raids is { } raidDirector)
+        {
+            var candidates = raidDirector.RaidCandidates();
+            result.Fact("Raid candidates after exclusions", $"{candidates.Count}: {raidDirector.LastCandidateReport}");
+        }
+
         result.Fact("Containers found on them", storages.ToString());
         result.Fact("Contraband stacks in those containers", contraband.ToString());
         result.Fact("Daily payroll (the processing fee base)", $"${consequences.Custody.DailyPayroll():N0}");
@@ -659,19 +675,35 @@ internal static class PoliceOverhaulProbes
 
     private static void Messages(ProbeContext context, ProbeResult result)
     {
-        result.Fact("Channel", "toast-only (no custom Dispatch NPC)");
+        HostGate.Evaluate(out var peer);
+        result.Fact("Channel", "toast + Steam lobby relay (no custom Dispatch NPC, no custom RPCs)");
         result.Fact("Display label", DispatchContact.DisplayName);
         result.Fact("Legacy contact id", $"{DispatchContact.ContactId} (not spawned)");
         result.Fact("Channel ready", PoliceMessages.ContactReady ? "yes" : "**no**");
         result.Fact("Announcements", PoliceRuntime.Config is { ShowHud.Value: false } ? "**off** (show_heat_hud)" : "on");
         result.Fact("Announce mode", PoliceMessages.DescribeMode());
+        result.Fact("Peer role", $"{AnnounceRelay.PeerRole} (HostGate={peer})");
+        result.Fact("Announcement route", AnnounceRelay.RouteInUse);
+        result.Fact("Lobby seq", AnnounceRelay.Sequence.ToString());
         result.Fact("Messages sent this session", PoliceMessages.Sent.ToString());
         result.Fact("Last delivery", PoliceMessages.LastDelivery);
         result.Fact("Last body", string.IsNullOrEmpty(PoliceMessages.LastBody) ? "-" : PoliceMessages.LastBody);
+        result.Fact(
+            "Raid candidates",
+            PoliceRuntime.Raids is { } raids ? raids.LastCandidateReport : "raids not wired");
+
+        if (string.Equals(peer, "client", StringComparison.Ordinal) && !PoliceRuntime.IsLive)
+        {
+            result.Ok(
+                "This peer is a co-op client. World authority stays on the host; announcements arrive via " +
+                "Steam lobby data (exp_po_ann) → local NotificationsManager toast. Check Announcement route after " +
+                "the host fires a raid/heat/outlaw line.");
+            return;
+        }
 
         result.Ok(
-            "Police announcements are on-screen toasts labelled Dispatch Office. A custom messaging NPC " +
-            "was retired because S1API could not finalize it and the half-built body crashed the game.");
+            "Police announcements are on-screen toasts labelled Dispatch Office. Host publishes the same line " +
+            "to Steam lobby data so clients toast locally — NotificationsManager cannot cross the wire.");
     }
 
     private static void Scheduler(ProbeContext context, ProbeResult result)

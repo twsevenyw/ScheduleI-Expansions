@@ -87,6 +87,18 @@ internal static class Estate
     internal static string CodeOf(object? property) => Members.Read(property, "PropertyCode", string.Empty);
 
     /// <summary>
+    /// Whether a property still exists in the world and is currently owned. Destroyed / unloaded
+    /// entries and unowned shells are never raid candidates.
+    /// </summary>
+    internal static bool IsValidOwned(object? property)
+    {
+        if (property is null || !GameReflection.IsPresent(property))
+            return false;
+
+        return Members.Read(property, "IsOwned", false);
+    }
+
+    /// <summary>
     /// Whether a point is inside the property, using the game's own collider test. A property whose
     /// bounds cannot be read answers <c>false</c>, which is the safe direction: a raid on a property
     /// the player might be standing in would read as a bug.

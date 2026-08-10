@@ -2,7 +2,7 @@
   <PropertyGroup>
     <RootNamespace>Expansions.HireableDrivers</RootNamespace>
     <AssemblyName>Expansions.HireableDrivers</AssemblyName>
-    <Version>0.7.4</Version>
+    <Version>0.7.5</Version>
     <Description>Driver employees who can transport items between your properties, businesses, and dealers.</Description>
     <ExpansionsDeployDir>$(GameDir)\Mods</ExpansionsDeployDir>
   </PropertyGroup>

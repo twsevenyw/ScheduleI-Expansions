@@ -63,7 +63,7 @@
      NEW SURFACE      Triggerable EVENTS on the UP ARROW: a short in-world list you raise while
                       playing. Police contributes five; Core contributes two so the list is
                       never empty. Shift+Up re-fires the last one.
-     DRIVERS          Reworked to the game's own screens (v0.7.4). Driver is now one employee type
+     DRIVERS          Reworked to the game's own screens (v0.7.5). Driver is now one employee type
                       in the Fixer's normal type -> location flow; the clipboard says Driver and
                       every paid hire must verify a visible world position first. See section 5.
      POLICE           Seven previously-deferred features built (v0.3.0): property raids,
@@ -730,6 +730,9 @@
   job BETWEEN logistics properties and dealers. Same hiring, same wages, same bed requirement,
   same five-route grammar. A fresh Veeper is created and boarded only when a valid route departs;
   the remaining new verb is "depart when the trunk holds N items."
+  Spawn success uses the live object returned by SpawnAndReturnVehicle; manager registration is
+  asynchronous and is never used as immediate success proof. All empty player Veeper duplicates are
+  removed once on load across the world. Delivery-vehicle codes, occupied vans and cargo vans are kept.
 
   A driver is a real vanilla Packager (EEmployeeType.Handler) whose packaging brain is suppressed
   during a trip and whose movement a managed state machine owns. It is NOT a new Employee

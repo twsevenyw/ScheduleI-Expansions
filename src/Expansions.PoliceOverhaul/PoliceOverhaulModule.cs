@@ -51,6 +51,7 @@ public sealed class PoliceOverhaulModule : ExpansionModule
     private OfficerKillResponse? _officerKills;
 
     private bool _wired;
+    private bool _clientWired;
     private bool _patchesApplied;
     private int _wireBackoffFrames;
     private int _enableGeneration;
@@ -70,7 +71,7 @@ public sealed class PoliceOverhaulModule : ExpansionModule
         "status, federal agents, stakeouts, raids on your properties, and an arrest that costs you the " +
         "day, your kit and your bank balance.";
 
-    public override string Version => "0.5.3";
+    public override string Version => "0.5.4";
 
     public override string ConfigCategory => ExpansionConfig.CategoryFor("PoliceImprovements");
 
@@ -121,6 +122,12 @@ public sealed class PoliceOverhaulModule : ExpansionModule
 
     public override void OnUpdate()
     {
+        if (_clientWired)
+        {
+            AnnounceRelay.Poll();
+            return;
+        }
+
         if (!_wired)
         {
             TryWire("OnUpdate");
@@ -184,10 +191,14 @@ public sealed class PoliceOverhaulModule : ExpansionModule
     /// Idempotent attempt to attach services. Retries when the scene is not ready or HostGate is
     /// briefly false during FishNet startup — that one-shot failure is why actions stayed red after
     /// a successful "Enabled." at boot.
+    /// <para>
+    /// A confirmed co-op <c>client</c> never gets world authority (by design). That peer still wires
+    /// an announce-only path so Dispatch toasts reach them via the Steam lobby side-channel.
+    /// </para>
     /// </summary>
     private void TryWire(string trigger)
     {
-        if (_wired || _config is null)
+        if (_wired || _clientWired || _config is null)
             return;
 
         if (_wireBackoffFrames > 0)
@@ -205,6 +216,12 @@ public sealed class PoliceOverhaulModule : ExpansionModule
 
         if (!HostGate.Evaluate(out var authority))
         {
+            if (string.Equals(authority, "client", StringComparison.Ordinal))
+            {
+                WireClient(trigger);
+                return;
+            }
+
             _lastWireBlock = $"HostGate not ready ({authority}) via {trigger}";
             PoliceRuntime.WireStatus = _lastWireBlock;
             _wireBackoffFrames = WireRetryBackoffFrames;
@@ -213,6 +230,39 @@ public sealed class PoliceOverhaulModule : ExpansionModule
         }
 
         Wire(trigger, authority);
+    }
+
+    /// <summary>
+    /// Client peer: no world writes, no Harmony mutation patches — only the announcement relay.
+    /// Host cannot push <c>NotificationsManager</c> toasts across the wire without custom RPCs.
+    /// </summary>
+    private void WireClient(string trigger)
+    {
+        if (_clientWired || _config is null)
+            return;
+
+        PoliceRuntime.AttachConfigOnly(_config);
+        AnnounceRelay.AttachClient();
+        _clientWired = true;
+        Lifetime.OnDispose(UnwireClient);
+
+        var summary =
+            $"client announce-only via {trigger}: route={AnnounceRelay.RouteInUse}, " +
+            "peer=client, world authority=no, lobby key=exp_po_ann";
+        PoliceRuntime.WireStatus = summary;
+        PoliceLog.Msg(
+            "Police Improvements: this peer is a co-op client. World effects stay host-authoritative; " +
+            "Dispatch announcements arrive via Steam lobby data → local toast. " + summary);
+    }
+
+    private void UnwireClient()
+    {
+        AnnounceRelay.Detach();
+        if (!_wired)
+            PoliceRuntime.Detach();
+        _clientWired = false;
+        PoliceRuntime.WireStatus = "client announce relay detached";
+        PoliceLog.Msg("Police Improvements client announce relay detached.");
     }
 
     private void Wire(string trigger, string authority)

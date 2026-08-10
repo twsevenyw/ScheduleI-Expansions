@@ -93,7 +93,7 @@ internal static class PoliceEvents
 
         var started = federal.ForceBegin(out var message);
         if (!started)
-            PoliceMessages.Announce("Federal agents", message);
+            PoliceMessages.Announce("Federal agents", message, forPlayer: GameBridge.LocalPlayer());
         return started ? ActionResult.Ok(message) : ActionResult.Failed(message);
     }
 
@@ -104,7 +104,7 @@ internal static class PoliceEvents
 
         var started = raids.Force(immediate, out var message);
         if (!started || immediate)
-            PoliceMessages.Announce(immediate ? "Raid" : "Raid", message);
+            PoliceMessages.Announce(immediate ? "Raid" : "Raid", message, forPlayer: GameBridge.LocalPlayer());
         return started ? ActionResult.Ok(message) : ActionResult.Failed(message);
     }
 
@@ -122,7 +122,7 @@ internal static class PoliceEvents
         var message =
             $"You are now {OutlawState.Describe(next)}. Body searches will find something, pursuits will not " +
             "let go, fines are multiplied, and card-only vendors have closed to you.";
-        PoliceMessages.Announce($"Outlaw: {OutlawState.Describe(next)}", message);
+        PoliceMessages.Announce($"Outlaw: {OutlawState.Describe(next)}", message, forPlayer: GameBridge.LocalPlayer());
         return ActionResult.Ok(message);
     }
 
@@ -141,7 +141,7 @@ internal static class PoliceEvents
             ? response.RespondNow(native, "event hotkey")
             : FallbackCall(native);
 
-        PoliceMessages.Announce("Dispatch", message);
+        PoliceMessages.Announce("Dispatch", message, forPlayer: GameBridge.LocalPlayer());
         return PoliceForce.LastShortfall.Length > 0 && message.Contains("0 officer", StringComparison.Ordinal)
             ? ActionResult.Failed(message)
             : ActionResult.Ok(message);

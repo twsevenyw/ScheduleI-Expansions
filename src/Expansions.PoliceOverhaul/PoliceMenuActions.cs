@@ -128,7 +128,7 @@ internal static class PoliceMenuActions
         }
 
         var body = string.Join(" ", lines);
-        PoliceMessages.Announce(headline, body);
+        PoliceMessages.Announce(headline, body, forPlayer: GameBridge.LocalPlayer());
         return ActionResult.Ok($"{headline}. {body}");
     }
 
@@ -156,7 +156,7 @@ internal static class PoliceMenuActions
                 $"call the police, card-only vendors would refuse you, fines would be x{config.OutlawFineMultiplier.Value:0.0}, and an " +
                 $"arrest would cost you the rest of the day plus ${consequences.Custody.ProcessingFeeDue():N0} in processing.";
 
-            PoliceMessages.Announce("Outlaw: CLEAN", preview);
+            PoliceMessages.Announce("Outlaw: CLEAN", preview, forPlayer: GameBridge.LocalPlayer());
             return ActionResult.Ok(preview);
         }
 
@@ -170,7 +170,7 @@ internal static class PoliceMenuActions
             $"${config.FeeFor(record.Outlaw):N0} for {OutlawState.Describe(record.Outlaw)}; serving it out takes " +
             $"{config.OutlawClearDays.Value - record.CleanDayStreak} more clean day(s).";
 
-        PoliceMessages.Announce($"Outlaw: {OutlawState.Describe(record.Outlaw)}", bill);
+        PoliceMessages.Announce($"Outlaw: {OutlawState.Describe(record.Outlaw)}", bill, forPlayer: GameBridge.LocalPlayer());
         return ActionResult.Ok(bill);
     }
 
@@ -192,7 +192,7 @@ internal static class PoliceMenuActions
         var message =
             $"Heat {before:0} -> {record.Heat:0} ({HeatModel.TierName(record.Tier)}). " +
             $"Law intensity is now {heat.CurrentIntensity} (baseline {heat.BaselineIntensity}); posts and detection re-evaluated immediately.";
-        PoliceMessages.Announce($"Heat {record.Heat:0}", message);
+        PoliceMessages.Announce($"Heat {record.Heat:0}", message, forPlayer: GameBridge.LocalPlayer());
         return ActionResult.Ok(message);
     }
 
@@ -211,7 +211,7 @@ internal static class PoliceMenuActions
         var message =
             $"Heat set to {record.Heat:0} ({HeatModel.TierName(record.Tier)}). " +
             $"Law intensity is now {heat.CurrentIntensity} (baseline {heat.BaselineIntensity}); posts and detection re-evaluated immediately.";
-        PoliceMessages.Announce($"Heat {record.Heat:0}", message);
+        PoliceMessages.Announce($"Heat {record.Heat:0}", message, forPlayer: GameBridge.LocalPlayer());
         return ActionResult.Ok(message);
     }
 
@@ -228,7 +228,7 @@ internal static class PoliceMenuActions
         var message = $"You are now {OutlawState.Describe(next)}. Searches will find something, pursuits will not let go, " +
                       "fines are doubled, dealers charge more and card-only vendors have closed to you.";
 
-        PoliceMessages.Announce($"Outlaw: {OutlawState.Describe(next)}", message);
+        PoliceMessages.Announce($"Outlaw: {OutlawState.Describe(next)}", message, forPlayer: GameBridge.LocalPlayer());
         return ActionResult.Ok(message);
     }
 
@@ -248,7 +248,7 @@ internal static class PoliceMenuActions
         var message = $"{OutlawState.Describe(previous)} down to {OutlawState.Describe(record.Outlaw)}, " +
                       $"and heat pulled back to {record.Heat:0} so it does not immediately re-latch.";
 
-        PoliceMessages.Announce($"Outlaw: {OutlawState.Describe(record.Outlaw)}", message);
+        PoliceMessages.Announce($"Outlaw: {OutlawState.Describe(record.Outlaw)}", message, forPlayer: GameBridge.LocalPlayer());
         return ActionResult.Ok(message);
     }
 
@@ -259,7 +259,7 @@ internal static class PoliceMenuActions
 
         var paid = outlaw.PayLegalFee(heat.LocalRecord, out var message);
         if (!paid)
-            PoliceMessages.Announce("Legal fee", message);
+            PoliceMessages.Announce("Legal fee", message, forPlayer: GameBridge.LocalPlayer());
         return paid ? ActionResult.Ok(message) : ActionResult.Failed(message);
     }
 
@@ -284,7 +284,7 @@ internal static class PoliceMenuActions
         var started = federal.ForceBegin(out var message);
         // ForceBegin already texts the rich FederalBegan copy on success.
         if (!started)
-            PoliceMessages.Announce("Federal agents", message);
+            PoliceMessages.Announce("Federal agents", message, forPlayer: GameBridge.LocalPlayer());
         return started ? ActionResult.Ok(message) : ActionResult.Failed(message);
     }
 
@@ -296,7 +296,7 @@ internal static class PoliceMenuActions
         var started = raids.Force(immediate: false, out var message);
         // RaidWarning already announces on success; still surface failures as a Dispatch text.
         if (!started)
-            PoliceMessages.Announce("Raid", message);
+            PoliceMessages.Announce("Raid", message, forPlayer: GameBridge.LocalPlayer());
         return started ? ActionResult.Ok(message) : ActionResult.Failed(message);
     }
 
@@ -318,7 +318,7 @@ internal static class PoliceMenuActions
               $"({after.Ghost} ghost) / {after.Total - after.Agents} shipped total. " +
               "No cloning — the closed officer set is the ceiling.";
 
-        PoliceMessages.Announce("Police force", message);
+        PoliceMessages.Announce("Police force", message, forPlayer: GameBridge.LocalPlayer());
         return before.Total == 0 && revived == 0
             ? ActionResult.Failed(message)
             : ActionResult.Ok(message);
@@ -361,7 +361,7 @@ internal static class PoliceMenuActions
         PoliceRuntime.Schedule?.Restore();
 
         var message = $"{wiped} player record(s) cleared, dealer cuts and snitch chances restored, and the world put back to vanilla.";
-        PoliceMessages.Announce("Police state reset", message);
+        PoliceMessages.Announce("Police state reset", message, forPlayer: GameBridge.LocalPlayer());
         return ActionResult.Ok(message);
     }
 

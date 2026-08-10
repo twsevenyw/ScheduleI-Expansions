@@ -108,7 +108,7 @@ internal sealed class Informants
         PoliceLog.Msg($"Relationship dropped by {delta:0.00} with {names} for calling the police.");
 
         if (_config.ShowHud.Value)
-            PoliceMessages.InformantFallout(names);
+            PoliceMessages.InformantFallout(names, player);
 
         return names;
     }

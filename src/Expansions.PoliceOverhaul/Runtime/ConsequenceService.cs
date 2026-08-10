@@ -156,7 +156,7 @@ internal sealed class ConsequenceService
         PoliceLog.Msg($"Seized {taken} equipment stack(s) from an outlawed player: {names}.");
 
         if (_config.ShowHud.Value)
-            PoliceMessages.EquipmentSeized(names);
+            PoliceMessages.EquipmentSeized(names, GameBridge.LocalPlayer());
 
         return taken;
     }
@@ -277,7 +277,7 @@ internal sealed class ConsequenceService
         _heat.AddPoliceTake(player, alreadyTaken + paid + LastDebtRaised);
 
         if (_config.ShowHud.Value && (LastFineCharged > 0f || LastDebtRaised > 0f))
-            PoliceMessages.FineSettled(LastFineCharged, LastDebtRaised);
+            PoliceMessages.FineSettled(LastFineCharged, LastDebtRaised, player);
 
         PoliceLog.Msg(
             $"Arrest settled: base ${baseFine:0} x{MultiplierFor(player):0.00} = ${owed:0}; " +
@@ -324,7 +324,7 @@ internal sealed class ConsequenceService
             PoliceLog.Msg($"Seized {taken} stack(s) of product from the impounded vehicle.");
 
             if (_config.ShowHud.Value)
-                PoliceMessages.VehicleSearched(taken);
+                PoliceMessages.VehicleSearched(taken, GameBridge.LocalPlayer());
         }
 
         return taken;

@@ -64,7 +64,7 @@ internal sealed class Custody
 
         // Toast: the clock skip lands moments later; a phone text would arrive after the jump.
         if (_config.ShowHud.Value)
-            PoliceMessages.BookedIn(sentence);
+            PoliceMessages.BookedIn(sentence, player);
 
         // Off this stack: release finishes inside a FishNet RPC body, and moving the world clock from
         // in there re-enters the arrest teardown.
@@ -78,7 +78,8 @@ internal sealed class Custody
             else if (_config.ShowHud.Value)
             {
                 PoliceMessages.EarlyRelease(
-                    "The clock could not be moved, so you kept the rest of the day. The processing fee still stood.");
+                    "The clock could not be moved, so you kept the rest of the day. The processing fee still stood.",
+                    player);
             }
         });
 

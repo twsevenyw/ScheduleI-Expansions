@@ -16,7 +16,14 @@ internal static class PoliceRuntime
     /// <summary>Last wire/unwire cycle summary for probes and red-action tooltips.</summary>
     internal static string WireStatus { get; set; } = "module not enabled";
 
+    /// <summary>
+    /// Module config. Set by full <see cref="Attach"/> on the host, or by
+    /// <see cref="AttachConfigOnly"/> on a co-op client (announce relay needs the HUD gate).
+    /// </summary>
     internal static PoliceConfig? Config { get; private set; }
+
+    /// <summary>Client announce-only wire: config without heat/raid services.</summary>
+    internal static void AttachConfigOnly(PoliceConfig config) => Config = config;
 
     internal static HeatDirector? Heat { get; private set; }
 

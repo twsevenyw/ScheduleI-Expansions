@@ -1,6 +1,7 @@
 using Expansions.HireableDrivers.Config;
 using Expansions.HireableDrivers.Game;
 using Expansions.HireableDrivers.Persistence;
+using UnityEngine;
 
 namespace Expansions.HireableDrivers.Runtime;
 
@@ -16,6 +17,8 @@ namespace Expansions.HireableDrivers.Runtime;
 /// </summary>
 internal static class DriverHiring
 {
+    private static bool _playerVansCleaned;
+
     /// <summary>
     /// The escalating signing fee. Counted across every property you own, not just this one, which is the
     /// shipped employee rule.
@@ -209,7 +212,7 @@ internal static class DriverHiring
             return true;
         }
 
-        if (DriverSettings.ProvideVanOnHire && TrySpawnVan(record))
+        if (DriverSettings.ProvideVanOnHire && TrySpawnVan(record, null, out _))
             return true;
 
         // Players who switch dedicated vans off still get the old behaviour: use their largest
@@ -229,7 +232,7 @@ internal static class DriverHiring
             return false;
         }
 
-        return TrySpawnVan(record);
+        return TrySpawnVan(record, null, out _);
     }
 
     /// <summary>
@@ -256,18 +259,9 @@ internal static class DriverHiring
             return false;
         }
 
-        if (!TrySpawnVan(record, employee))
+        if (!TrySpawnVan(record, employee, out vehicle) || vehicle is null)
         {
             failure = "the game would not create a fresh Veeper";
-            return false;
-        }
-
-        vehicle = VehicleApi.FindByGuid(record.VehicleGuid);
-        if (!Gx.Alive(vehicle))
-        {
-            failure = "the fresh Veeper was not present in VehicleManager";
-            record.VehicleGuid = string.Empty;
-            record.SpawnedVehicle = false;
             return false;
         }
 
@@ -276,7 +270,9 @@ internal static class DriverHiring
         if (!EmployeeApi.EnterVehicle(employee, vehicle))
         {
             failure = "the driver could not be seated in the fresh Veeper";
-            RetireTripVan(record, employee, preserveCargo: false);
+            Gx.Call(vehicle, "DestroyVehicle", Array.Empty<string>());
+            record.VehicleGuid = string.Empty;
+            record.SpawnedVehicle = false;
             vehicle = null;
             return false;
         }
@@ -309,6 +305,54 @@ internal static class DriverHiring
     }
 
     /// <summary>
+    /// Removes every empty player Veeper left by the v0.7.4 registration race, across the whole world.
+    /// Delivery vehicles have different codes and are untouched. Cargo-bearing/occupied vans are kept
+    /// so cleanup cannot delete inventory or destabilize a player currently inside one.
+    /// </summary>
+    internal static int CleanupOrphanTripVans(DriverRecord record)
+    {
+        if (_playerVansCleaned)
+            return 0;
+
+        var vehicles = VehicleApi.AllVehicles().Where(Gx.Alive).ToArray();
+        if (vehicles.Length == 0)
+            return 0;
+        _playerVansCleaned = true;
+
+        var removed = 0;
+        foreach (var vehicle in vehicles)
+        {
+            var guid = VehicleApi.Guid(vehicle);
+            if (!string.Equals(
+                    VehicleApi.Code(vehicle),
+                    VehicleApi.DriverVanCode,
+                    StringComparison.OrdinalIgnoreCase) ||
+                VehicleApi.HasPlayerAboard(vehicle) ||
+                TransitApi.UnitsInStorage(VehicleApi.Storage(vehicle)) > 0)
+            {
+                continue;
+            }
+
+            Gx.Call(vehicle, "DestroyVehicle", Array.Empty<string>());
+            removed++;
+
+            foreach (var driver in DriverStore.Records.Where(driver =>
+                         string.Equals(driver.VehicleGuid, guid, StringComparison.OrdinalIgnoreCase)))
+            {
+                driver.VehicleGuid = string.Empty;
+                driver.SpawnedVehicle = false;
+            }
+        }
+
+        if (removed > 0)
+            DriverLog.Msg($"Removed {removed} empty duplicate player Veeper(s); delivery vehicles were untouched.");
+
+        return removed;
+    }
+
+    internal static void ForgetVehicleCleanup() => _playerVansCleaned = false;
+
+    /// <summary>
     /// Provides the shipped 16-slot Veeper. The code is verified from the live prefab catalogue and
     /// real <c>OwnedVehicles.json</c>; dedicated mode refuses substitutes so the hiring promise stays
     /// literal.
@@ -317,8 +361,9 @@ internal static class DriverHiring
     /// vehicle save path. The record marks it as provided so an empty one can be cleaned up on fire.
     /// </para>
     /// </summary>
-    private static bool TrySpawnVan(DriverRecord record, object? departingEmployee = null)
+    private static bool TrySpawnVan(DriverRecord record, object? departingEmployee, out object? spawned)
     {
+        spawned = null;
         var manager = VehicleApi.Manager();
         if (manager is null)
             return false;
@@ -355,7 +400,7 @@ internal static class DriverHiring
             spawn = fallback;
         }
 
-        var spawned = Gx.Call(
+        spawned = Gx.Call(
             manager,
             "SpawnAndReturnVehicle",
             new[] { "String", "Vector3", "Quaternion", "Boolean" },

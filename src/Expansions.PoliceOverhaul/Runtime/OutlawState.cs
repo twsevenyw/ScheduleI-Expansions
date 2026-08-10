@@ -193,7 +193,7 @@ internal sealed class OutlawState
         PoliceLog.Msg($"Legal fee paid: ${fee} ({Describe(previous)} -> {Describe(record.Outlaw)}).");
 
         if (_config.ShowHud.Value)
-            PoliceMessages.LegalFeePaid(message);
+            PoliceMessages.LegalFeePaid(message, GameBridge.LocalPlayer());
 
         return true;
     }

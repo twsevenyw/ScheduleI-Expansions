@@ -101,7 +101,7 @@ internal sealed class OfficerKillResponse
         PoliceLog.Msg($"Officer kill response: {message}");
 
         if (_config.ShowHud.Value)
-            PoliceMessages.Announce("Officer down", message, toastSeconds: 10f, urgent: true);
+            PoliceMessages.Announce("Officer down", message, toastSeconds: 10f, urgent: true, forPlayer: player);
     }
 
     private static void RaiseWanted(object player, int level)

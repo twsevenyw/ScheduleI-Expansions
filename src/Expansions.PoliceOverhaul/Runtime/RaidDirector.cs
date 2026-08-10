@@ -53,6 +53,9 @@ internal sealed class RaidDirector
 
     internal float ValueSeized { get; private set; }
 
+    /// <summary>Last candidate enumeration for probes (codes + why kept/dropped).</summary>
+    internal string LastCandidateReport { get; private set; } = "not enumerated yet";
+
     /// <summary>
     /// Hourly eligibility check. High heat is enough; outlaw status always qualifies and shortens
     /// the scheduler interval.
@@ -110,9 +113,15 @@ internal sealed class RaidDirector
             return;
         }
 
-        if (!GameReflection.IsPresent(_target))
+        if (!GameReflection.IsPresent(_target) || !Estate.IsValidOwned(_target))
         {
-            Cancel("the property is no longer loaded");
+            Cancel("the property is no longer loaded or owned");
+            return;
+        }
+
+        if (_config.IsRaidExcluded(Estate.CodeOf(_target)))
+        {
+            Cancel($"'{Estate.CodeOf(_target)}' is on raid_excluded_properties");
             return;
         }
 
@@ -282,9 +291,16 @@ internal sealed class RaidDirector
     /// </summary>
     private object? PickTarget(object player, bool allowOccupied, bool preferCurrent)
     {
-        var owned = Owned();
+        var owned = RaidCandidates();
         if (owned.Count == 0)
+        {
+            _lastScheduleFailure =
+                "Raid skipped — no valid owned property left after exclusions " +
+                $"(raid_excluded_properties='{_config.RaidExcludedProperties.Value}') and validity checks. " +
+                LastCandidateReport;
+            PoliceLog.Msg(_lastScheduleFailure);
             return null;
+        }
 
         var position = Components.TransformOf(player)?.position ?? Vector3.zero;
 
@@ -335,7 +351,44 @@ internal sealed class RaidDirector
         return !requireAbsent || !Estate.Contains(property, playerPosition);
     }
 
-    private static IReadOnlyList<object> Owned() => Estate.Owned();
+    /// <summary>
+    /// Owned properties that still exist and are not on <c>raid_excluded_properties</c>.
+    /// Updates <see cref="LastCandidateReport"/> every call.
+    /// </summary>
+    internal IReadOnlyList<object> RaidCandidates()
+    {
+        var kept = new List<object>();
+        var notes = new List<string>();
+
+        foreach (var property in Estate.Owned())
+        {
+            var code = Estate.CodeOf(property);
+            var label = code.Length > 0 ? code : Estate.NameOf(property);
+
+            if (!Estate.IsValidOwned(property))
+            {
+                notes.Add($"{label}=skip(invalid/unowned/destroyed)");
+                continue;
+            }
+
+            if (_config.IsRaidExcluded(code))
+            {
+                notes.Add($"{label}=skip(excluded)");
+                continue;
+            }
+
+            kept.Add(property);
+            notes.Add($"{label}=candidate");
+        }
+
+        LastCandidateReport =
+            notes.Count == 0
+                ? "no owned properties"
+                : string.Join("; ", notes) +
+                  $" | kept {kept.Count}, excluded cfg='{_config.RaidExcludedProperties.Value}'";
+
+        return kept;
+    }
 
     private void Execute()
     {

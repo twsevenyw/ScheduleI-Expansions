@@ -27,7 +27,7 @@ internal sealed class HeatDirector
 
     private int? _intensityOnEnable;
     private int _lastWrittenIntensity = int.MinValue;
-    private HeatTier _lastAnnouncedTier = (HeatTier)(-1);
+    private readonly Dictionary<string, HeatTier> _lastAnnouncedTier = new(StringComparer.Ordinal);
 
     internal HeatDirector(PoliceConfig config, LawScheduleTuner schedule, DetectionTuner detection, OutlawState outlaw)
     {
@@ -99,10 +99,10 @@ internal sealed class HeatDirector
     internal void Adopt(PoliceSaveState state)
     {
         _records.Clear();
+        _lastAnnouncedTier.Clear();
         foreach (var record in state.Players)
             _records[record.PlayerKey] = record;
 
-        _lastAnnouncedTier = (HeatTier)(-1);
         PoliceLog.Msg($"Loaded heat for {_records.Count} player(s) from the save.");
     }
 
@@ -148,11 +148,11 @@ internal sealed class HeatDirector
             record.Heat = 0f;
             PoliceLog.Detail(
                 $"Heat {before:0.#} -> 0 (arrest reset). Outlaw {OutlawState.Describe(record.Outlaw)} unchanged.");
-            AnnounceTierIfChanged();
+            AnnounceTierFor(record);
             ApplyWorldNow();
 
             if (_config.ShowHud.Value)
-                PoliceMessages.ArrestClearedHeat(before, record.Outlaw);
+                PoliceMessages.ArrestClearedHeat(before, record.Outlaw, player);
 
             return;
         }
@@ -189,7 +189,7 @@ internal sealed class HeatDirector
     internal void SetHeat(PlayerHeatRecord record, float heat)
     {
         record.Heat = HeatModel.Clamp(heat);
-        AnnounceTierIfChanged();
+        AnnounceTierFor(record);
         // Menu heat buttons used to only mutate the score; the streets caught up on the next game
         // minute, which read as a silent no-op. Push the world now.
         ApplyWorldNow();
@@ -285,7 +285,7 @@ internal sealed class HeatDirector
         _detection.Apply(tier, scalar, FederalAgents.IsAgent);
         PoliceRuntime.Response?.Apply();
 
-        AnnounceTierIfChanged();
+        AnnounceAllTiers();
     }
 
     /// <summary>
@@ -337,7 +337,7 @@ internal sealed class HeatDirector
             record.MinutesCleanToday = 0;
         }
 
-        AnnounceTierIfChanged();
+        AnnounceAllTiers();
     }
 
     // ── Teardown ──────────────────────────────────────────────────────────────────────────────
@@ -364,7 +364,7 @@ internal sealed class HeatDirector
     {
         _intensityOnEnable = null;
         _lastWrittenIntensity = int.MinValue;
-        _lastAnnouncedTier = (HeatTier)(-1);
+        _lastAnnouncedTier.Clear();
     }
 
     // ── Internals ─────────────────────────────────────────────────────────────────────────────
@@ -380,7 +380,7 @@ internal sealed class HeatDirector
         if (Math.Abs(record.Heat - before) > 0.001f)
             PoliceLog.Detail($"Heat {before:0.#} -> {record.Heat:0.#} ({(amount >= 0 ? "+" : string.Empty)}{amount:0.##}, {reason}).");
 
-        AnnounceTierIfChanged();
+        AnnounceTierFor(record);
     }
 
     /// <summary>
@@ -446,14 +446,27 @@ internal sealed class HeatDirector
         PoliceLog.Detail($"Adopted law intensity baseline {_baselineIntensity} (something outside this module set it).");
     }
 
-    private void AnnounceTierIfChanged()
+    private void AnnounceAllTiers()
     {
-        var tier = PeakTier;
-        if (tier == _lastAnnouncedTier)
+        foreach (var record in _records.Values)
+            AnnounceTierFor(record);
+    }
+
+    /// <summary>
+    /// Per-player heat-tier toast. Peak heat still drives world intensity, but the announcement must
+    /// reach the player whose score moved — not whoever happens to be sitting at the host keyboard.
+    /// </summary>
+    private void AnnounceTierFor(PlayerHeatRecord record)
+    {
+        var tier = HeatModel.TierFor(record.Heat);
+        if (_lastAnnouncedTier.TryGetValue(record.PlayerKey, out var previous) && previous == tier)
             return;
 
-        var previous = _lastAnnouncedTier;
-        _lastAnnouncedTier = tier;
+        var hadPrevious = _lastAnnouncedTier.TryGetValue(record.PlayerKey, out previous);
+        if (!hadPrevious)
+            previous = (HeatTier)(-1);
+
+        _lastAnnouncedTier[record.PlayerKey] = tier;
 
         var rising = tier > previous;
         if (rising && previous != (HeatTier)(-1))
@@ -462,16 +475,17 @@ internal sealed class HeatDirector
         if (previous == (HeatTier)(-1) || !_config.ShowHud.Value)
             return;
 
-        if (_config.ShowHud.Value)
-        {
-            PoliceMessages.HeatTierChanged(
-                rising,
-                HeatModel.TierName(tier),
-                PeakHeat,
-                HeatMeaning(tier, rising));
-        }
+        var audience = PoliceMessages.PlayerForRecord(record);
+        PoliceMessages.HeatTierChanged(
+            rising,
+            HeatModel.TierName(tier),
+            record.Heat,
+            HeatMeaning(tier, rising),
+            audience);
 
-        PoliceLog.Msg($"Heat tier {HeatModel.TierName(previous)} -> {HeatModel.TierName(tier)} at heat {PeakHeat:0.#}.");
+        PoliceLog.Msg(
+            $"Heat tier for '{record.PlayerKey}': {HeatModel.TierName(previous)} -> {HeatModel.TierName(tier)} " +
+            $"at heat {record.Heat:0.#}.");
     }
 
     private void AnnounceOutlaw(PlayerHeatRecord record, OutlawTier previous)
@@ -479,7 +493,7 @@ internal sealed class HeatDirector
         PoliceLog.Msg($"Outlaw status for '{record.PlayerKey}': {OutlawState.Describe(previous)} -> {OutlawState.Describe(record.Outlaw)}.");
 
         if (_config.ShowHud.Value)
-            PoliceMessages.OutlawChanged(record.Outlaw);
+            PoliceMessages.OutlawChanged(record.Outlaw, PoliceMessages.PlayerForRecord(record));
     }
 
     private static string HeatMeaning(HeatTier tier, bool rising) => tier switch

@@ -271,8 +271,8 @@ internal static class PolicePatches
                 return true;
 
             var reason = outlaw.Economy.RefusalFor(__instance);
-            // Toast for immediacy, and a Dispatch text so the truncated toast is not the only record.
-            PoliceMessages.ShopRefused(reason);
+            // Toast for immediacy on the local outlawed shopper only.
+            PoliceMessages.ShopRefused(reason, GameBridge.LocalPlayer());
             PoliceLog.Msg($"Refused a card-only shop to an outlawed player: {reason}");
             return false;
         }

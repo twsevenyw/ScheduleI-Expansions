@@ -388,6 +388,12 @@ internal sealed class PoliceConfig
             "Raid cooldown (in-game days)",
             "Minimum gap between raids, so they stay an event rather than a rent.");
 
+        RaidExcludedProperties = config.Bind(
+            "raid_excluded_properties",
+            "rv",
+            "Raid-excluded property codes",
+            "Comma-separated PropertyCode values the raid director will never target. Default is rv — the RV is early-game only and is destroyed later, so it is never a valid raid site. Add others (e.g. motelroom) without a rebuild.");
+
         EnableStakeouts = config.Bind(
             "enable_stakeouts",
             true,
@@ -446,7 +452,7 @@ internal sealed class PoliceConfig
             "show_heat_hud",
             true,
             "Announce heat / outlaw / raid / federal events",
-            "Master switch for player-facing announcements. When on, every announcement is an on-screen toast labelled Dispatch Office. There is no custom Dispatch NPC (that path crashed the game). Turn off for a silent run; the F7 menu still reports the numbers.");
+            "Master switch for player-facing announcements. When on, every announcement is an on-screen toast labelled Dispatch Office. In co-op the host also publishes the line to Steam lobby data so the client peer can toast it locally (NotificationsManager is local-only; no custom RPCs). There is no custom Dispatch NPC. Turn off for a silent run; the F7 menu still reports the numbers.");
 
         AnnounceMode = config.Bind(
             "announce_mode",
@@ -641,7 +647,24 @@ internal sealed class PoliceConfig
 
     internal ConfigValue<int> RaidCooldownDays { get; }
 
+    internal ConfigValue<string> RaidExcludedProperties { get; }
+
     internal ConfigValue<bool> EnableStakeouts { get; }
+
+    /// <summary>Whether a <c>PropertyCode</c> is on the raid exclusion list (case-insensitive).</summary>
+    internal bool IsRaidExcluded(string? propertyCode)
+    {
+        if (string.IsNullOrWhiteSpace(propertyCode))
+            return false;
+
+        foreach (var part in RaidExcludedProperties.Value.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (string.Equals(part.Trim(), propertyCode.Trim(), StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
 
     internal ConfigValue<bool> EnableJailDay { get; }
 
