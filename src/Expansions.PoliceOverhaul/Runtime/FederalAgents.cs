@@ -126,41 +126,14 @@ internal static class FederalAgents
 
             if (postPosition is { } post)
             {
-                var offset = Quaternion.Euler(0f, designated * 48f, 0f) * Vector3.forward * (5f + designated * 0.75f);
-                Posts[pointer] = post + offset;
-                OfficerDeployment.Relocate(officer, post + offset, "federal-post");
+                // The deployment pass already put reserve officers near the post. Never relocate an
+                // active officer here: it may be a sentry whose behaviour still indexes its authored
+                // stand-point list.
+                Posts[pointer] = here.Value;
             }
 
             designated++;
             RaiseActivated();
-        }
-
-        // Deploy may have left fewer in radius than wanted — pull more from farther candidates.
-        if (designated < count)
-        {
-            foreach (var candidate in DetectionTuner.Officers())
-            {
-                if (designated >= count)
-                    break;
-
-                if (candidate is null || !IsLivingShipped(candidate) || IsAgent(candidate))
-                    continue;
-
-                var officer = candidate;
-                var offset = Quaternion.Euler(0f, designated * 48f, 0f) * Vector3.forward * (5f + designated * 0.75f);
-                var dest = (postPosition ?? position) + offset;
-                if (!OfficerDeployment.Relocate(officer, dest, "federal-designate"))
-                    continue;
-
-                if (!TryTag(officer, postPosition is null ? null : dest, out _))
-                    continue;
-
-                if (pursue && !string.IsNullOrEmpty(targetPlayerCode))
-                    Members.Invoke(officer, "BeginFootPursuit_Networked", targetPlayerCode, false);
-
-                designated++;
-                RaiseActivated();
-            }
         }
 
         if (designated > 0)

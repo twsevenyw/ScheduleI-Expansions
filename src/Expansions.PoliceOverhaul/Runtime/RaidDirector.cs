@@ -1,3 +1,4 @@
+using Expansions.Core.Actions;
 using Expansions.Core.Diagnostics;
 using Expansions.PoliceOverhaul.State;
 using S1API.GameTime;
@@ -31,6 +32,7 @@ internal sealed class RaidDirector
     private string _targetName = string.Empty;
     private int _executeAtMinute = -1;
     private string _reason = string.Empty;
+    private string _lastScheduleFailure = string.Empty;
 
     internal RaidDirector(PoliceConfig config, HeatDirector heat, OutlawState outlaw, EventScheduler scheduler)
     {
@@ -157,9 +159,17 @@ internal sealed class RaidDirector
         // Manual triggers must always pick a property you own — including the one you are standing
         // in. Being home is the defence at execute time (they drive past), not a reason for the
         // button to do nothing.
-        if (!Schedule(player, _heat.RecordFor(player), "requested from the menu", warn: !immediate, allowOccupied: true))
+        if (!Schedule(
+                player,
+                _heat.RecordFor(player),
+                "requested from the menu",
+                warn: !immediate,
+                allowOccupied: true,
+                preferCurrent: true))
         {
-            message = "You do not own a property yet, so there is nothing to raid. Buy one and try again.";
+            message = _lastScheduleFailure.Length > 0
+                ? _lastScheduleFailure
+                : "You do not own a property yet, so there is nothing to raid. Buy one and try again.";
             return false;
         }
 
@@ -208,9 +218,16 @@ internal sealed class RaidDirector
 
     // ── Internals ─────────────────────────────────────────────────────────────────────────────
 
-    private bool Schedule(object player, PlayerHeatRecord record, string reason, bool warn = true, bool allowOccupied = false)
+    private bool Schedule(
+        object player,
+        PlayerHeatRecord record,
+        string reason,
+        bool warn = true,
+        bool allowOccupied = false,
+        bool preferCurrent = false)
     {
-        var target = PickTarget(player, allowOccupied);
+        _lastScheduleFailure = string.Empty;
+        var target = PickTarget(player, allowOccupied, preferCurrent);
         if (target is null)
             return false;
 
@@ -220,6 +237,8 @@ internal sealed class RaidDirector
         _executeAtMinute = GameClock.Minutes() + Math.Max(1, _config.RaidDelayMinutes.Value);
 
         PoliceLog.Msg($"Raid scheduled on '{_targetName}' in {_config.RaidDelayMinutes.Value} minute(s): {reason}.");
+        if (IsNatural(reason))
+            ActionLog.Note($"Natural raid scheduled: {_targetName}, due in {GameClock.Describe(MinutesUntilRaid)} ({reason}).");
 
         // Physical inbound team at warn time — a text with nobody walking up is not a raid.
         var wanted = Math.Max(1, _config.EventOfficerCount.Value);
@@ -227,6 +246,26 @@ internal sealed class RaidDirector
         PoliceLog.Msg(
             $"Raid warn '{_targetName}': {onScene}/{wanted} officer(s) within " +
             $"{OfficerDeployment.SceneRadiusMetres:0}m — {OfficerDeployment.LastReport}");
+
+        if (IsNatural(reason))
+        {
+            ActionLog.Note(
+                $"Natural raid deployment: {_targetName} has {onScene}/{wanted} visibly present officer(s) " +
+                $"within {OfficerDeployment.SceneRadiusMetres:0}m.");
+        }
+
+        if (onScene <= 0)
+        {
+            var failedProperty = _targetName;
+            _lastScheduleFailure =
+                $"Raid on {failedProperty} was not scheduled because no visible officers reached the property. " +
+                PoliceForce.LastShortfall;
+            PoliceLog.Warn(_lastScheduleFailure);
+            if (IsNatural(reason))
+                ActionLog.Fail($"Natural raid aborted before warning: {_lastScheduleFailure}");
+            Forget();
+            return false;
+        }
 
         // Urgent toast + phone text naming the property. Always attempt delivery.
         if (warn)
@@ -237,17 +276,26 @@ internal sealed class RaidDirector
     }
 
     /// <summary>
-    /// The property they would actually hit: one the player owns and is not currently standing in,
-    /// preferring the one they were last seen at. Manual triggers may fall back to an occupied
-    /// property so the button never no-ops when you own something.
+    /// Automatic raids prefer an owned property the player is away from. Manual menu/event triggers
+    /// first choose the owned property physically containing the player, then fall back to the normal
+    /// selection only when the player is not standing in one.
     /// </summary>
-    private object? PickTarget(object player, bool allowOccupied)
+    private object? PickTarget(object player, bool allowOccupied, bool preferCurrent)
     {
         var owned = Owned();
         if (owned.Count == 0)
             return null;
 
         var position = Components.TransformOf(player)?.position ?? Vector3.zero;
+
+        if (preferCurrent)
+        {
+            foreach (var property in owned)
+            {
+                if (Estate.Contains(property, position))
+                    return property;
+            }
+        }
 
         var recent = Members.ReadPath(player, "LastVisitedProperty");
         if (GameReflection.IsPresent(recent) && recent is not null && IsRaidable(recent, position, owned, requireAbsent: true))
@@ -308,17 +356,22 @@ internal sealed class RaidDirector
         var wanted = Math.Max(1, _config.EventOfficerCount.Value);
         var onScene = PoliceForce.EnsureAt(propertyPoint, wanted, player, beginAsSighted: false);
         var presence = OfficerDeployment.CountWithin(propertyPoint, OfficerDeployment.SceneRadiusMetres);
+        var visible = PoliceForce.VisibleWithin(propertyPoint, OfficerDeployment.SceneRadiusMetres);
         PoliceLog.Msg(
-            $"Raid execute '{name}': {presence.Count}/{wanted} officer(s) within " +
+            $"Raid execute '{name}': {visible}/{wanted} visible officer(s), {presence.Count} physically within " +
             $"{OfficerDeployment.SceneRadiusMetres:0}m (nearest " +
             $"{(presence.Count > 0 ? presence.NearestMetres.ToString("0.0") : "n/a")}m). " +
             OfficerDeployment.LastReport);
+        if (IsNatural(reason))
+            ActionLog.Note($"Natural raid executing: {name} has {visible}/{wanted} visible officer(s) on scene.");
 
-        if (presence.Count <= 0)
+        if (visible <= 0)
         {
             PoliceLog.Warn(
-                $"Raid on '{name}' aborted — zero officers within {OfficerDeployment.SceneRadiusMetres:0}m. " +
+                $"Raid on '{name}' aborted — zero visible officers within {OfficerDeployment.SceneRadiusMetres:0}m. " +
                 "Nothing seized. " + PoliceForce.LastShortfall);
+            if (IsNatural(reason))
+                ActionLog.Fail($"Natural raid on {name} aborted: zero visible officers reached the property; nothing seized.");
             PoliceMessages.RaidCalledOff(name, "the raid team never made it to the property");
             return;
         }
@@ -333,6 +386,8 @@ internal sealed class RaidDirector
             present.RaidsAvoided++;
 
             PoliceMessages.RaidResolved(name, present: true, stacks: 0, value: 0f, haul: string.Empty);
+            if (IsNatural(reason))
+                ActionLog.Ok($"Natural raid on {name} resolved: you were present, so nothing was seized.");
 
             TutorialSignalRaid();
             return;
@@ -357,6 +412,13 @@ internal sealed class RaidDirector
               $"{presence.Count} officer(s) on scene.");
 
         PoliceMessages.RaidResolved(name, present: false, stacks, value, haul);
+        if (IsNatural(reason))
+        {
+            ActionLog.Ok(
+                stacks > 0
+                    ? $"Natural raid on {name} completed: {stacks} stack(s), about ${value:0}, seized. {haul}"
+                    : $"Natural raid on {name} completed: officers found nothing worth taking.");
+        }
 
         TutorialSignalRaid();
         _ = onScene;
@@ -410,6 +472,9 @@ internal sealed class RaidDirector
     /// </summary>
     private static bool Remove(object storage, Estate.Contraband entry) =>
         Members.Invoke(storage, "SetStoredInstance", null, entry.SlotIndex, null);
+
+    private static bool IsNatural(string reason) =>
+        !reason.Contains("requested from the menu", StringComparison.OrdinalIgnoreCase);
 
     private static void TutorialSignalRaid() =>
         Expansions.Core.Tutorial.TutorialSignals.Raise(Tutorial.PoliceChapter.RaidSignal);

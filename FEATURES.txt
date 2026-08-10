@@ -63,14 +63,14 @@
      NEW SURFACE      Triggerable EVENTS on the UP ARROW: a short in-world list you raise while
                       playing. Police contributes five; Core contributes two so the list is
                       never empty. Shift+Up re-fires the last one.
-     DRIVERS          Reworked to the game's own screens (v0.7.0). Driver is now one employee type
+     DRIVERS          Reworked to the game's own screens (v0.7.4). Driver is now one employee type
                       in the Fixer's normal type -> location flow; the clipboard says Driver and
-                      the NPC wears a blue delivery uniform. See section 5.
+                      every paid hire must verify a visible world position first. See section 5.
      POLICE           Seven previously-deferred features built (v0.3.0): property raids,
                       stakeouts, custody and the lost day, equipment loss, informants, outlaw
                       economics, and the legal fee now actually spends. Then, on top: THE MAP'S
                       EMPTY-STREETS PROBLEM FIXED (dead officers return to duty daily,
-                      police_density triples the street presence, events guarantee officers
+                      police_density can scale street presence, events require visible officers
                       before firing), PHONE MESSAGES from a "Dispatch Office" contact instead of
                       toasts you cannot re-read, a randomised event schedule, and the "LeRoy"
                       bug -- federal agents inheriting a civilian's identity -- fixed.
@@ -583,9 +583,9 @@
    Run the diagnostics probes         Core. Same sweep as the Actions tab.
    Send a federal team                Police. Two plain-clothes agents from the nearest station.
                                       Inside a property you own, they stake it out instead.
-   Put a raid on the clock            Police. Warns you a team is heading for one of your
-                                      properties. Be there when it lands and you lose nothing.
-   Raid a property now                Police. Skips the warning.
+   Put a raid on the clock            Police. Targets the owned property you are currently inside
+                                      and warns that a team is heading there.
+   Raid a property now                Police. Immediately targets the owned property you are inside.
    Escalate outlaw status             Police. Clean to MARKED, or MARKED to HUNTED.
    Have someone call the police       Police. Reports you through the game's own call path, so
                                       real officers are sent to your last known position.
@@ -678,7 +678,7 @@
   HIREABLE DRIVERS (7)                                                   [SHIPPED, UNVERIFIED]
   --------------------------------------------------------------------------------------------
   This list is deliberately short. Route editing is on the shipped management clipboard and
-  vehicle assignment is on the driver's own dialogue; what is left here is diagnostics plus four
+  trip-van provisioning is automatic; what is left here is diagnostics plus four
   REPAIR PATHS that hide themselves while the native surface they replace is working.
 
    Open the drivers
@@ -727,9 +727,9 @@
   WHAT IT IS
   --------------------------------------------------------------------------------------------
   You already have Handlers who shuffle items around inside one property. A Driver does the same
-  job BETWEEN logistics properties and dealers, using one of your cars. Same hiring, same wages,
-  same bed requirement, same five-route grammar. The only new verbs are "assign a vehicle" and
-  "depart when the trunk holds N items" -- which is the dev's own wording from Community Vote #2.
+  job BETWEEN logistics properties and dealers. Same hiring, same wages, same bed requirement,
+  same five-route grammar. A fresh Veeper is created and boarded only when a valid route departs;
+  the remaining new verb is "depart when the trunk holds N items."
 
   A driver is a real vanilla Packager (EEmployeeType.Handler) whose packaging brain is suppressed
   during a trip and whose movement a managed state machine owns. It is NOT a new Employee
@@ -748,8 +748,8 @@
      Drop-off              The clipboard's own ItemSelector list screen -- every owned storage
                            plus recruited dealers, other-property first, plus "Point at it in the
                            world" handing back to the shipped picker
-     Vehicle / departure
-       size / set off now  The driver's own dialogue
+     Departure size /
+       set off now         The driver's own dialogue; trip Veeper is automatic
      Fire                  Shipped dialogue option; the mod just cleans up behind it
 
   DRIVER SLOTS ARE A SEPARATE BUDGET FROM EMPLOYEE CAPACITY
@@ -788,10 +788,10 @@
      Working hours      07:00 to 04:00, the shipped day window.
      Curfew             Ignored by default, matching the shipped rule that dealers cannot be
                         arrested. respect_curfew = true makes them stop.
-     Vehicle            A new driver takes an unassigned Veeper, or receives a persistent 16-slot
-                        Veeper when provide_van_on_hire = true (default). Hiring rolls back and
-                        refunds the fee if the promised van cannot be created. A sold/missing van
-                        self-heals the same way. One assigned vehicle per driver.
+     Vehicle            No persistent vehicle assignment. Once a complete route has movable stock,
+                        the driver creates a fresh 16-slot Veeper at departure, is warped to its
+                        driver door and must board successfully. The empty mod-owned van is removed
+                        after return; interrupted cargo keeps its exact van for safe resume.
 
   ROUTES -- EDITED ON THE SHIPPED CLIPBOARD
   --------------------------------------------------------------------------------------------
@@ -923,7 +923,7 @@
   TextField and breaks DrawTexture, and a diagnostic view has no business owning a canvas. 720 x
   520, Escape or F6 closes it.
 
-  HARMONY PATCHES (20 targets)
+  HARMONY PATCHES
   --------------------------------------------------------------------------------------------
      Packager.UpdateBehaviour            prefix, SKIPPING -- the only skipping prefix in the mod.
                                          It is the per-tick work dispatcher, and there is no other
@@ -932,11 +932,11 @@
                                          also carries bed-and-wage bookkeeping, and a permanently
                                          suppressed driver is never marked paid, so CanWork()
                                          stays false forever.
-     Employee.InitializeAppearance       postfix -- applies the Driver uniform on every peer after
-                                         the vanilla hire/load appearance RPC
-     EmployeeManager.CreateEmployee_Server prefix + postfix -- temporarily expands vanilla capacity
-                                         by occupied driver slots (plus the new Driver slot), then
-                                         restores the authored value; ordinary employee slots remain free
+     Property.Awake                      postfix -- expands both EmployeeCapacity and the matching
+                                         EmployeeIdlePoints backing array. Raising only the integer
+                                         capacity creates an employee that cannot finish AssignProperty.
+                                         Dedicated points are unique transforms beside InteriorSpawnPoint,
+                                         never duplicated NPCSpawnPoint coordinates in the truck yard.
      Packager.ShouldIdle                 postfix -- never idle mid-trip
      Packager.IsAnyWorkInProgress        postfix -- report busy mid-trip
      Packager.Fire                       postfix -- tear the driver down when fired by vanilla
@@ -986,7 +986,7 @@
                             game. That is what buys the real clipboard UI.
      Everything else        in the mod's own blob at
                             <save>\Modded\Saveables\hireable_drivers.json: which employees are
-                            drivers, which property each was hired to, the assigned vehicle GUID,
+                            drivers, which property each was hired to, an active trip-van GUID,
                             exact blacklist/whitelist filters, departure thresholds, dealer
                             destinations, active-trip cargo manifests and trip counters.
 
@@ -1052,9 +1052,9 @@
   NEW IN THIS BUILD (all four landed 2026-08-09 02:31, after the previous package was cut):
      Police population    The map ships a FIXED set of officers and nothing in the game creates
                           more, so a violent week permanently empties the stations. Dead officers
-                          now return to duty at each day rollover, police_density (3.0) roughly
-                          triples the street presence, and every event checks there are officers
-                          alive before it fires. See PILLAR 0.
+                          now return to duty at each day rollover, police_density can open more
+                          posts, and every event checks for visibly rendered officers before firing.
+                          See PILLAR 0.
      Phone messages       Substantive events now TEXT YOU from a "Dispatch Office" contact with
                           the full story and the bill, instead of a toast you cannot re-read.
      Random cadence       Federal visits and raids roll on a per-save randomised schedule rather
@@ -1094,13 +1094,14 @@
      _daily (true)       has sat out the full threshold, which is far slower than a violent week
                          loses them. This calls the game's own Revive() at each in-game day
                          rollover instead of waiting. No static is written and no object is
-                         created, so turning the setting off simply stops the early call.
-     Density             police_density (3.0) multiplies the officers each post asks for and
-     police_density      DIVIDES each post's intensity requirement, so far more posts run at
-     (3.0)               once. That second half is where the tripling comes from: per-post
-                         staffing is hard-capped at 4 by the engine no matter what you ask for.
-                         1.0 is vanilla. Snapshotted on enable and written back on disable, the
-                         same as every other schedule write.
+                         created. Combat responses and event deployment never revive an officer;
+                         a kill remains a kill for the rest of that day.
+     Density             police_density (1.0 by default) enlarges foot patrols and DIVIDES each authored
+     police_density      post's intensity requirement, so far more patrol, sentry, checkpoint
+     (1.0)               and vehicle posts run at once. Sentries and checkpoints keep their
+                         authored member limits because their fixed route/stand-point arrays are
+                         indexed by member number. 1.0 is vanilla. Snapshotted on enable and
+                         written back on disable, the same as every other schedule write.
      Event guarantee     Raids, federal teams and pursuit events check that event_officer_count
      event_officer       (3) live officers are near the scene before they fire, dispatching from
      _count (3)          the nearest station if the map is empty. An event with no police behind
@@ -1305,7 +1306,10 @@
 
   NEVER ClearContents(). A total wipe reads as a bug; a partial loss is what makes you move the
   rest. "Put a raid on the clock" and the Up-arrow "Raid a property now" let you watch the whole
-  sequence without waiting for a trigger.
+  sequence without waiting for a trigger. Manual triggers target the owned property physically
+  containing the player; only when the player is not inside one do they fall back to another property.
+  Natural raids print schedule, visible deployment, execution and resolution/abort lines into the
+  in-game Actions output as well as MelonLoader. Zero visible officers means no warning and no seizure.
 
   --------------------------------------------------------------------------------------------
   PILLAR 7 -- CUSTODY, EQUIPMENT AND INFORMANTS
@@ -2167,13 +2171,11 @@
      dealer_topup_cap                  int     10       Items per dealer visit. Dealers hold 10
                                                         inventory slots. Clamped 1-50.
      allow_dealer_destinations         bool    true     Let a route target a recruited dealer.
-     provide_van_on_hire               bool    true     Take an unassigned Veeper or create a
-                                                        persistent 16-slot Veeper for each driver.
-                                                        A failed provision rolls the hire back.
-     allow_spawned_vans                bool    false    Legacy compatibility switch used when
-                                                        provide_van_on_hire is off.
-     auto_assign_vehicle               bool    true     Assign the Veeper during hire and replace
-                                                        it if the assigned van is sold or missing.
+     provide_van_on_hire               bool    true     Compatibility key. Fresh trip Veeper
+                                                        provisioning is now automatic.
+     allow_spawned_vans                bool    false    Legacy compatibility key.
+     auto_assign_vehicle               bool    true     Compatibility key; persistent vehicle
+                                                        claiming was removed.
      require_bed_and_wage              bool    true     On: a driver refuses to work unhoused or
                                                         unpaid, exactly like other employees.
      respect_curfew                    bool    false    On: drivers start nothing new once curfew
@@ -2205,8 +2207,8 @@
      KEY                          TYPE    DEFAULT  WHAT IT DOES
      enabled                      bool    true     Load the module.
      intensity_scalar             float   1.0      MASTER SCALAR. Multiplies every heat-driven
-                                                   world effect: law intensity, officers per post,
-                                                   detection and search rates. 0 tracks heat
+                                                   world effect: law intensity, patrol staffing,
+                                                   post activation, detection and search rates. 0 tracks heat
                                                    without changing anything (pure telemetry
                                                    mode). 2 is brutal. Hot-reloadable.
      heat_gain_scalar             float   1.0      Multiplies every heat input. Heat per crime
@@ -2222,8 +2224,10 @@
                                                    capped at 15/day. Off means only crimes matter.
      enable_dynamic_intensity     bool    true     PILLAR. Drive the game's own law scheduler from
                                                    your heat.
-     enable_schedule_tuning       bool    true     PILLAR. Also widen the officers-per-post bands
-                                                   and checkpoint hours on the schedule data.
+     enable_schedule_tuning       bool    true     PILLAR. Open more authored posts, widen safe
+                                                   foot-patrol bands and checkpoint hours.
+                                                   Fixed-layout sentries/checkpoints retain their
+                                                   authored member counts.
                                                    Snapshotted on enable, written back on disable.
      enable_consequences          bool    true     PILLAR. Heat- and outlaw-scaled fines, wider
                                                    confiscation, vehicle cargo seizure, debt.
@@ -2231,20 +2235,19 @@
      enable_federal_agents        bool    true     PILLAR. Plain-clothes agents at very high heat.
                                                    Viability is detected at runtime; if this build
                                                    cannot spawn them the rest carries on.
-     max_officers_per_post        int     4        Upper bound for patrol, sentry and checkpoint
-                                                   member counts. The game refuses more than 4
-                                                   whatever this says.
-     police_density               float   3.0      How many police the town has, independent of
-                                                   how badly they want you. 3 is roughly triple
-                                                   the vanilla street presence: it multiplies the
-                                                   officers each post asks for (still capped at
-                                                   the engine's 4) and divides each post's
-                                                   intensity requirement, so far more posts run
-                                                   at once. 1 is vanilla. Snapshotted and written
-                                                   back on disable.
+     max_officers_per_post        int     4        Upper bound for foot-patrol member counts.
+                                                   Fixed-layout sentries and checkpoints retain
+                                                   their authored limits.
+     police_density               float   1.0      How many police the town has, independent of
+                                                   how badly they want you. Higher values open
+                                                   more authored posts and enlarge foot patrols;
+                                                   sentries/checkpoints are never overfilled.
+                                                   1 is vanilla. Snapshotted and written back on
+                                                   disable.
      respawn_officers_daily       bool    true     Return dead officers to duty at each day
                                                    rollover via the game's own NPCHealth.Revive(),
                                                    instead of waiting out its multi-day timer.
+                                                   Never runs during combat or event deployment.
                                                    The map ships a fixed set of officers and
                                                    nothing creates more, so without this a
                                                    violent week permanently empties the stations.
@@ -2633,12 +2636,13 @@
       PASS: only one Driver type choice exists (no per-property top-level clutter); every eligible
       location appears on the next screen; Barn and Docks Warehouse allow two drivers; ordinary
       employee capacity is ignored; Car Wash/Laundromat/Post Office/Taco Ticklers do not appear;
-      you are charged and a persistent 16-slot Veeper is parked.
+      the NPC's visible position at that property is verified before charging, and a persistent
+      16-slot Veeper is parked.
       FAIL: run drivers.hiring_desk; it names the exact missing hook or scene object.
 
    5. THE CLIPBOARD. Point the management clipboard at that driver.
-      PASS: the header says Driver (not Handler), the NPC wears the blue delivery uniform, and the
-      panel shows Bed plus five Route rows with no text overlap; Stations is hidden. Set the Bed. Put one unrelated
+      PASS: the header says Driver (not Handler), the NPC keeps its stable vanilla appearance, and
+      the panel shows Bed plus five Route rows with no text overlap; Stations is hidden. Set the Bed. Put one unrelated
       product in the Veeper, then set a route's pickup with the worldspace picker -- hovering
       a container at a DIFFERENT property must refuse with "Driver X only collects from the Barn".
       Set a drop-off at another property you own; the vanilla out-of-range refusal must be

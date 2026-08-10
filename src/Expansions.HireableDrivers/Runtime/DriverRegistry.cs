@@ -196,7 +196,6 @@ internal static class DriverRegistry
         }
 
         DriverDesk.Detach(employeeId);
-        DriverAppearance.Restore(employeeId, brain.Employee);
         brain.AbortAndRelease();
         DriverStore.Forget(employeeId);
     }
@@ -236,7 +235,6 @@ internal static class DriverRegistry
             {
                 // The driver's own dialogue is the only place some settings live, so a driver you can
                 // talk to but get no options from is a broken feature, not a cosmetic one.
-                DriverAppearance.Apply(brain);
                 DriverDesk.Ensure(brain);
 
                 // The clipboard is the route editor, so its rows are read before the loop plans a trip.
@@ -291,6 +289,24 @@ internal static class DriverRegistry
 
             var brain = Register(record, employee);
             ApplyIdentity(brain);
+            if (!record.PendingCargo.IsActive)
+            {
+                DriverHiring.RetireTripVan(record, employee, preserveCargo: true);
+                var property = WorldApi.OwnedProperties().FirstOrDefault(candidate =>
+                    string.Equals(
+                        WorldApi.PropertyCode(candidate),
+                        record.HomePropertyCode,
+                        StringComparison.OrdinalIgnoreCase));
+
+                if (property is not null)
+                {
+                    if (EmployeeApi.EnsureArrival(employee, property, out var arrival))
+                        DriverLog.Msg($"Restored driver {brain.Name} at home: {arrival}.");
+                    else
+                        DriverLog.Warn($"Could not restore driver {brain.Name} visibly at home: {arrival}.");
+                }
+            }
+
             bound++;
         }
 
@@ -303,7 +319,6 @@ internal static class DriverRegistry
     {
         EmployeeApi.SetFees(brain.Employee, DriverSettings.SigningFee, DriverSettings.DailyWage);
         EmployeeApi.SetConfigName(brain.Employee, DriverName(brain.Record));
-        DriverAppearance.Apply(brain);
         DriverDesk.Attach(brain);
         AdoptRoutes(brain);
     }
@@ -407,7 +422,6 @@ internal static class DriverRegistry
     /// <summary>Drops runtime wrappers while retaining the world's current clipboard state.</summary>
     internal static void Clear()
     {
-        DriverAppearance.RestoreAll(Drivers);
         DriverDesk.DetachAll();
         RoutePicker.Reset();
 

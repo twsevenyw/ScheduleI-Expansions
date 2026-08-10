@@ -162,53 +162,60 @@ internal sealed class DriverBrain
             return;
         }
 
-        var vehicle = Vehicle;
-
-        // Self-healing: a driver whose vehicle was sold, or who never got one because nothing was free at
-        // hire time, picks one up as soon as one becomes available.
-        if (vehicle is null && DriverSettings.AutoAssignVehicle && DriverHiring.AutoAssignVehicle(Record))
-            vehicle = Vehicle;
-
-        if (vehicle is null)
+        if (Record.PendingCargo.IsActive)
         {
-            StatusNote = Record.VehicleGuid.Length == 0
-                ? "No vehicle assigned."
-                : "The assigned vehicle no longer exists.";
+            var pendingVehicle = Vehicle;
+            var pendingStorage = VehicleApi.Storage(pendingVehicle);
+            if (pendingVehicle is null || pendingStorage is null)
+            {
+                StatusNote = "The interrupted trip van is missing; waiting rather than losing its manifest.";
+                Cooldown(now, 60);
+                return;
+            }
 
-            Issue("Your driver has no vehicle.", "Park one at the property, then talk to them and pick \"Take the …\".", 5);
+            if (TryResumePending(now, pendingVehicle, pendingStorage))
+                return;
+
+            StatusNote = "The interrupted trip could not be resumed.";
             Cooldown(now, 60);
             return;
         }
 
-        if (VehicleApi.HasPlayerAboard(vehicle))
+        if (!SelectRoute(out var routeIndex, out var source, out var destination, out var cargoItemId, out var why))
         {
-            StatusNote = $"Waiting — you are in the {VehicleApi.Name(vehicle)}.";
-            Cooldown(now, 10);
+            StatusNote = why;
+            if (_forceDeparture)
+            {
+                DriverLog.Warn($"{Name} cannot depart: {why}");
+                _forceDeparture = false;
+            }
+            Cooldown(now, 20);
+            return;
+        }
+
+        if (!DriverHiring.PrepareTripVan(Record, _employee, out var vehicle, out var vanFailure) || vehicle is null)
+        {
+            StatusNote = $"Could not prepare a trip van: {vanFailure}.";
+            Issue("Your driver could not leave.", StatusNote, 8);
+            DriverLog.Warn($"{Name} cannot depart: {vanFailure}.");
+            Cooldown(now, 60);
             return;
         }
 
         var vehicleStorage = VehicleApi.Storage(vehicle);
         if (vehicleStorage is null || VehicleApi.SlotCount(vehicle) <= 0)
         {
-            StatusNote = $"The {VehicleApi.Name(vehicle)} has no usable cargo storage.";
-            Issue("Your driver's vehicle cannot carry products.", "Talk to them beside a Veeper and hand it over.", 5);
+            DriverHiring.RetireTripVan(Record, _employee, preserveCargo: false);
+            StatusNote = "The fresh Veeper has no usable cargo storage.";
+            Issue("Your driver's fresh Veeper cannot carry products.", "The trip was cancelled and the van removed.", 8);
             Cooldown(now, 60);
-            return;
-        }
-
-        if (TryResumePending(now, vehicle, vehicleStorage))
-            return;
-
-        if (!SelectRoute(out var routeIndex, out var source, out var destination, out var cargoItemId, out var why))
-        {
-            StatusNote = why;
-            Cooldown(now, 20);
             return;
         }
 
         var path = TransportPath.Choose(vehicle, out var pathReason);
         if (path is null)
         {
+            DriverHiring.RetireTripVan(Record, _employee, preserveCargo: false);
             StatusNote = $"No usable transport path: {pathReason}.";
             Issue("Your driver cannot use that vehicle.", "Set transport_mode to auto in Expansions.cfg.", 5);
             Cooldown(now, 120);
@@ -217,8 +224,9 @@ internal sealed class DriverBrain
 
         if (!VehicleAssignment.TryClaim(Record.VehicleGuid, Record.EmployeeId))
         {
-            StatusNote = $"Waiting for the {VehicleApi.Name(vehicle)}.";
-            Issue("Your driver is waiting for a vehicle.", "Another driver has it. Park a second one and hand it over.", 2);
+            DriverHiring.RetireTripVan(Record, _employee, preserveCargo: false);
+            StatusNote = "The fresh trip van could not be reserved; it was removed and will be retried.";
+            Issue("Your driver is waiting for a fresh trip van.", "The mod will create another one automatically.", 2);
             Cooldown(now, 15);
             return;
         }
@@ -870,27 +878,15 @@ internal sealed class DriverBrain
             return false;
         }
 
-        var vehicle = Vehicle;
-        if (vehicle is null)
-        {
-            reason = "No vehicle is assigned.";
-            return false;
-        }
-
-        if (VehicleApi.HasPlayerAboard(vehicle))
-        {
-            reason = $"A player is using the {VehicleApi.Name(vehicle)}.";
-            return false;
-        }
-
-        if (VehicleApi.Storage(vehicle) is null)
-        {
-            reason = "The assigned vehicle has no cargo storage.";
-            return false;
-        }
-
         if (Record.PendingCargo.IsActive)
         {
+            var vehicle = Vehicle;
+            if (vehicle is null || VehicleApi.Storage(vehicle) is null)
+            {
+                reason = "The interrupted trip van is missing.";
+                return false;
+            }
+
             reason = string.Empty;
             return true;
         }
@@ -934,6 +930,7 @@ internal sealed class DriverBrain
     {
         VehicleAssignment.Release(Record.VehicleGuid, Record.EmployeeId);
         EmployeeApi.ReleaseToVanilla(_employee);
+        DriverHiring.RetireTripVan(Record, _employee, preserveCargo: true);
         _source = null;
         _destination = null;
         _routeIndex = -1;

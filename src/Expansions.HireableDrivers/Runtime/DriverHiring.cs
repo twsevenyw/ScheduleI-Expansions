@@ -59,6 +59,12 @@ internal static class DriverHiring
             return false;
         }
 
+        if (!DriverPropertyCapacity.Ensure(property))
+        {
+            reason = $"{WorldApi.PropertyName(property)} could not safely allocate its dedicated driver backing slot.";
+            return false;
+        }
+
         var code = WorldApi.PropertyCode(property);
         if (!DriverCapacity.HasRoom(property))
         {
@@ -96,6 +102,16 @@ internal static class DriverHiring
             return false;
         }
 
+        if (!EmployeeApi.EnsureArrival(employee, property, out var arrival))
+        {
+            EmployeeApi.Fire(employee);
+            message = $"Could not hire a driver: the employee was created but did not arrive ({arrival}). No fee was charged.";
+            DriverLog.Warn(message);
+            return false;
+        }
+
+        DriverLog.Msg($"Driver arrival verified before payment: {arrival}.");
+
         // Charging after creation avoids taking money for a game-side spawn refusal. If the charge
         // itself cannot run, remove the just-created employee immediately instead of granting a free
         // hire with a half-written roster.
@@ -126,21 +142,12 @@ internal static class DriverHiring
             brain = registered;
             DriverRegistry.ApplyIdentity(registered);
 
-            if (DriverSettings.AutoAssignVehicle &&
-                !AutoAssignVehicle(record) &&
-                DriverSettings.ProvideVanOnHire)
-            {
-                throw new InvalidOperationException("the game would not create or assign the promised Veeper van");
-            }
-
             var beds = WorldApi.UnassignedBeds(property).Count(Gx.Alive);
             var bedNote = beds > 0
                 ? "Point the management clipboard at them to give them a bed and set their routes."
                 : "There is no free bed on this property — build one, or they will refuse to work.";
 
-            var vehicleNote = record.VehicleGuid.Length > 0
-                ? $" Their {VehicleApi.Name(VehicleApi.FindByGuid(record.VehicleGuid))} is ready."
-                : " Talk to them while standing by a vehicle to assign it.";
+            const string vehicleNote = " A fresh Veeper will spawn and seat them automatically when a route departs.";
 
             message =
                 $"Hired {record.DisplayName} as a driver at {WorldApi.PropertyName(property)} for ${fee:N0}.{vehicleNote} {bedNote}";
@@ -226,6 +233,82 @@ internal static class DriverHiring
     }
 
     /// <summary>
+    /// Creates a fresh mod-owned Veeper for one departure and seats the driver immediately. Existing
+    /// player vehicles are never moved or destroyed; stale empty trip vans are retired first.
+    /// </summary>
+    internal static bool PrepareTripVan(
+        DriverRecord record,
+        object? employee,
+        out object? vehicle,
+        out string failure)
+    {
+        vehicle = null;
+        failure = string.Empty;
+
+        if (record.SpawnedVehicle)
+            RetireTripVan(record, employee, preserveCargo: true);
+        else
+            record.VehicleGuid = string.Empty;
+
+        if (record.VehicleGuid.Length > 0)
+        {
+            failure = "the previous trip van still contains cargo and cannot be replaced";
+            return false;
+        }
+
+        if (!TrySpawnVan(record, employee))
+        {
+            failure = "the game would not create a fresh Veeper";
+            return false;
+        }
+
+        vehicle = VehicleApi.FindByGuid(record.VehicleGuid);
+        if (!Gx.Alive(vehicle))
+        {
+            failure = "the fresh Veeper was not present in VehicleManager";
+            record.VehicleGuid = string.Empty;
+            record.SpawnedVehicle = false;
+            return false;
+        }
+
+        VehicleApi.LeavePark(vehicle);
+        EmployeeApi.Warp(employee, VehicleApi.DriverEntryPoint(vehicle));
+        if (!EmployeeApi.EnterVehicle(employee, vehicle))
+        {
+            failure = "the driver could not be seated in the fresh Veeper";
+            RetireTripVan(record, employee, preserveCargo: false);
+            vehicle = null;
+            return false;
+        }
+
+        DriverLog.Msg($"{record.DisplayName} boarded a fresh {VehicleApi.Name(vehicle)} for this trip.");
+        return true;
+    }
+
+    internal static void RetireTripVan(DriverRecord record, object? employee, bool preserveCargo)
+    {
+        if (!record.SpawnedVehicle)
+            return;
+
+        var vehicle = VehicleApi.FindByGuid(record.VehicleGuid);
+        if (vehicle is not null)
+        {
+            var cargo = TransitApi.UnitsInStorage(VehicleApi.Storage(vehicle));
+            if (preserveCargo && cargo > 0)
+                return;
+
+            if (EmployeeApi.IsInVehicle(employee))
+                EmployeeApi.ExitVehicle(employee);
+
+            if (!VehicleApi.HasPlayerAboard(vehicle))
+                Gx.Call(vehicle, "DestroyVehicle", Array.Empty<string>());
+        }
+
+        record.VehicleGuid = string.Empty;
+        record.SpawnedVehicle = false;
+    }
+
+    /// <summary>
     /// Provides the shipped 16-slot Veeper. The code is verified from the live prefab catalogue and
     /// real <c>OwnedVehicles.json</c>; dedicated mode refuses substitutes so the hiring promise stays
     /// literal.
@@ -234,7 +317,7 @@ internal static class DriverHiring
     /// vehicle save path. The record marks it as provided so an empty one can be cleaned up on fire.
     /// </para>
     /// </summary>
-    private static bool TrySpawnVan(DriverRecord record)
+    private static bool TrySpawnVan(DriverRecord record, object? departingEmployee = null)
     {
         var manager = VehicleApi.Manager();
         if (manager is null)
@@ -298,7 +381,10 @@ internal static class DriverHiring
         if (lot is not null)
             VehicleApi.ParkIn(spawned, lot);
 
-        DriverLog.Msg($"Provided {record.DisplayName} with a persistent {VehicleApi.Name(spawned)}.");
+        DriverLog.Msg(
+            departingEmployee is null
+                ? $"Provided {record.DisplayName} with a persistent {VehicleApi.Name(spawned)}."
+                : $"Created a fresh trip {VehicleApi.Name(spawned)} for {record.DisplayName}.");
         return true;
     }
 

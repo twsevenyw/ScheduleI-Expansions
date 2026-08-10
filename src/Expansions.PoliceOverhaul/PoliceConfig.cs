@@ -20,7 +20,7 @@ internal sealed class PoliceConfig
             "intensity_scalar",
             1.0f,
             "Master intensity scalar",
-            "Multiplies every heat-driven world effect: law intensity, officers per post, detection and search rates. 0 tracks heat without changing anything; 2 is brutal.");
+            "Multiplies every heat-driven world effect: law intensity, patrol staffing, post activation, detection and search rates. 0 tracks heat without changing anything; 2 is brutal.");
 
         HeatGainScalar = config.Bind(
             "heat_gain_scalar",
@@ -67,8 +67,8 @@ internal sealed class PoliceConfig
         EnableScheduleTuning = config.Bind(
             "enable_schedule_tuning",
             true,
-            "Pillar: officers per post",
-            "Also widen the officers-per-post bands and checkpoint hours on the game's schedule data. Snapshotted on enable and written back on disable.");
+            "Pillar: schedule density",
+            "Opens more shipped patrol, sentry, checkpoint and vehicle posts, safely widens foot-patrol staffing, and extends checkpoint hours. Fixed-layout sentries/checkpoints keep their authored member counts. Snapshotted on enable and written back on disable.");
 
         EnableConsequences = config.Bind(
             "enable_consequences",
@@ -91,26 +91,20 @@ internal sealed class PoliceConfig
         MaxOfficersPerPost = config.Bind(
             "max_officers_per_post",
             4,
-            "Max officers per post",
-            "Upper bound for patrol, sentry and checkpoint member counts. The game refuses to dispatch more than 4 whatever this says.");
+            "Max officers per patrol",
+            "Upper bound for foot-patrol member counts. Sentries and checkpoints keep their authored limits because their routes and stand points are fixed arrays.");
 
         PoliceDensity = config.Bind(
             "police_density",
-            3.0f,
+            1.0f,
             "Police density multiplier",
-            "How many police this town fields from the shipped officer set, independent of how badly they want you. 3 multiplies officers each post asks for (still capped at the engine's 4) and divides each post's intensity requirement so far more posts run at once. 1 is vanilla. Snapshotted and written back on disable. Does not invent bodies — the map's closed officer set is the ceiling.");
+            "How many police this town fields from the shipped officer set, independent of how badly they want you. Higher values open more authored posts and enlarge foot patrols; fixed-layout sentries/checkpoints are never overfilled. 1 is vanilla. Snapshotted and written back on disable. Does not invent bodies — the map's closed officer set is the ceiling.");
 
         RespawnOfficersDaily = config.Bind(
             "respawn_officers_daily",
             true,
-            "Also revive on day rollover",
-            "Extra safety net on top of officer_revive_interval_minutes. Still uses the game's own NPCHealth.Revive().");
-
-        OfficerReviveIntervalMinutes = config.Bind(
-            "officer_revive_interval_minutes",
-            45,
-            "Officer revive interval (in-game minutes)",
-            "How often dead officers are brought back via NPCHealth.Revive(). Default 45 is well under a day (~1440 minutes), so wiping the force buys minutes, not permanent safety. 0 disables the interval (day rollover may still revive).");
+            "Revive on day rollover",
+            "Uses the game's own NPCHealth.Revive() once per enabled day rollover. Combat responses and event deployment never revive officers.");
 
         OfficerThreatScalar = config.Bind(
             "officer_threat_scalar",
@@ -544,8 +538,6 @@ internal sealed class PoliceConfig
     internal ConfigValue<float> PoliceDensity { get; }
 
     internal ConfigValue<bool> RespawnOfficersDaily { get; }
-
-    internal ConfigValue<int> OfficerReviveIntervalMinutes { get; }
 
     internal ConfigValue<float> OfficerThreatScalar { get; }
 

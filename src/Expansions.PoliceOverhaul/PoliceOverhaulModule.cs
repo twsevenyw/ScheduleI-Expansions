@@ -70,7 +70,7 @@ public sealed class PoliceOverhaulModule : ExpansionModule
         "status, federal agents, stakeouts, raids on your properties, and an arrest that costs you the " +
         "day, your kit and your bank balance.";
 
-    public override string Version => "0.3.1";
+    public override string Version => "0.5.3";
 
     public override string ConfigCategory => ExpansionConfig.CategoryFor("PoliceImprovements");
 

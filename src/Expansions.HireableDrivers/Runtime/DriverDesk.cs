@@ -15,8 +15,8 @@ namespace Expansions.HireableDrivers.Runtime;
 /// opens. No Harmony patch, no mod-drawn UI.
 /// </para>
 /// <para>
-/// Departure size has no vanilla field anywhere. Vehicle choice is deliberately in-world rather than a
-/// list: you walk to the van you want and tell the driver to take that one.
+/// Departure size has no vanilla field anywhere. Vehicles are intentionally automatic: each departure
+/// creates a fresh Veeper and seats the driver, so no persistent unreachable handover is required.
 /// </para>
 /// </summary>
 internal static class DriverDesk
@@ -27,7 +27,7 @@ internal static class DriverDesk
     /// <summary>Neutral, so driver options never outrank the shipped Fire option.</summary>
     private const int ChoicePriority = 0;
 
-    internal const int ExpectedChoices = 3;
+    internal const int ExpectedChoices = 2;
 
     private static readonly int[] Thresholds = { 0, 5, 10, 20, 40, 80 };
 
@@ -200,7 +200,6 @@ internal static class DriverDesk
         internal bool Build()
         {
             Add(DepartureLabel, _ => true, CycleDeparture);
-            Add(HandoverLabel, _ => NearbyVehicle() is not null, TakeNearbyVehicle);
             Add(_ => "Set off now", _ => CanSetOff(), SetOff);
 
             if (Choices.Count == ExpectedChoices)

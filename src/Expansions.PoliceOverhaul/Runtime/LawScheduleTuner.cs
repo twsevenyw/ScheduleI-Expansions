@@ -10,10 +10,9 @@ namespace Expansions.PoliceOverhaul.Runtime;
 /// The game already ships a complete minute-ticked law scheduler: seven <c>LawActivitySettings</c>
 /// holding patrol, sentry, checkpoint, vehicle-patrol and curfew entries, each of which starts itself
 /// when <c>LawController.LE_Intensity</c> clears its own <c>IntensityRequirement</c>. Raising
-/// intensity therefore puts officers on the street for free, widening the per-post member bands makes
-/// each of those posts bigger, and lowering the requirements makes more of them run at once. All
-/// three are plain writable ints on shared designer objects, so the entire feature reduces to a
-/// snapshot, a handful of writes, and an <c>Evaluate()</c>.
+/// intensity therefore puts officers on the street for free, widening foot-patrol bands makes those
+/// patrols bigger, and lowering requirements makes more authored posts run at once. Sentry and
+/// checkpoint member bands stay authored because their members index fixed route/stand-point arrays.
 /// </para>
 /// <para>
 /// <c>IntensityRequirement</c> is written only by the density dial, and only downwards. It is the
@@ -32,7 +31,7 @@ internal sealed class LawScheduleTuner
 
     /// <summary>
     /// True once <see cref="DeployExtraVehicles"/> has run for the current applied band/density.
-    /// Re-firing StartPatrol every minute was resetting officer destinations (stutter-walk).
+    /// Re-evaluating vehicle deployment every minute resets officer destinations (stutter-walk).
     /// </summary>
     private bool _vehiclesDeployedForApplied;
 
@@ -47,8 +46,7 @@ internal sealed class LawScheduleTuner
     internal int PostsOpened { get; private set; }
 
     /// <summary>
-    /// Pushes the tier's officer band, the density dial and the checkpoint hours onto every scheduled
-    /// post.
+    /// Pushes the tier's safe foot-patrol band, density dial and checkpoint hours onto scheduled posts.
     /// <para>
     /// The same <c>PatrolInstance</c> object is reachable from several days' settings, so posts are
     /// keyed on the native pointer rather than the managed wrapper — two wrappers around one native
@@ -78,11 +76,11 @@ internal sealed class LawScheduleTuner
 
         foreach (var settings in AllSettings(controller))
         {
-            posts += ApplyToArray(settings, "Patrols", min, max, 0, density, settled, ref added);
-            posts += ApplyToArray(settings, "Sentries", min, max, 0, density, settled, ref added);
-            posts += ApplyToArray(settings, "Checkpoints", min, max, widen, density, settled, ref added);
+            posts += ApplyToArray(settings, "Patrols", min, max, 0, density, true, settled, ref added);
+            posts += ApplyToArray(settings, "Sentries", min, max, 0, density, false, settled, ref added);
+            posts += ApplyToArray(settings, "Checkpoints", min, max, widen, density, false, settled, ref added);
             // Vehicle patrols have IntensityRequirement but no Min/Max — density still opens more cars.
-            posts += ApplyToArray(settings, "VehiclePatrols", min, max, 0, density, settled, ref added);
+            posts += ApplyToArray(settings, "VehiclePatrols", min, max, 0, density, false, settled, ref added);
         }
 
         if (settled && added == 0)
@@ -100,7 +98,8 @@ internal sealed class LawScheduleTuner
         }
 
         PoliceLog.Detail(
-            $"Schedule tuned to {min}-{max} officers per post, checkpoints +/-{widen}h, density x{density:0.##} " +
+            $"Schedule tuned to {min}-{max} officers per foot patrol (fixed-layout posts unchanged), " +
+            $"checkpoints +/-{widen}h, density x{density:0.##} " +
             $"opening {PostsOpened} extra post(s), across {posts} post(s)" +
             (added > 0 ? $" ({added} newly seen this pass)." : "."));
     }
@@ -139,9 +138,9 @@ internal sealed class LawScheduleTuner
                 if (entry is null)
                     continue;
 
+                // Evaluate owns the transition. Calling StartPatrol again can duplicate a transition
+                // that Evaluate already started.
                 Members.Invoke(entry, "Evaluate");
-                // StartPatrol is safe to call when Evaluate decided the post is due; it no-ops otherwise.
-                Members.Invoke(entry, "StartPatrol");
             }
         }
 
@@ -237,6 +236,7 @@ internal sealed class LawScheduleTuner
         int max,
         int widenHours,
         float density,
+        bool allowStaffingIncrease,
         bool settled,
         ref int added)
     {
@@ -264,26 +264,35 @@ internal sealed class LawScheduleTuner
                 continue;
             }
 
-            Write(entry, post!, min, max, widenHours, density);
+            Write(entry, post!, min, max, widenHours, density, allowStaffingIncrease);
         }
 
         return applied;
     }
 
-    private static void Write(object entry, Post post, int min, int max, int widenHours, float density)
+    private static void Write(
+        object entry,
+        Post post,
+        int min,
+        int max,
+        int widenHours,
+        float density,
+        bool allowStaffingIncrease)
     {
         var vanilla = post.Vanilla;
 
-        // Raise towards the tier band, never below the designer's own staffing for this post.
+        // Patrol routes can carry a larger group. Sentries and checkpoints have fixed authored
+        // route/stand-point collections indexed by member number; exceeding those collections causes
+        // SentryBehaviour.IsAtStandPoint/CheckpointBehaviour index errors every tick.
         if (vanilla.MinMembers is { } vanillaMin)
         {
-            post.AppliedMin = Math.Max(vanillaMin, min);
+            post.AppliedMin = allowStaffingIncrease ? Math.Max(vanillaMin, min) : vanillaMin;
             Members.TryWrite(entry, "MinMembers", post.AppliedMin);
         }
 
         if (vanilla.MaxMembers is { } vanillaMax)
         {
-            post.AppliedMax = Math.Max(vanillaMax, max);
+            post.AppliedMax = allowStaffingIncrease ? Math.Max(vanillaMax, max) : vanillaMax;
             Members.TryWrite(entry, "MaxMembers", post.AppliedMax);
         }
 

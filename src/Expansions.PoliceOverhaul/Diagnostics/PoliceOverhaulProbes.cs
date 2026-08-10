@@ -168,7 +168,7 @@ internal static class PoliceOverhaulProbes
         result.Table(new[] { "Static", "What it controls", "Writable", "Verdict" }, rows);
 
         result.Heading("Fallbacks doing the actual work");
-        result.Bullet("Officers per post: the game's own `MinMembers`/`MaxMembers` schedule data, plus a clamp on `PoliceStation.Dispatch`.");
+        result.Bullet("Police density: lower authored post requirements and widen foot-patrol `MinMembers`/`MaxMembers`; fixed-layout sentries/checkpoints retain authored member limits. Dispatch remains clamped.");
         result.Bullet("Detection range and search rate: per-officer `VisionCone.RangeMultiplier` and `BodySearchChance`, which are instance fields and cannot be const-inlined.");
         result.Bullet("Everything else: Harmony postfixes on the decision methods themselves.");
 
@@ -752,8 +752,8 @@ internal static class PoliceOverhaulProbes
             ? "hidden — knock on the police station door instead"
             : $"repair path: spend ${PoliceRuntime.Config?.FeeFor(PoliceRuntime.LocalRecord?.Outlaw ?? OutlawTier.Marked):N0} to demote one tier",
         "police_overhaul.spawn_federal" or "police_overhaul.federal_team" => "spawn plain-clothes agents (or stakeout if you are home)",
-        "police_overhaul.raid_trigger" or "police_overhaul.raid_warning" => "schedule a warned raid on an owned property",
-        "police_overhaul.raid_now" => "execute a raid immediately on an owned property",
+        "police_overhaul.raid_trigger" or "police_overhaul.raid_warning" => "schedule a warned raid on the owned property currently containing the player",
+        "police_overhaul.raid_now" => "execute a raid immediately at the owned property currently containing the player",
         "police_overhaul.restore_force" => "Revive() every dead/KO officer; report the census",
         "police_overhaul.reset" => "wipe heat/outlaw/raid/agents and restore vanilla levers",
         "police_overhaul.escalate_outlaw" => "promote outlaw tier + apply economy/visibility",

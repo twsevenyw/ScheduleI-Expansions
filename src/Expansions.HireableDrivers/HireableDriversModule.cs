@@ -37,7 +37,7 @@ public sealed class HireableDriversModule : ExpansionModule
     public override string Description =>
         "Driver employees who can transport items between your properties, businesses, and dealers.";
 
-    public override string Version => "0.7.0";
+    public override string Version => "0.7.4";
 
     protected override void OnRegistered()
     {
@@ -95,6 +95,7 @@ public sealed class HireableDriversModule : ExpansionModule
 
         if (_inGameplayScene)
         {
+            Try("expanding property backing slots for drivers", DriverPropertyCapacity.EnsureAll);
             Try("binding Driver into the Fixer's native hiring flow", HiringDesk.Attach);
             Log.Msg($"Hiring desk after enable: {HiringDesk.StatusLine}");
         }
@@ -145,6 +146,7 @@ public sealed class HireableDriversModule : ExpansionModule
         _inGameplayScene = true;
         EndpointCatalog.Invalidate();
         GameClock.Reset();
+        Try("expanding property backing slots for drivers", DriverPropertyCapacity.EnsureAll);
         Try("binding Driver into the Fixer's native hiring flow", HiringDesk.Attach);
         Log.Msg($"Hiring desk on save/scene load: {HiringDesk.StatusLine}");
         Try("binding existing drivers", BindExisting);
@@ -160,6 +162,7 @@ public sealed class HireableDriversModule : ExpansionModule
         DriverRegistry.Clear();
         HiringDesk.Detach();
         EndpointCatalog.Invalidate();
+        DriverPropertyCapacity.ForgetAll();
     }
 
     /// <summary>

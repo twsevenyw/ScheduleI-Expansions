@@ -3,6 +3,7 @@ using Expansions.Core.Diagnostics;
 using Expansions.PoliceOverhaul.Runtime;
 using Expansions.PoliceOverhaul.State;
 using HarmonyLib;
+using Il2CppInterop.Runtime.InteropTypes;
 
 namespace Expansions.PoliceOverhaul.Patches;
 
@@ -25,6 +26,7 @@ internal static class PolicePatches
 {
     private static readonly List<string> Applied = new();
     private static readonly List<string> Missing = new();
+    private static readonly HashSet<IntPtr> HealedSentries = new();
 
     internal static IReadOnlyList<string> AppliedTargets => Applied;
 
@@ -35,12 +37,14 @@ internal static class PolicePatches
     {
         Applied.Clear();
         Missing.Clear();
+        HealedSentries.Clear();
     }
 
     internal static void Apply(HarmonyLib.Harmony harmony)
     {
         Applied.Clear();
         Missing.Clear();
+        HealedSentries.Clear();
 
         Patch(harmony, GameTypes.LawController, "OnUncappedMinPass", 0, postfix: nameof(LawMinutePassPostfix));
         Patch(harmony, GameTypes.PlayerCrimeData, "AddCrime", 2, postfix: nameof(AddCrimePostfix));
@@ -64,6 +68,7 @@ internal static class PolicePatches
 
         Patch(harmony, GameTypes.BodySearchBehaviour, "DoesPlayerContainItemsOfInterest", 0, postfix: nameof(BodySearchPostfix));
         Patch(harmony, GameTypes.CheckpointBehaviour, "DoesVehicleContainIllicitItems", 0, postfix: nameof(VehicleSearchPostfix));
+        Patch(harmony, GameTypes.SentryBehaviour, "IsAtStandPoint", 0, prefix: nameof(SentryStandPointPrefix));
         // The hand-written body of the observers RPC, so the caller is recorded on the host as well
         // as on every client rather than only where the writer happened to run.
         Patch(harmony, GameTypes.CallPoliceBehaviour, "RpcLogic___FinalizeCall_*", 0, postfix: nameof(PoliceCalledPostfix));
@@ -97,6 +102,65 @@ internal static class PolicePatches
         Guard("minute tick", () => PoliceRuntime.Heat!.MinutePass(__instance));
         Guard("raid countdown", () => PoliceRuntime.Raids?.MinutePass());
         Guard("stakeout upkeep", () => PoliceRuntime.Federal?.MinutePass());
+    }
+
+    /// <summary>
+    /// Repairs sentries created by an older build that overstaffed a fixed route collection. The
+    /// original method indexes Routes[AssignedOfficers.IndexOf(officer)] and then RoutePoints[index]
+    /// without bounds checks, so one bad assignment throws every tick.
+    /// </summary>
+    private static bool SentryStandPointPrefix(object __instance, ref bool __result)
+    {
+        try
+        {
+            var location = Members.ReadPath(__instance, "AssignedLocation");
+            if (location is null)
+                return true;
+
+            var officer = Members.ReadPath(__instance, "officer");
+            var routes = GameReflection.Enumerate(Members.ReadPath(location, "Routes"), 64);
+            var assigned = GameReflection.Enumerate(Members.ReadPath(location, "AssignedOfficers"), 64);
+
+            var officerIndex = -1;
+            for (var i = 0; i < assigned.Count; i++)
+            {
+                if (SameNative(assigned[i], officer))
+                {
+                    officerIndex = i;
+                    break;
+                }
+            }
+
+            if (officerIndex >= 0 && officerIndex < routes.Count && routes[officerIndex] is { } route)
+            {
+                var points = GameReflection.Enumerate(Members.ReadPath(route, "RoutePoints"), 256);
+                var pointIndex = Members.Read(__instance, "_currentRoutePointIndex", 0);
+                if (points.Count > 0 && pointIndex >= 0 && pointIndex < points.Count)
+                    return true;
+            }
+
+            Members.TryWrite(__instance, "_currentRoutePointIndex", 0);
+            Members.Invoke(__instance, "UnassignLocation");
+            __result = false;
+
+            var pointer = __instance is Il2CppObjectBase native ? native.Pointer : IntPtr.Zero;
+            if (HealedSentries.Add(pointer))
+            {
+                PoliceLog.Warn(
+                    $"Detached one invalid sentry assignment (officer index {officerIndex}, " +
+                    $"routes {routes.Count}); the law scheduler can safely assign it again.");
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            __result = false;
+            var pointer = __instance is Il2CppObjectBase native ? native.Pointer : IntPtr.Zero;
+            if (HealedSentries.Add(pointer))
+                PoliceLog.Error("Sentry assignment guard failed; skipped the unsafe sentry tick.", ex);
+            return false;
+        }
     }
 
     private static void AddCrimePostfix(object __instance, object[] __args)
@@ -513,6 +577,17 @@ internal static class PolicePatches
     {
         var dot = typeName.LastIndexOf('.');
         return dot < 0 ? typeName : typeName[(dot + 1)..];
+    }
+
+    private static bool SameNative(object? left, object? right)
+    {
+        if (ReferenceEquals(left, right))
+            return true;
+
+        return left is Il2CppObjectBase leftNative &&
+               right is Il2CppObjectBase rightNative &&
+               leftNative.Pointer != IntPtr.Zero &&
+               leftNative.Pointer == rightNative.Pointer;
     }
 
     private static string Short(string typeName, string methodName) =>

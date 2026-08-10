@@ -64,10 +64,6 @@ internal static class OfficerDeployment
             return already.Count;
         }
 
-        // Corpses first — a town of dead cops cannot field a raid.
-        if (PoliceForce.Count() is { Dead: > 0 } or { KnockedOut: > 0 })
-            PoliceForce.ReturnToDuty();
-
         var need = wanted - CountWithin(destination, SceneRadiusMetres).Count;
         var moved = 0;
         var player = targetPlayer ?? GameBridge.LocalPlayer();
@@ -265,17 +261,18 @@ internal static class OfficerDeployment
             if (!IsUsableShipped(officer))
                 continue;
 
-            // Prefer pooled/inactive (cheap to move) then officers furthest from the destination
-            // so we do not yank the ones already on scene.
+            // Only pooled/inactive officers are safe to relocate. Moving an active sentry leaves its
+            // SentryBehaviour enabled with a stale stand-point index, flooding IsAtStandPoint errors
+            // every tick and eventually freezing/crashing the game.
             var go = Components.GameObjectOf(officer);
             var active = go is not null && go.activeInHierarchy;
+            if (active)
+                continue;
+
             var here = Components.TransformOf(officer)?.position ?? Vector3.zero;
             var dist = Vector3.Distance(here, destination);
 
-            if (dist <= SceneRadiusMetres && active)
-                continue;
-
-            var score = (active ? 0f : 1000f) + dist;
+            var score = 1000f + dist;
             scored.Add((score, officer!));
         }
 

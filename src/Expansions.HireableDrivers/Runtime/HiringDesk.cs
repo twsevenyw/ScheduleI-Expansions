@@ -313,16 +313,20 @@ internal static class HiringDesk
             // slot by validating against non-driver staff instead.
             var vanillaProperty = FindOwnedProperty(choiceLabel);
             if (vanillaProperty is not null &&
-                DriverCapacity.Used(WorldApi.PropertyCode(vanillaProperty)) > 0)
+                DriverCapacity.ForProperty(vanillaProperty) > 0)
             {
                 var ordinaryEmployees = WorldApi.Employees(vanillaProperty)
                     .Count(employee => Gx.Alive(employee) && !DriverRegistry.HasDriverIdentity(employee));
-                if (ordinaryEmployees < WorldApi.EmployeeCapacity(vanillaProperty))
+                if (ordinaryEmployees < DriverPropertyCapacity.BaseCapacity(vanillaProperty))
                 {
                     result = true;
                     invalidReason = string.Empty;
                     return false;
                 }
+
+                result = false;
+                invalidReason = "This location's ordinary employee slots are full";
+                return false;
             }
 
             return true;

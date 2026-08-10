@@ -2,7 +2,7 @@
   <PropertyGroup>
     <RootNamespace>Expansions.PoliceOverhaul</RootNamespace>
     <AssemblyName>Expansions.PoliceOverhaul</AssemblyName>
-    <Version>0.5.0</Version>
+    <Version>0.5.3</Version>
     <Description>Persistent heat driving the game's own patrol scheduler, federal agents and stakeouts, outlaw status with economic penalties, property raids, and an arrest that costs the day.</Description>
     <ExpansionsDeployDir>$(GameDir)\Mods</ExpansionsDeployDir>
   </PropertyGroup>

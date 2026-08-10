@@ -167,15 +167,15 @@ internal static class DriverSettings
 
         _allowDealerDestinations = config.Bind("allow_dealer_destinations", true, "Allow dealer destinations");
 
-        _provideVanOnHire = config.Bind("provide_van_on_hire", true, "Provide a Veeper van on hire",
-            "On: each new driver takes an unassigned Veeper you own or receives a persistent 16-slot Veeper. " +
-            "Off: the driver falls back to any unassigned vehicle you own.");
+        _provideVanOnHire = config.Bind("provide_van_on_hire", true, "Fresh Veeper per trip",
+            "Compatibility key. Drivers now always create a fresh Veeper at departure, seat immediately, " +
+            "and remove the empty mod-owned van after returning.");
 
-        _allowSpawnedVans = config.Bind("allow_spawned_vans", false, "Spawn a van if none is available",
-            "Legacy compatibility switch. provide_van_on_hire is the normal dedicated-van setting.");
+        _allowSpawnedVans = config.Bind("allow_spawned_vans", false, "Spawned vans (legacy)",
+            "Compatibility key retained for old config files; fresh trip vans are automatic.");
 
-        _autoAssignVehicle = config.Bind("auto_assign_vehicle", true, "Auto-assign a vehicle on hire",
-            "Gives a new driver a vehicle immediately; with provide_van_on_hire on, this is a Veeper.");
+        _autoAssignVehicle = config.Bind("auto_assign_vehicle", true, "Automatic trip vehicle",
+            "Compatibility key. Drivers no longer claim persistent player vehicles; departure creates the trip Veeper.");
 
         _requireBedAndWage = config.Bind("require_bed_and_wage", true, "Require a bed and payment",
             "On: a driver refuses to work unhoused or unpaid, exactly like other employees. Off: it works regardless.");

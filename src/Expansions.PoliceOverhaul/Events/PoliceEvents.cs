@@ -41,7 +41,7 @@ internal static class PoliceEvents
         Add(lifetime, new ExpansionEvent(
             id: "police_overhaul.raid_warning",
             label: "Put a raid on the clock",
-            description: "Warns you that a team is heading for one of your properties. Be there when it lands and you lose nothing.",
+            description: "Targets the property you are currently inside and warns that a team is inbound. If you are not inside one, falls back to another owned property.",
             isAvailable: () => Readiness.Raid(immediate: false),
             invoke: () => Raid(immediate: false),
             order: 20));
@@ -49,7 +49,7 @@ internal static class PoliceEvents
         Add(lifetime, new ExpansionEvent(
             id: "police_overhaul.raid_now",
             label: "Raid a property now",
-            description: "Skips the warning. Takes a share of the contraband out of every container on a property you are not standing in.",
+            description: "Immediately targets the property you are currently inside. Your presence makes the team drive on, so nothing is seized.",
             isAvailable: () => Readiness.Raid(immediate: true),
             invoke: () => Raid(immediate: true),
             order: 30));

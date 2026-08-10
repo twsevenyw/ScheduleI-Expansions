@@ -32,6 +32,7 @@ internal static class GameTypes
 
     internal const string BodySearchBehaviour = "Il2CppScheduleOne.NPCs.Behaviour.BodySearchBehaviour";
     internal const string CheckpointBehaviour = "Il2CppScheduleOne.NPCs.Behaviour.CheckpointBehaviour";
+    internal const string SentryBehaviour = "Il2CppScheduleOne.NPCs.Behaviour.SentryBehaviour";
     internal const string CallPoliceBehaviour = "Il2CppScheduleOne.NPCs.Behaviour.CallPoliceBehaviour";
 
     internal const string Property = "Il2CppScheduleOne.Property.Property";

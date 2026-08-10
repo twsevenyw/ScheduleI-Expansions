@@ -38,6 +38,7 @@ internal static class DriverPatches
         IsApplied("UpdateBehaviour") && IsApplied("GetTransitRouteReady");
 
     internal static bool NativeHiringSafe =>
+        IsApplied("Awake") &&
         IsApplied("ModifyChoiceList") &&
         Applied.Count(label => label.EndsWith(".ChoiceCallback", StringComparison.Ordinal)) >= 2 &&
         IsApplied("CheckChoice") &&
@@ -66,9 +67,8 @@ internal static class DriverPatches
         Applied.Clear();
         Skipped.Clear();
 
-        var employee = Gx.Type(GameTypes.Employee);
-        var employeeManager = Gx.Type(GameTypes.EmployeeManager);
         var packager = Gx.RequireType(GameTypes.Packager);
+        var property = Gx.Type(GameTypes.Property);
         var configuration = Gx.Type(GameTypes.PackagerConfiguration);
         var routeEntry = Gx.Type(GameTypes.RouteEntryUi);
         var configPanel = Gx.Type(GameTypes.PackagerConfigPanel);
@@ -79,9 +79,7 @@ internal static class DriverPatches
         // The one place a skipping prefix is genuinely required: UpdateBehaviour is the per-tick work
         // dispatcher and there is no other way to stop the packaging brain issuing its own movement.
         Patch(harmony, packager, "UpdateBehaviour", nameof(SuppressUpdateBehaviour), PatchKind.Prefix);
-        Patch(harmony, employee, "InitializeAppearance", nameof(DressInitializedDriver), PatchKind.Postfix);
-        Patch(harmony, employeeManager, "CreateEmployee_Server", nameof(ExpandCreationCapacity), PatchKind.Prefix);
-        Patch(harmony, employeeManager, "CreateEmployee_Server", nameof(RestoreCreationCapacity), PatchKind.Postfix);
+        Patch(harmony, property, "Awake", nameof(ExpandPropertyDriverSlots), PatchKind.Postfix);
 
         Patch(harmony, packager, "ShouldIdle", nameof(NeverIdleMidTrip), PatchKind.Postfix);
         Patch(harmony, packager, "IsAnyWorkInProgress", nameof(BusyMidTrip), PatchKind.Postfix);
@@ -509,35 +507,8 @@ internal static class DriverPatches
             Gx.Set(label, "text", title);
     }
 
-    /// <summary>Runs on every peer after the vanilla appearance RPC path.</summary>
-    private static void DressInitializedDriver(object __instance)
-    {
-        try
-        {
-            var id = EmployeeApi.Id(__instance);
-            if (!id.StartsWith("driver_", StringComparison.Ordinal))
-                return;
-
-            DriverAppearance.Apply(id, EmployeeApi.DisplayName(__instance), __instance);
-        }
-        catch (Exception ex)
-        {
-            DriverLog.Warn($"Could not apply a driver uniform after appearance initialization ({Gx.Explain(ex)}).");
-        }
-    }
-
-    private static void ExpandCreationCapacity(object property, string id, ref int __state)
-    {
-        __state = WorldApi.EmployeeCapacity(property);
-        var driverSlotsInUse = DriverCapacity.Used(WorldApi.PropertyCode(property));
-        var creatingDriver = id.StartsWith("driver_", StringComparison.Ordinal) ? 1 : 0;
-        var expanded = __state + driverSlotsInUse + creatingDriver;
-        if (expanded > __state)
-            Gx.Set(property, "EmployeeCapacity", expanded);
-    }
-
-    private static void RestoreCreationCapacity(object property, int __state) =>
-        Gx.Set(property, "EmployeeCapacity", __state);
+    private static void ExpandPropertyDriverSlots(object __instance) =>
+        DriverPropertyCapacity.Ensure(__instance);
 
     private static void FixerModifyChoiceList(object __instance, string dialogueLabel, object existingChoices)
     {

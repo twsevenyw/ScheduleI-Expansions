@@ -66,29 +66,12 @@ internal static class EmployeeApi
         Gx.Call(manager, "GetRandomAppearance", new[] { "Boolean", "Int32", "AvatarSettings" }, appearance);
         var appearanceIndex = appearance[1] as int? ?? 0;
 
-        // The factory repeats Property.EmployeeCapacity internally. Drivers have a separate budget,
-        // so expose one temporary slot plus the slots occupied by existing drivers, then restore the
-        // authored capacity immediately after the synchronous server creation call.
-        var originalCapacity = WorldApi.EmployeeCapacity(property);
-        var employeeCount = WorldApi.Employees(property).Count(Gx.Alive);
-        var temporaryCapacity = Math.Max(
-            originalCapacity + Runtime.DriverCapacity.Used(WorldApi.PropertyCode(property)) + 1,
-            employeeCount + 1);
-
-        object? created;
-        Gx.Set(property, "EmployeeCapacity", temporaryCapacity);
-        try
-        {
-            created = Gx.Call(
-                manager,
-                "CreateEmployee_Server",
-                new[] { "Property", "EEmployeeType", "String", "String", "String", "Boolean", "Int32", "Vector3", "Quaternion", "String" },
-                property, handler, firstName, lastName, id, male, appearanceIndex, position, rotation, guid);
-        }
-        finally
-        {
-            Gx.Set(property, "EmployeeCapacity", originalCapacity);
-        }
+        Runtime.DriverPropertyCapacity.Ensure(property);
+        var created = Gx.Call(
+            manager,
+            "CreateEmployee_Server",
+            new[] { "Property", "EEmployeeType", "String", "String", "String", "Boolean", "Int32", "Vector3", "Quaternion", "String" },
+            property, handler, firstName, lastName, id, male, appearanceIndex, position, rotation, guid);
 
         if (!Gx.Alive(created))
         {
@@ -139,6 +122,56 @@ internal static class EmployeeApi
 
     internal static Vector3 Position(object? employee) =>
         Gx.GetAlive(employee, "transform") is Transform transform ? transform.position : Vector3.zero;
+
+    /// <summary>
+    /// Makes a newly-created employee materially present at the requested property. A non-null factory
+    /// wrapper is insufficient proof: the NPC can remain culled or at a stale transform.
+    /// </summary>
+    internal static bool EnsureArrival(object? employee, object? property, out string detail)
+    {
+        if (!Gx.Alive(employee) ||
+            !Runtime.DriverPropertyCapacity.TryArrivalPoint(property, employee, out var arrivalPoint, out var employeeIndex))
+        {
+            detail = "employee or assigned property idle point is unavailable";
+            return false;
+        }
+
+        var destination = arrivalPoint.position;
+        var transform = Gx.GetAlive(employee, "transform") as Transform;
+        if (transform is null)
+        {
+            detail = "employee has no transform";
+            return false;
+        }
+
+        var gameObject = transform.gameObject;
+        if (!gameObject.activeSelf)
+            gameObject.SetActive(true);
+
+        var movement = Movement(employee);
+        if (movement is not null)
+        {
+            Gx.TryCall(movement, "Warp", new[] { "Vector3" }, destination);
+            Gx.TryCall(movement, "WarpToNavMesh", Array.Empty<string>());
+        }
+
+        // A failed/stripped movement call must not leave a paid employee at an unrelated position.
+        if (Vector3.Distance(transform.position, destination) > 8f)
+            transform.position = destination;
+
+        Gx.TryCall(employee, "SetVisible", new[] { "Boolean", "Boolean" }, true, true);
+
+        var renderers = gameObject.GetComponentsInChildren<Renderer>(true);
+        var after = transform.position;
+        var distance = Vector3.Distance(after, destination);
+        var enabledRenderers = renderers.Count(renderer => renderer is not null && renderer.enabled);
+        detail =
+            $"position ({after.x:0.0}, {after.y:0.0}, {after.z:0.0}), " +
+            $"{distance:0.0}m from {WorldApi.PropertyName(property)} employee slot {employeeIndex}, " +
+            $"activeSelf={gameObject.activeSelf}, activeInHierarchy={gameObject.activeInHierarchy}, " +
+            $"renderers={enabledRenderers}/{renderers.Length}";
+        return distance <= 8f && gameObject.activeSelf;
+    }
 
     internal static bool CanWork(object? employee) => Gx.Call(employee, "CanWork", Array.Empty<string>()) is true;
 
